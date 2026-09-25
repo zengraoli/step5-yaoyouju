@@ -235,7 +235,9 @@ CREATE TABLE IF NOT EXISTS eval_set (
   id           TEXT PRIMARY KEY,
   name         TEXT NOT NULL,
   case_count   INTEGER NOT NULL DEFAULT 0,
-  deidentified INTEGER NOT NULL DEFAULT 1
+  deidentified INTEGER NOT NULL DEFAULT 1,
+  -- T13 演示用例（JSON 数组：类别 / 输入 / 期望 / 本地模拟输出），失败用例对外输出去标识化
+  cases        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS eval_run (
@@ -245,6 +247,8 @@ CREATE TABLE IF NOT EXISTS eval_run (
   metrics          TEXT,
   result           TEXT NOT NULL,
   trigger_reason   TEXT,
+  -- T13 失败用例快照（输入 / 期望 / 实际 / 判定，已去标识化）
+  failed_cases     TEXT,
   created_at       TEXT NOT NULL
 );
 
@@ -326,6 +330,24 @@ export function ensureFeedbackColumns(db: {
   ];
   for (const [name, ddl] of additions) {
     if (!names.has(name)) db.exec(`ALTER TABLE feedback ADD COLUMN ${ddl}`);
+  }
+}
+
+/**
+ * 既有数据库的列增量迁移（T13 模型发布与评测字段）。
+ * `CREATE TABLE IF NOT EXISTS` 不会给已存在的表补列，老库启动时按需 ALTER（幂等）。
+ */
+export function ensureEvalColumns(db: {
+  exec(sql: string): unknown;
+  prepare(sql: string): { all(...args: unknown[]): unknown };
+}): void {
+  const setCols = db.prepare('PRAGMA table_info(eval_set)').all() as { name: string }[];
+  if (setCols.length > 0 && !setCols.some((c) => c.name === 'cases')) {
+    db.exec('ALTER TABLE eval_set ADD COLUMN cases TEXT');
+  }
+  const runCols = db.prepare('PRAGMA table_info(eval_run)').all() as { name: string }[];
+  if (runCols.length > 0 && !runCols.some((c) => c.name === 'failed_cases')) {
+    db.exec('ALTER TABLE eval_run ADD COLUMN failed_cases TEXT');
   }
 }
 
