@@ -1,0 +1,14 @@
+node_modules/
+dist/
+unpackage/
+.vite/
+coverage/
+server/data/
+*.db
+*.db-journal
+*.sqlite
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
