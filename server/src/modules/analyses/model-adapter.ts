@@ -8,6 +8,11 @@
  * 生产环境可替换为真实大模型实现，只要遵循同一接口与约束。
  */
 
+import type { RetrievedChunk } from '../evidence/evidence-retrieval';
+
+// 检索到的证据片段类型以 evidence 模块为准（T11 起检索实现收敛到 evidence 模块）
+export type { RetrievedChunk };
+
 /** 引用：一条解释陈述对应一个证据文档中的可核实陈述 */
 export interface Citation {
   evidence_doc_id: string;
@@ -49,15 +54,6 @@ export interface AnalysisSections {
   unknown: string[];
   next: NextItem[];
   videos: VideoItem[];
-}
-
-/** 检索到的证据片段（只来自证据库 evidence_chunk） */
-export interface RetrievedChunk {
-  chunk_id: string;
-  doc_id: string;
-  doc_title: string;
-  content: string;
-  score: number;
 }
 
 export interface GenerateContext {

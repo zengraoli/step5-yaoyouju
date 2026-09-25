@@ -1,5 +1,4 @@
-import { RetrievedChunk } from '../analyses/model-adapter';
-import { queryTerms } from '../analyses/retrieval';
+import { RetrievedChunk, queryTerms } from '../evidence/evidence-retrieval';
 
 /**
  * 问与解释的本地回答构造（模板 + 证据片段，不调用任何外部服务）。

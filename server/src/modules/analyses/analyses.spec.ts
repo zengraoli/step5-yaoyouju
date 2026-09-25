@@ -21,7 +21,7 @@ import { AnalysesService } from './analyses.service';
 import { SafetyService } from '../safety/safety.service';
 import { consumeOneTask } from './analysis-pipeline';
 import { LocalMockAdapter, findSupport } from './model-adapter';
-import { retrieveEvidence } from './retrieval';
+import { retrieveEvidence } from '../evidence/evidence-retrieval';
 
 describe('T07 一页分析流水线与 Worker', () => {
   let app: INestApplication;

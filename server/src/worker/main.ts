@@ -1,7 +1,8 @@
 import { DbService } from '../db/db.service';
-import { APP_DDL } from '../db/schema';
+import { APP_DDL, ensureEvidenceColumns } from '../db/schema';
 import { consumeOneTask } from '../modules/analyses/analysis-pipeline';
 import { LocalMockAdapter } from '../modules/analyses/model-adapter';
+import { LocalEvidenceRetriever } from '../modules/evidence/evidence-retrieval';
 
 /**
  * AI 任务 Worker（独立进程：npm run worker = tsx src/worker/main.ts）。
@@ -21,8 +22,10 @@ async function main(): Promise<void> {
   const db = new DbService();
   // 确保表存在（IF NOT EXISTS，幂等）；演示种子数据由 API 服务启动时写入
   db.app.exec(APP_DDL);
+  ensureEvidenceColumns(db.app);
 
   const adapter = new LocalMockAdapter();
+  const retriever = new LocalEvidenceRetriever(db.app);
   let running = true;
   const stop = () => {
     running = false;
@@ -34,7 +37,7 @@ async function main(): Promise<void> {
 
   while (running) {
     try {
-      const r = consumeOneTask(db.app, adapter);
+      const r = consumeOneTask(db.app, adapter, retriever);
       if (r.processed) {
         if (r.status === 'completed') {
           console.log(`[worker] 任务 ${r.taskId} 已完成，生成分析 ${r.analysisId}`);

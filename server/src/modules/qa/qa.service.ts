@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { DbService } from '../../db/db.service';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { SafetyResult, SafetyService } from '../safety/safety.service';
-import { retrieveEvidence } from '../analyses/retrieval';
+import { LocalEvidenceRetriever } from '../evidence/evidence-retrieval';
 import {
   QA_DISCLAIMER,
   QaAnswer,
@@ -349,7 +349,8 @@ export class QaService {
     const analysis = this.latestAnalysis(session.user_id, session.episode_id);
     const episodeId = session.episode_id ?? analysis?.episode_id ?? null;
     const events = episodeId ? this.episodeEvents(episodeId) : [];
-    const evidence = retrieveEvidence(this.db.app, question, 5);
+    // 证据库受控检索（收敛到 evidence 模块，只检索启用中的证据文档）
+    const evidence = new LocalEvidenceRetriever(this.db.app).search(question, 5).results;
     const answer = buildQaAnswer({
       question,
       evidence,

@@ -117,13 +117,19 @@ CREATE TABLE IF NOT EXISTS safety_event (
 );
 
 CREATE TABLE IF NOT EXISTS evidence_doc (
-  id          TEXT PRIMARY KEY,
-  title       TEXT NOT NULL,
-  source_type TEXT NOT NULL,
-  source_url  TEXT,
-  license     TEXT,
-  verified_at TEXT,
-  active      INTEGER NOT NULL DEFAULT 1
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL,
+  source_type   TEXT NOT NULL,
+  source_url    TEXT,
+  license       TEXT,
+  verified_at   TEXT,
+  active        INTEGER NOT NULL DEFAULT 1,
+  -- T11 切分入库管线：原文 + 状态（待切分 / 已切分 / 失败）+ 最近一次入库时间与错误信息
+  raw_text      TEXT,
+  ingest_status TEXT NOT NULL DEFAULT '待切分',
+  ingested_at   TEXT,
+  ingest_error  TEXT,
+  updated_at    TEXT
 );
 
 CREATE TABLE IF NOT EXISTS evidence_chunk (
@@ -272,3 +278,26 @@ CREATE TABLE IF NOT EXISTS qa_message (
   created_at       TEXT NOT NULL
 );
 `;
+
+/**
+ * 既有数据库的列增量迁移。
+ * `CREATE TABLE IF NOT EXISTS` 不会给已存在的表补列，老库启动时按需 ALTER（幂等）。
+ */
+export function ensureEvidenceColumns(db: {
+  exec(sql: string): unknown;
+  prepare(sql: string): { all(...args: unknown[]): unknown };
+}): void {
+  const cols = db.prepare('PRAGMA table_info(evidence_doc)').all() as { name: string }[];
+  if (cols.length === 0) return; // 表尚未创建（新建库走 APP_DDL）
+  const names = new Set(cols.map((c) => c.name));
+  const additions: [string, string][] = [
+    ['raw_text', 'raw_text TEXT'],
+    ['ingest_status', "ingest_status TEXT NOT NULL DEFAULT '待切分'"],
+    ['ingested_at', 'ingested_at TEXT'],
+    ['ingest_error', 'ingest_error TEXT'],
+    ['updated_at', 'updated_at TEXT'],
+  ];
+  for (const [name, ddl] of additions) {
+    if (!names.has(name)) db.exec(`ALTER TABLE evidence_doc ADD COLUMN ${ddl}`);
+  }
+}

@@ -8,7 +8,12 @@ import {
   LocalMockAdapter,
   VideoItem,
 } from './model-adapter';
-import { queryTerms, retrieveEvidence } from './retrieval';
+import {
+  EvidenceRetriever,
+  LocalEvidenceRetriever,
+  RETRIEVAL_STRATEGY,
+  RetrievedChunk,
+} from '../evidence/evidence-retrieval';
 import { beijingDate } from '../../common/time.util';
 
 /**
@@ -18,6 +23,9 @@ import { beijingDate } from '../../common/time.util';
  * 流程：证据库内受控检索 → 大模型适配层生成草稿（缺失即未知、不补写概率、五段固定）
  *       → 陈述提取 + 引用核对（剔除无依据陈述）→ 保存 analysis + analysis_citation。
  * 失败（模型 / 检索 / 来源校验）：任务状态 failed + 回退，不无限重试（attempts 上限 3）。
+ *
+ * T11：受控检索改为调用 evidence 模块的检索服务（LocalEvidenceRetriever，即 EvidenceService.search
+ * 的同一实现）；检索快照直接采用该服务返回的 retrieval_snapshot（策略名 / 命中 doc_ids / 耗时）。
  */
 
 /** 最大尝试次数（达到后标记 failed，不再重试） */
@@ -71,6 +79,7 @@ const now = () => new Date().toISOString();
 export function consumeOneTask(
   db: DatabaseSync,
   adapter: LlmAdapter = new LocalMockAdapter(),
+  retriever?: EvidenceRetriever,
 ): ConsumeResult {
   const task = db
     .prepare(`SELECT * FROM analysis_task WHERE status = 'queued' ORDER BY created_at ASC, rowid ASC LIMIT 1`)
@@ -79,7 +88,7 @@ export function consumeOneTask(
 
   const attempts = (task.attempts ?? 0) + 1;
   try {
-    const analysisId = runPipeline(db, task, adapter);
+    const analysisId = runPipeline(db, task, adapter, retriever);
     db.prepare(
       `UPDATE analysis_task SET status='completed', result_analysis_id=?, attempts=?, error=NULL, updated_at=? WHERE id=?`,
     ).run(analysisId, attempts, now(), task.id);
@@ -108,7 +117,12 @@ export function consumeOneTask(
 }
 
 /** 执行一次分析：检索 → 生成 → 核对 → 保存；校验失败抛 PipelineError */
-function runPipeline(db: DatabaseSync, task: TaskRow, adapter: LlmAdapter): string {
+function runPipeline(
+  db: DatabaseSync,
+  task: TaskRow,
+  adapter: LlmAdapter,
+  retriever?: EvidenceRetriever,
+): string {
   const payload = JSON.parse(task.payload) as TaskPayload;
   const episodeId = payload.episode_id;
 
@@ -128,9 +142,11 @@ function runPipeline(db: DatabaseSync, task: TaskRow, adapter: LlmAdapter): stri
     throw new PipelineError('模型校验失败：没有生效的模型发布记录');
   }
 
-  // 2. 受控检索：只在证据库内检索
+  // 2. 受控检索：只在证据库内检索（调用 evidence 模块的检索服务，停用的证据立即不再被检索到）
   const query = buildQuery(db, episodeId, payload);
-  const evidence = retrieveEvidence(db, query, 5);
+  const evidenceService = retriever ?? new LocalEvidenceRetriever(db);
+  const outcome = evidenceService.search(query, 5);
+  const evidence: RetrievedChunk[] = outcome.results;
   if (evidence.length === 0) {
     throw new PipelineError('检索校验失败：证据库内未检索到相关片段');
   }
@@ -159,12 +175,10 @@ function runPipeline(db: DatabaseSync, task: TaskRow, adapter: LlmAdapter): stri
     | undefined;
   const version = (maxVer?.v ?? 0) + 1;
 
-  // 9. 检索快照（策略 + 命中的证据文档 + 被剔除陈述）
+  // 9. 检索快照（策略 + 命中的证据文档 + 被剔除陈述；快照来自 evidence 模块的检索服务）
   const retrievalSnapshot = {
-    strategy: modelRelease.retrieval_strategy ?? '关键词检索（证据库内）',
-    query_terms: [...queryTerms(query)],
-    doc_ids: [...new Set(evidence.map((e) => e.doc_id))],
-    chunk_count: evidence.length,
+    ...outcome.retrieval_snapshot,
+    strategy: modelRelease.retrieval_strategy ?? outcome.retrieval_snapshot.strategy ?? RETRIEVAL_STRATEGY,
     removed_statements: removed,
   };
 

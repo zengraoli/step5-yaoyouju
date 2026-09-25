@@ -1,7 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, createHash } from 'node:crypto';
 import { FieldCrypto } from './crypto.service';
-import { APP_DDL, IDENTITY_DDL } from './schema';
+import { APP_DDL, IDENTITY_DDL, ensureEvidenceColumns } from './schema';
+import { localVector } from '../modules/evidence/evidence-retrieval';
 
 /**
  * 演示种子数据（全部虚构，不涉及真实用户）。
@@ -16,22 +17,6 @@ function hashPassword(pw: string): string {
 
 const uid = () => randomUUID();
 const now = () => new Date().toISOString();
-
-/** 本地"向量"：按词项计数生成 16 维演示向量（不使用外部服务） */
-function localVector(text: string): number[] {
-  const terms = ['腰痛', '椎间盘', '久坐', '就医', '运动', '腿麻', '报告', '休息', '加重', '放射'];
-  const v = terms.map((t) => {
-    let n = 0;
-    let idx = text.indexOf(t);
-    while (idx !== -1) {
-      n += 1;
-      idx = text.indexOf(t, idx + t.length);
-    }
-    return n;
-  });
-  while (v.length < 16) v.push(0);
-  return v.slice(0, 16);
-}
 
 export function seedIfEmpty(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto): boolean {
   const row = app.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number };
@@ -188,8 +173,9 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   for (const e of evidence) {
     const id = uid();
     evidenceIds.push(id);
-    app.prepare('INSERT INTO evidence_doc (id,title,source_type,source_url,license,verified_at,active) VALUES (?,?,?,?,?,?,?)')
-      .run(id, e.title, e.source_type, e.url, e.license, e.verified, 1);
+    const rawText = e.chunks.join('\n');
+    app.prepare('INSERT INTO evidence_doc (id,title,source_type,source_url,license,verified_at,active,raw_text,ingest_status,ingested_at,ingest_error,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, e.title, e.source_type, e.url, e.license, e.verified, 1, rawText, '已切分', t, null, t);
     e.chunks.forEach((c, i) => {
       app.prepare('INSERT INTO evidence_chunk (id,doc_id,content,embedding,position) VALUES (?,?,?,?,?)')
         .run(uid(), id, c, JSON.stringify(localVector(c)), i);
@@ -277,9 +263,9 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   const mr1 = uid();
   const mr2 = uid();
   app.prepare('INSERT INTO model_release (id,model_name,prompt_version,retrieval_strategy,content_lib_version,status,created_at) VALUES (?,?,?,?,?,?,?)')
-    .run(mr1, '本地模拟模型', 'prompt-v1', '关键词检索（证据库内）', 'content-lib-v1', '生效', t);
+    .run(mr1, '本地模拟模型', 'prompt-v1', '关键词 + 本地向量混合检索（证据库内）', 'content-lib-v1', '生效', t);
   app.prepare('INSERT INTO model_release (id,model_name,prompt_version,retrieval_strategy,content_lib_version,status,created_at) VALUES (?,?,?,?,?,?,?)')
-    .run(mr2, '本地模拟模型', 'prompt-v2', '关键词检索（证据库内）', 'content-lib-v2', '灰度', t);
+    .run(mr2, '本地模拟模型', 'prompt-v2', '关键词 + 本地向量混合检索（证据库内）', 'content-lib-v2', '灰度', t);
   const es1 = uid();
   app.prepare('INSERT INTO eval_set (id,name,case_count,deidentified) VALUES (?,?,?,?)')
     .run(es1, '腰痛解释安全评测集', 8, 1);
@@ -380,7 +366,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
         version: 1,
         disclaimer: '系统生成内容（v1），仅供参考，不作诊断',
       },
-    }), JSON.stringify({ strategy: '关键词检索（证据库内）', doc_ids: [evidenceIds[1], evidenceIds[2]] }), 'none', t);
+    }), JSON.stringify({ strategy: '关键词 + 本地向量混合检索（证据库内）', doc_ids: [evidenceIds[1], evidenceIds[2]] }), 'none', t);
 
   for (const [docIdx, stmt] of [
     [1, 'L5/S1 指第 5 节腰椎与第 1 节骶椎之间的椎间盘'],
@@ -454,6 +440,7 @@ if (require.main === module) {
   const identity = new DatabaseSync(path.join(dir, 'identity.db'));
   app.exec(APP_DDL);
   identity.exec(IDENTITY_DDL);
+  ensureEvidenceColumns(app);
   const created = seedIfEmpty(app, identity, FieldCrypto.fromEnv(dir));
   console.log(created ? '[seed] 已写入演示种子数据' : '[seed] 已有数据，跳过写入');
   app.close();
