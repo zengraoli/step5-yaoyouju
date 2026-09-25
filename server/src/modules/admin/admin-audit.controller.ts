@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { CurrentAdmin } from '../../common/current-admin.decorator';
 import { AdminContext } from './admin-auth.service';
@@ -58,12 +59,14 @@ class ExportApproveDto {
  * 审计日志（T14，B11）：筛选 + 分页、哈希链校验、导出需审批。
  * 查看与校验要求 audit.view（合规 / 超级管理）；导出申请与审批要求 audit.export。
  */
+@ApiTags('后台·审计')
 @Controller('admin/audit')
 @RequirePermission('audit.view')
 export class AdminAuditController {
   constructor(private readonly adminAudit: AdminAuditService) {}
 
   /** 列表：时间 / 操作人 / 角色 / 动作 / 对象 / 请求 ID / 哈希 */
+  @ApiOperation({ summary: '审计日志列表（筛选 + 分页）' })
   @Get()
   list(@Query() query: AuditQueryDto): AuditLogPage {
     return this.adminAudit.list({
@@ -77,12 +80,14 @@ export class AdminAuditController {
   }
 
   /** 哈希链校验：篡改任何一条都会被发现 */
+  @ApiOperation({ summary: '审计哈希链校验（篡改任何一条都会被发现）' })
   @Get('verify')
   verify(): { ok: boolean; broken_at: string | null } {
     return this.adminAudit.verify();
   }
 
   /** 提交导出申请（状态待审批） */
+  @ApiOperation({ summary: '提交审计导出申请（状态待审批）' })
   @Post('export-request')
   @RequirePermission('audit.export')
   requestExport(@CurrentAdmin() admin: AdminContext, @Body() dto: ExportRequestDto): AuditExportRequest {
@@ -90,6 +95,7 @@ export class AdminAuditController {
   }
 
   /** 审批导出申请（合规或超级管理；不能审批本人提交的申请） */
+  @ApiOperation({ summary: '审批审计导出申请（不能审批本人提交的申请）' })
   @Post('export-approve')
   @RequirePermission('audit.export')
   approveExport(@CurrentAdmin() admin: AdminContext, @Body() dto: ExportApproveDto): AuditExportRequest {

@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ModelReleasesService } from './models.service';
 import { CurrentUser } from '../../common/current-user.decorator';
@@ -39,18 +40,21 @@ class RollbackReleaseDto {
  *
  * T14：后台守卫（/admin）+ 技术角色权限 model.manage（越权 40300 并写审计）。
  */
+@ApiTags('后台·模型发布')
 @Controller('admin/models')
 @RequirePermission('model.manage')
 export class ModelsController {
   constructor(private readonly releases: ModelReleasesService) {}
 
   /** 发布组合表：模型名、提示词版本、检索策略、内容库版本、状态、创建时间、最近评测结果 */
+  @ApiOperation({ summary: '模型发布组合表（含最近评测结果）' })
   @Get()
   list() {
     return this.releases.list();
   }
 
   /** 创建候选发布（状态=候选） */
+  @ApiOperation({ summary: '创建候选发布（状态=候选）' })
   @Post()
   create(@CurrentUser() user: { id: string }, @Body() dto: CreateReleaseDto) {
     return this.releases.create(
@@ -65,12 +69,14 @@ export class ModelsController {
   }
 
   /** 提升一级（候选→灰度→生效）；门禁未通过返回 40900 */
+  @ApiOperation({ summary: '提升发布一级（候选→灰度→生效；门禁未通过返回 40900）' })
   @Post(':id/promote')
   promote(@CurrentUser() user: { id: string }, @Param('id') id: string) {
     return this.releases.promote(id, user?.id ?? null);
   }
 
   /** 回滚（必须填写原因，写审计日志） */
+  @ApiOperation({ summary: '回滚发布（必须填原因，写审计）' })
   @Post(':id/rollback')
   rollback(@CurrentUser() user: { id: string }, @Param('id') id: string, @Body() dto: RollbackReleaseDto) {
     return this.releases.rollback(id, dto.reason, user?.id ?? null);

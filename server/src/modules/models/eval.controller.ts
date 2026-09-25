@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
 import { EvalCase } from './eval-scorer';
 import { EvalService } from './eval.service';
@@ -41,30 +42,35 @@ class RunEvalDto {
  *
  * T14：后台守卫（/admin）+ 技术角色权限 eval.manage（越权 40300 并写审计）。
  */
+@ApiTags('后台·评测回归')
 @Controller('admin/eval')
 @RequirePermission('eval.manage')
 export class EvalController {
   constructor(private readonly evalService: EvalService) {}
 
   /** 评测集列表：名称、用例数、是否去标识化、最近一次运行结果 */
+  @ApiOperation({ summary: '评测集列表（名称 / 用例数 / 是否去标识化 / 最近运行结果）' })
   @Get('sets')
   listSets() {
     return this.evalService.listSets();
   }
 
   /** 新建评测集（演示用例，deidentified=true） */
+  @ApiOperation({ summary: '新建评测集（演示用例，deidentified=true）' })
   @Post('sets')
   createSet(@CurrentUser() user: { id: string }, @Body() dto: CreateEvalSetDto) {
     return this.evalService.createSet({ name: dto.name, cases: dto.cases }, user?.id ?? null);
   }
 
   /** 运行记录：触发原因、时间、指标、结果（可按评测集筛选） */
+  @ApiOperation({ summary: '评测运行记录（触发原因 / 时间 / 指标 / 结果）' })
   @Get('runs')
   listRuns(@Query('eval_set_id') evalSetId?: string) {
     return this.evalService.listRuns(evalSetId);
   }
 
   /** 运行评测：逐用例「生成 + 核对」，输出 metrics 与失败用例（去标识化） */
+  @ApiOperation({ summary: '运行评测（逐用例生成 + 核对，失败用例去标识化）' })
   @Post('runs')
   runEval(@CurrentUser() user: { id: string }, @Body() dto: RunEvalDto) {
     return this.evalService.runEval(
@@ -76,6 +82,7 @@ export class EvalController {
   }
 
   /** 运行详情（含失败用例） */
+  @ApiOperation({ summary: '评测运行详情（含失败用例）' })
   @Get('runs/:id')
   getRun(@Param('id') id: string) {
     return this.evalService.getRun(id);

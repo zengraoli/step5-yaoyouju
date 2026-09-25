@@ -9,10 +9,14 @@ npm install
 cp .env.example .env      # Windows: copy .env.example .env
 npm run dev               # API 服务，默认端口 3200（GET /health）
 npm run worker            # AI 任务 Worker（另开一个终端，轮询消费任务表）
-npm run seed              # 写入演示种子数据
+npm run smoke             # 端到端冒烟测试（需先启动 API；脚本自行启动 Worker 子进程）
+npm run seed              # 写入演示种子数据（仅在库为空时写入）
 ```
 
-生产模式：`npm run build` 后 `npm start` 与 `npm run start:worker`。
+- **API 服务**：开发 `npm run dev`（端口 3200）；生产 `npm run build` 后 `npm start`。
+- **AI 任务 Worker**：开发 `npm run worker`；生产 `npm run start:worker`（`npm run build` 后）。Worker 为独立进程，轮询消费 `analysis_task` 表。
+- **冒烟测试** `npm run smoke`：用独立测试手机号 `13700008888` 依次跑通 登录 → 同意 → 关键变化确认 → 录入报告 → 结构化核对 → 生成一页分析（含 Worker 消费）→ 原文对照 → 记录今天 → 生成复诊摘要，并另跑红旗命中分支（应返回 `40910/40911` + 就医提示且不建任务）；全部通过输出 `SMOKE OK`。**运行前需先在另一终端 `npm run dev`**（脚本先探测 `/health`，未运行则给出明确提示并以非 0 退出；Worker 由脚本自行以子进程启动、结束后关闭）。
+- **接口文档（OpenAPI / Swagger）**：启动 API 后访问 `http://127.0.0.1:3200/api-docs`（标题「腰有据服务端 API」）。文档主要展示路径与参数；实际响应由全局拦截器统一包装为 `{ code, data, message }`。
 
 ## 配置
 
@@ -63,9 +67,11 @@ npm run seed              # 写入演示种子数据
 ## 常用命令
 
 ```bash
+npm run dev        # 开发运行 API（监听变更，端口 3200）
 npm run build      # 构建
 npm run typecheck  # 类型检查
-npm test           # 单元测试
+npm test           # 单元测试（jest；冒烟脚本不计入）
+npm run smoke      # 端到端冒烟测试（需先 npm run dev）
 ```
 
 ## 已知问题
@@ -73,3 +79,4 @@ npm test           # 单元测试
 - 大模型为本地模拟实现（模板 + 证据片段），不调用任何外部服务。
 - OCR 为模拟实现，返回示例文本；主路径是粘贴文字。
 - 任务队列用 SQLite 任务表替代 Redis Streams，单机演示够用，不做多 Worker 并发保证。
+- 冒烟测试使用独立测试手机号 `13700008888`，其产生的数据仅归属该测试用户（不影响种子演示用户），默认保留以便复查，可重复运行。

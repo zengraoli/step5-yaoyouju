@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 import { EvidenceService } from './evidence.service';
 import { CurrentUser } from '../../common/current-user.decorator';
@@ -89,10 +90,12 @@ class EvidenceActiveBody {
 
 /** 检索（POST /evidence/search） */
 class EvidenceSearchBody {
+  @ApiProperty({ description: '检索关键词', maxLength: 2000 })
   @IsString()
   @MaxLength(2000)
   q!: string;
 
+  @ApiProperty({ description: '返回片段数量上限（默认 5，最大 50）', required: false })
   @IsOptional()
   @IsNumber()
   limit?: number;
@@ -104,6 +107,7 @@ class EvidenceSearchBody {
  * 读接口（列表 / 详情 / 检索 / 管线状态 / 影响预览）与写接口（新建 / 编辑 / 停用启用 / 入库）
  * 都要求登录；写接口的 actor_id 记录到审计日志（T14 后台账号体系落地后改为后台身份）。
  */
+@ApiTags('证据库')
 @Controller('evidence')
 export class EvidenceController {
   constructor(private readonly evidence: EvidenceService) {}
@@ -112,12 +116,14 @@ export class EvidenceController {
    * 证据库检索：关键词 + 本地向量相似度混合打分，只在证据库内、只检索启用中的文档。
    * 返回片段内容、所属文档标题 / 来源类型 / 许可、得分与 retrieval_snapshot。
    */
+  @ApiOperation({ summary: '证据库检索（POST，关键词 + 本地向量混合打分，只在证据库内）' })
   @Post('search')
   searchByPost(@Body() body: EvidenceSearchBody) {
     return this.evidence.search(body.q, body.limit ?? 5);
   }
 
   /** 证据库检索（GET 形式，便于后台与联调直接验证） */
+  @ApiOperation({ summary: '证据库检索（GET 形式）' })
   @Get('search')
   searchByGet(@Query('q') q: string, @Query('limit') limit?: string) {
     const query = (q ?? '').trim();
@@ -128,6 +134,7 @@ export class EvidenceController {
   }
 
   /** 证据文档列表：来源类型 / 启用状态筛选，带片段数与被引用数 */
+  @ApiOperation({ summary: '证据文档列表（来源类型 / 启用状态筛选）' })
   @Get()
   list(@Query() query: ListEvidenceQuery) {
     return this.evidence.list({
@@ -137,36 +144,42 @@ export class EvidenceController {
   }
 
   /** 证据文档详情（含原文） */
+  @ApiOperation({ summary: '证据文档详情（含原文）' })
   @Get(':id')
   detail(@Param('id') id: string) {
     return this.evidence.detail(id);
   }
 
   /** 入库管线状态：待切分 / 已切分 / 失败、片段数、最近一次入库时间、错误信息 */
+  @ApiOperation({ summary: '入库管线状态（待切分 / 已切分 / 失败、片段数、最近入库时间）' })
   @Get(':id/pipeline')
   pipeline(@Param('id') id: string) {
     return this.evidence.pipeline(id);
   }
 
   /** 停用影响预览：引用该证据的分析列表（分析 ID、episode、版本、引用的 statement） */
+  @ApiOperation({ summary: '停用影响预览：引用该证据的分析列表' })
   @Get(':id/impact')
   impact(@Param('id') id: string) {
     return this.evidence.impactPreview(id);
   }
 
   /** 新建证据文档（标题、来源类型、来源地址、许可、核实日期） */
+  @ApiOperation({ summary: '新建证据文档' })
   @Post()
   create(@CurrentUser() user: { id: string }, @Body() body: EvidenceCreateBody) {
     return this.evidence.create(user.id, body);
   }
 
   /** 编辑证据文档（改动写审计） */
+  @ApiOperation({ summary: '编辑证据文档（改动写审计）' })
   @Patch(':id')
   update(@CurrentUser() user: { id: string }, @Param('id') id: string, @Body() body: EvidenceDocBody) {
     return this.evidence.update(user.id, id, body);
   }
 
   /** 停用 / 启用：停用时返回影响预览，供审核人确认；启用立即生效 */
+  @ApiOperation({ summary: '停用 / 启用证据文档（停用时返回影响预览）' })
   @Post(':id/active')
   setActive(
     @CurrentUser() user: { id: string },
@@ -180,6 +193,7 @@ export class EvidenceController {
    * 切分入库：把文档原文切分为片段写入 evidence_chunk，并计算本地 16 维向量。
    * 幂等：重复 ingest 不会重复产生片段（按位置更新）。
    */
+  @ApiOperation({ summary: '切分入库（切分片段并计算本地向量，幂等）' })
   @Post(':id/ingest')
   ingest(@CurrentUser() user: { id: string }, @Param('id') id: string) {
     return this.evidence.ingest(user.id, id);

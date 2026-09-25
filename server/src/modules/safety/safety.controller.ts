@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/public.decorator';
 
 /**
@@ -6,9 +7,11 @@ import { Public } from '../../common/public.decorator';
  * 文案与 App A03「需要及时寻求专业帮助」一致；命中信号由安全规则引擎（T04）判定，
  * 这里返回固定的提示内容，网络异常时前端也可直接展示本页静态内容。
  */
+@ApiTags('就医提示')
 @Controller('safety')
 export class SafetyNoticeController {
   @Public()
+  @ApiOperation({ summary: '就医提示内容（公开，命中红旗时展示，不被登录 / 付费 / 上传阻断）' })
   @Get('emergency-notice')
   emergencyNotice() {
     return {

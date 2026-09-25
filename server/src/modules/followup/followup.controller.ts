@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsArray, IsIn, IsOptional } from 'class-validator';
 import { FollowupService } from './followup.service';
 import { CurrentUser } from '../../common/current-user.decorator';
@@ -6,6 +7,12 @@ import { RequireConsent } from '../../common/require-consent.decorator';
 
 class CorrectFollowupDto {
   /** 纠正后的固定六段（key / title / items，items 可编辑文字、增删、调整顺序） */
+  @ApiProperty({
+    description: '纠正后的固定六段（每段 key / title / items；items 可编辑文字、增删、调整顺序）',
+    type: 'array',
+    items: { type: 'object' },
+    required: false,
+  })
   @IsOptional()
   @IsArray({ message: '摘要内容格式不正确：sections 应为固定六段的数组' })
   sections?: unknown[];
@@ -13,6 +20,7 @@ class CorrectFollowupDto {
 
 class ExportFollowupDto {
   /** 导出格式：文本（纯文本）/ PDF、图片（浏览器打印生成） */
+  @ApiProperty({ description: '导出格式：文本（纯文本）/ PDF / 图片（后两者浏览器打印生成）', enum: ['文本', 'PDF', '图片'] })
   @IsIn(['文本', 'PDF', '图片'], { message: '导出格式必须是：文本 / PDF / 图片' })
   format!: string;
 }
@@ -22,24 +30,28 @@ class ExportFollowupDto {
  * 需登录 + 需同意「健康信息处理」（全局守卫）；只能操作自己的病程（他人 404）。
  * 固定六段、区分来源、未核实项保留并标记；预览后纠正；导出文本（PDF / 图片由浏览器打印生成）。
  */
+@ApiTags('复诊摘要')
 @RequireConsent('健康信息处理')
 @Controller('episodes')
 export class FollowupController {
   constructor(private readonly followup: FollowupService) {}
 
   /** 生成六段草稿：从该病程的 care_event 自动整理（可反复重新生成） */
+  @ApiOperation({ summary: '生成复诊摘要六段草稿（可反复重新生成）' })
   @Post(':id/followup/generate')
   generate(@CurrentUser() user: { id: string }, @Param('id') id: string) {
     return this.followup.generate(user.id, id);
   }
 
   /** 最新一份摘要（六段 content + 生成时间 + 是否已导出） */
+  @ApiOperation({ summary: '最新一份复诊摘要（六段 + 生成时间 + 是否已导出）' })
   @Get(':id/followup')
   latest(@CurrentUser() user: { id: string }, @Param('id') id: string) {
     return this.followup.latest(user.id, id);
   }
 
   /** 预览后纠正：编辑各段文字、增删问题、调整问题顺序；保留来源标记 */
+  @ApiOperation({ summary: '预览后纠正：编辑各段文字、增删问题、调整顺序（保留来源标记）' })
   @Put(':id/followup/:summaryId')
   correct(
     @CurrentUser() user: { id: string },
@@ -51,6 +63,7 @@ export class FollowupController {
   }
 
   /** 导出：文本返回纯文本（带头部与水印脚注）；PDF / 图片由浏览器打印生成 */
+  @ApiOperation({ summary: '导出复诊摘要（文本返回纯文本 + 水印脚注；PDF / 图片浏览器打印生成）' })
   @Post(':id/followup/:summaryId/export')
   exportSummary(
     @CurrentUser() user: { id: string },
