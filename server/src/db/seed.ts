@@ -67,11 +67,12 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   app.prepare('INSERT INTO users (id,status,created_at,retention_until) VALUES (?,?,?,?)')
     .run(u2, 'active', day('2026-08-20'), '2027-08-20T00:00:00.000Z');
 
-  identity.prepare('INSERT INTO identity_profile (user_id,phone_enc,real_name_enc) VALUES (?,?,?)')
-    .run(u1, crypto.encrypt('13800001234'), crypto.encrypt('张岚'));
-  identity.prepare('INSERT INTO identity_profile (user_id,phone_enc,real_name_enc) VALUES (?,?,?)')
-    .run(u2, crypto.encrypt('13900005678'), crypto.encrypt('李成'));
-
+  identity
+    .prepare('INSERT INTO identity_profile (user_id,phone_enc,phone_hash,real_name_enc) VALUES (?,?,?,?)')
+    .run(u1, crypto.encrypt('13800001234'), crypto.blindIndex('13800001234'), crypto.encrypt('张岚'));
+  identity
+    .prepare('INSERT INTO identity_profile (user_id,phone_enc,phone_hash,real_name_enc) VALUES (?,?,?,?)')
+    .run(u2, crypto.encrypt('13900005678'), crypto.blindIndex('13900005678'), crypto.encrypt('李成'));
   for (const [uidv, scopes] of [
     [u1, [['健康信息处理', null], ['产品改进', null], ['分享', '2026-08-15T00:00:00.000Z']]],
     [u2, [['健康信息处理', null], ['产品改进', '2026-09-02T00:00:00.000Z']]],

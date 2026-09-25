@@ -9,6 +9,7 @@ export const IDENTITY_DDL = `
 CREATE TABLE IF NOT EXISTS identity_profile (
   user_id       TEXT PRIMARY KEY,
   phone_enc     TEXT NOT NULL,
+  phone_hash    TEXT NOT NULL UNIQUE,
   real_name_enc TEXT
 );
 `;

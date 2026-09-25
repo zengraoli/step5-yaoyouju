@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { DbModule } from './db/db.module';
 import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
 import { AuthModule } from './modules/auth/auth.module';
+import { AuthGuard } from './common/auth.guard';
+import { ConsentGuard } from './common/consent.guard';
 import { EpisodesModule } from './modules/episodes/episodes.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AnalysesModule } from './modules/analyses/analyses.module';
@@ -46,6 +49,11 @@ import { SwitchesModule } from './modules/switches/switches.module';
     AdminModule,
   ],
   controllers: [HealthController],
-  providers: [HealthService],
+  providers: [
+    HealthService,
+    // 全局守卫：先校验登录，再校验「健康信息处理」同意（标注 @Public() 的路由跳过）
+    { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: ConsentGuard },
+  ],
 })
 export class AppModule {}

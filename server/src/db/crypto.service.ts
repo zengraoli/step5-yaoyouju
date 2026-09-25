@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHmac, randomBytes, scryptSync } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -54,6 +54,11 @@ export class FieldCrypto {
       decipher.update(Buffer.from(parts[3], 'base64')),
       decipher.final(),
     ]).toString('utf8');
+  }
+
+  /** 盲索引：同一手机号得到稳定哈希，用于查找（不存储明文） */
+  blindIndex(value: string): string {
+    return createHmac('sha256', this.key).update(`phone:${value}`).digest('base64url');
   }
 
   /** 手机号脱敏：138****1234 */

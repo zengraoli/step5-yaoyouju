@@ -1,8 +1,12 @@
 import { Module } from '@nestjs/common';
+import { DbModule } from '../../db/db.module';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
 
-/**
- * 用户与授权服务（/auth）
- * T03 补充：手机号验证码登录、同意记录、身份隔离库字段加密。
- */
-@Module({})
+@Module({
+  imports: [DbModule],
+  controllers: [AuthController],
+  providers: [AuthService],
+  exports: [AuthService],
+})
 export class AuthModule {}

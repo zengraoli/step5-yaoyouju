@@ -8,6 +8,8 @@ export enum ErrorCode {
   UNAUTHORIZED = 40100,
   /** 无权限 */
   FORBIDDEN = 40300,
+  /** 未同意健康信息处理 */
+  CONSENT_REQUIRED = 40310,
   /** 资源不存在 */
   NOT_FOUND = 40400,
   /** 状态冲突（如重复提交、状态机不允许的流转） */
@@ -26,6 +28,7 @@ const MESSAGES: Record<number, string> = {
   [ErrorCode.BAD_REQUEST]: '请求参数不正确',
   [ErrorCode.UNAUTHORIZED]: '请先登录',
   [ErrorCode.FORBIDDEN]: '没有权限执行该操作',
+  [ErrorCode.CONSENT_REQUIRED]: '需要先同意健康信息处理才能使用该功能',
   [ErrorCode.NOT_FOUND]: '请求的内容不存在',
   [ErrorCode.CONFLICT]: '当前状态不允许该操作',
   [ErrorCode.SAFETY_SEEK_CARE]: '检测到需要及时就医的信号，请尽快就医',
@@ -39,18 +42,19 @@ export class ApiException extends HttpException {
   readonly code: ErrorCode;
 
   constructor(code: ErrorCode, message?: string) {
-    super(
-      { code, message: message ?? MESSAGES[code] ?? '请求处理失败' },
-      code >= ErrorCode.SERVICE_UNAVAILABLE
-        ? HttpStatus.SERVICE_UNAVAILABLE
-        : code >= ErrorCode.INTERNAL
-          ? HttpStatus.INTERNAL_SERVER_ERROR
-          : code >= ErrorCode.BAD_REQUEST
-            ? HttpStatus.BAD_REQUEST
-            : HttpStatus.OK,
-    );
+    super({ code, message: message ?? MESSAGES[code] ?? '请求处理失败' }, httpStatus(code));
     this.code = code;
   }
+}
+
+function httpStatus(code: ErrorCode): number {
+  if (code >= ErrorCode.INTERNAL) return HttpStatus.INTERNAL_SERVER_ERROR;
+  if (code >= ErrorCode.SERVICE_UNAVAILABLE) return HttpStatus.SERVICE_UNAVAILABLE;
+  if (code >= ErrorCode.CONFLICT) return HttpStatus.CONFLICT;
+  if (code >= ErrorCode.NOT_FOUND) return HttpStatus.NOT_FOUND;
+  if (code >= ErrorCode.FORBIDDEN) return HttpStatus.FORBIDDEN;
+  if (code >= ErrorCode.UNAUTHORIZED) return HttpStatus.UNAUTHORIZED;
+  return HttpStatus.BAD_REQUEST;
 }
 
 export function errorMessage(code: ErrorCode): string {

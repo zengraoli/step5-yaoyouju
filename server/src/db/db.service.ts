@@ -3,6 +3,7 @@ import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { DatabaseSync } from 'node:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { FieldCrypto } from './crypto.service';
 
 /**
  * SQLite 连接管理（演示实现替代原设计的 PostgreSQL 业务库与身份隔离库）：
@@ -13,11 +14,13 @@ import * as path from 'node:path';
 export class DbService implements OnModuleDestroy {
   readonly app: DatabaseSync;
   readonly identity: DatabaseSync;
+  readonly crypto: FieldCrypto;
   readonly dataDir: string;
 
   constructor() {
     this.dataDir = path.resolve(process.env.DB_DIR ?? './data');
     fs.mkdirSync(this.dataDir, { recursive: true });
+    this.crypto = FieldCrypto.fromEnv(this.dataDir);
     this.app = this.open(path.join(this.dataDir, 'app.db'));
     this.identity = this.open(path.join(this.dataDir, 'identity.db'));
   }
