@@ -13,7 +13,7 @@ import * as path from 'node:path';
 export class DbService implements OnModuleDestroy {
   readonly app: DatabaseSync;
   readonly identity: DatabaseSync;
-  private readonly dataDir: string;
+  readonly dataDir: string;
 
   constructor() {
     this.dataDir = path.resolve(process.env.DB_DIR ?? './data');

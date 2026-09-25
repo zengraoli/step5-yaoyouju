@@ -25,12 +25,13 @@ npm run seed              # 写入演示种子数据
 | IDENTITY_ENCRYPTION_KEY | 空 | 身份隔离库字段加密密钥（AES-256-GCM，base64） |
 | DEMO_SMS_CODE | 123456 | 演示短信验证码 |
 | ADMIN_TOTP_DEMO_CODE | 123456 | 后台 TOTP 演示固定码 |
+| ADMIN_DEMO_PASSWORD | 123456 | 后台演示账号登录密码（演示固定值） |
 | WORKER_POLL_INTERVAL_MS | 1500 | Worker 轮询间隔 |
 
 ## 演示账号
 
 - 用户端：任意 11 位手机号 + 验证码 `123456`；种子数据含 2 个演示用户（见 `npm run seed`）。
-- 后台：5 个角色各一个账号，TOTP 固定码 `123456`（账号密码见 `server/README.md`「默认账号」一节，T14 补充）。
+- 后台：5 个角色各一个账号（editor01 / clinician01 / tech01 / compliance01 / super01），TOTP 固定码 `123456`；登录密码取 `.env` 中 `ADMIN_DEMO_PASSWORD`（默认演示值见 `.env.example`）。
 
 ## 常用命令
 
