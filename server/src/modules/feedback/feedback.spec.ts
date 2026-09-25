@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { APP_GUARD } from '@nestjs/core';
 import { DbModule } from '../../db/db.module';
@@ -11,7 +12,11 @@ import { SchemaService } from '../../db/schema.service';
 import { AuthService } from '../auth/auth.service';
 import { AuditService } from '../../common/audit.service';
 import { AuthGuard } from '../../common/auth.guard';
+import { AdminGuard } from '../../common/admin.guard';
 import { ConsentGuard } from '../../common/consent.guard';
+import { hashAdminPassword } from '../../common/password';
+import { AdminAuthService } from '../admin/admin-auth.service';
+import { PermissionGuard } from '../admin/permission.guard';
 import { ResponseInterceptor } from '../../common/response.interceptor';
 import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { FeedbackController } from './feedback.controller';
@@ -63,15 +68,24 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
   let userId: string;
   let analysisId: string;
   let contentItemId: string;
+  /** 运行时生成的后台演示口令（覆盖种子哈希，避免在代码中出现明文） */
+  const adminPassword = randomUUID();
+  const adminTotp = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
+  /** 后台令牌（T14 起 /admin/* 走后台账号体系：合规角色） */
+  let adminToken: string;
+  let adminId: string;
 
   beforeAll(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yaoyouju-feedback-'));
     process.env.DB_DIR = dir;
+    process.env.ADMIN_TOTP_DEMO_CODE = adminTotp;
     const moduleRef = await Test.createTestingModule({
       imports: [DbModule],
       controllers: [FeedbackController, AdminFeedbackController],
-      providers: [FeedbackService, AuthService, AuditService, SchemaService,
+      providers: [FeedbackService, AuthService, AuditService, SchemaService, AdminAuthService,
         { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_GUARD, useClass: AdminGuard },
+        { provide: APP_GUARD, useClass: PermissionGuard },
         { provide: APP_GUARD, useClass: ConsentGuard },
       ],
     }).compile();
@@ -86,6 +100,12 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
 
     auth = app.get(AuthService);
     db = app.get(DbService);
+
+    // T14：/admin/* 由 AdminGuard 保护，使用合规角色后台账号（feedback.view / consent.view / feedback.handle）
+    db.app.prepare('UPDATE admin_user SET password_hash = ?').run(hashAdminPassword(adminPassword));
+    const admin = app.get(AdminAuthService).login('compliance01', adminPassword, adminTotp);
+    adminToken = admin.token;
+    adminId = admin.admin.id;
 
     // 演示用户 u1（13800001234）已同意「健康信息处理」，种子数据含一页分析与已发布内容
     const me = auth.login('13800001234', '123456');
@@ -114,6 +134,8 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
 
   const api = () => request(app.getHttpServer());
   const H = (t = token) => ({ Authorization: `Bearer ${t}` });
+  /** 后台接口请求头（T14：/admin/* 使用后台账号令牌） */
+  const HA = () => ({ Authorization: `Bearer ${adminToken}` });
 
   const submitFeedback = (body: Record<string, unknown>, t = token) =>
     api().post('/feedback').set(H(t)).send(body);
@@ -262,7 +284,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     const mediumId = (medium.body.data as FeedbackItem).id;
     const lowId = (low.body.data as FeedbackItem).id;
 
-    const queue = await api().get('/admin/feedback?type=error_report').set(H());
+    const queue = await api().get('/admin/feedback?type=error_report').set(HA());
     expect(queue.body.code).toBe(0);
     const items = queue.body.data as QueueItem[];
     const idx = (id: string) => items.findIndex((i) => i.id === id);
@@ -282,13 +304,13 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     expect(JSON.stringify(highItem.affected_users)).not.toMatch(/1\d{10}/);
 
     // 类型筛选：只返回帮助类型反馈
-    const helpOnly = await api().get('/admin/feedback?type=feedback').set(H());
+    const helpOnly = await api().get('/admin/feedback?type=feedback').set(HA());
     const helpItems = helpOnly.body.data as QueueItem[];
     expect(helpItems.length).toBeGreaterThan(0);
     expect(helpItems.every((i) => i.type === 'feedback')).toBe(true);
 
     // 状态筛选：只返回待处理
-    const pending = await api().get('/admin/feedback?status=待处理').set(H());
+    const pending = await api().get('/admin/feedback?status=待处理').set(HA());
     const pendingItems = pending.body.data as QueueItem[];
     expect(pendingItems.every((i) => i.status === '待处理')).toBe(true);
     expect(pendingItems.map((i) => i.id)).toContain(highId);
@@ -304,7 +326,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     const id = (created.body.data as FeedbackItem).id;
 
     // 未授权：用户原始内容不可见
-    const before = await api().get(`/admin/feedback/${id}`).set(H());
+    const before = await api().get(`/admin/feedback/${id}`).set(HA());
     expect(before.body.code).toBe(0);
     const beforeDetail = before.body.data as Detail;
     expect(beforeDetail.raw_content).toBe('未授权，不可查看');
@@ -314,12 +336,12 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     // 单条授权
     const granted = await api()
       .post(`/admin/feedback/${id}/authorize-view`)
-      .set(H())
+      .set(HA())
       .send({ scope: '核对报告原文表述' });
     expect(granted.body.code).toBe(0);
     const afterDetail = granted.body.data as Detail;
     expect(afterDetail.authorization.authorized).toBe(true);
-    expect(afterDetail.authorization.by).toBe(userId);
+    expect(afterDetail.authorization.by).toBe(adminId);
     expect(afterDetail.authorization.at).toBeTruthy();
     expect(afterDetail.authorization.scope).toBe('核对报告原文表述');
     expect(typeof afterDetail.raw_content).toBe('object');
@@ -332,7 +354,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     expect(raw.records.some((r) => r.raw_text.includes('腰椎 MRI'))).toBe(true);
 
     // 授权后再次读取详情：原始内容可见
-    const after = await api().get(`/admin/feedback/${id}`).set(H());
+    const after = await api().get(`/admin/feedback/${id}`).set(HA());
     expect((after.body.data as Detail).raw_content).not.toBe('未授权，不可查看');
 
     // 审计日志记录授权人、时间、范围（只追加）
@@ -343,7 +365,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
       )
       .all(`feedback:${id}`) as { actor_id: string; action: string; target: string; diff: string }[];
     expect(logs.length).toBe(1);
-    expect(logs[0].actor_id).toBe(userId);
+    expect(logs[0].actor_id).toBe(adminId);
     const diff = JSON.parse(logs[0].diff) as { scope: string };
     expect(diff.scope).toBe('核对报告原文表述');
 
@@ -355,7 +377,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
       severity: 'low',
     });
     const otherId = (other.body.data as FeedbackItem).id;
-    const otherDetail = (await api().get(`/admin/feedback/${otherId}`).set(H())).body.data as Detail;
+    const otherDetail = (await api().get(`/admin/feedback/${otherId}`).set(HA())).body.data as Detail;
     expect(otherDetail.raw_content).toBe('未授权，不可查看');
   });
 
@@ -370,7 +392,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
 
     const handled = await api()
       .post(`/admin/feedback/${id}/handle`)
-      .set(H())
+      .set(HA())
       .send({ action: '转内容修正', comment: '已转内容运营核对脚本表述' });
     expect(handled.body.code).toBe(0);
     const detail = handled.body.data as Detail;
@@ -378,7 +400,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     expect(detail.handling.length).toBe(1);
     expect(detail.handling[0].action).toBe('转内容修正');
     expect(detail.handling[0].comment).toBe('已转内容运营核对脚本表述');
-    expect(detail.handling[0].actor_id).toBe(userId);
+    expect(detail.handling[0].actor_id).toBe(adminId);
 
     // 处理记录落库 feedback_handling
     const rows = db.app
@@ -387,19 +409,19 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     expect(rows.length).toBe(1);
     expect(rows[0].action).toBe('转内容修正');
     expect(rows[0].comment).toBe('已转内容运营核对脚本表述');
-    expect(rows[0].actor_id).toBe(userId);
+    expect(rows[0].actor_id).toBe(adminId);
 
     // 审计日志
     const log = db.app
       .prepare(`SELECT actor_id, action, target, diff FROM audit_log WHERE action='feedback.handle' AND target=?`)
       .get(`feedback:${id}`) as { actor_id: string; diff: string };
-    expect(log.actor_id).toBe(userId);
+    expect(log.actor_id).toBe(adminId);
     expect((JSON.parse(log.diff) as { action: string }).action).toBe('转内容修正');
 
     // 再次处置：已回复用户 → 已处理（处理记录追加，不改历史）
     const replied = await api()
       .post(`/admin/feedback/${id}/handle`)
-      .set(H())
+      .set(HA())
       .send({ action: '已回复用户', comment: '已回复用户并解释版本差异' });
     expect(replied.body.code).toBe(0);
     const repliedDetail = replied.body.data as Detail;
@@ -410,12 +432,12 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     // 非法处置动作 → 40000；空处理记录 → 40000
     const badAction = await api()
       .post(`/admin/feedback/${id}/handle`)
-      .set(H())
+      .set(HA())
       .send({ action: '直接删除', comment: 'x' });
     expect(badAction.body.code).toBe(40000);
     const emptyComment = await api()
       .post(`/admin/feedback/${id}/handle`)
-      .set(H())
+      .set(HA())
       .send({ action: '关闭', comment: '   ' });
     expect(emptyComment.body.code).toBe(40000);
     // 失败的处置不写处理记录
@@ -437,7 +459,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
       const rid = (r.body.data as FeedbackItem).id;
       const res = await api()
         .post(`/admin/feedback/${rid}/handle`)
-        .set(H())
+        .set(HA())
         .send({ action, comment: `测试处置：${action}` });
       expect(res.body.code).toBe(0);
       expect((res.body.data as Detail).status).toBe(status);
@@ -447,7 +469,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     // 不存在的反馈 → 404
     const missing = await api()
       .post('/admin/feedback/00000000-0000-0000-0000-000000000000/handle')
-      .set(H())
+      .set(HA())
       .send({ action: '关闭', comment: 'x' });
     expect(missing.body.code).toBe(40400);
   });
@@ -481,10 +503,10 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
       severity: 'high',
     });
     const id = (report.body.data as FeedbackItem).id;
-    await api().post(`/admin/feedback/${id}/authorize-view`).set(H()).send({});
+    await api().post(`/admin/feedback/${id}/authorize-view`).set(HA()).send({});
     await api()
       .post(`/admin/feedback/${id}/handle`)
-      .set(H())
+      .set(HA())
       .send({ action: '转内容修正', comment: '转内容运营线下核对，不自动改写内容库' });
 
     // 内容库 / 证据库 / 模型与评测 / 投稿等表条数不变

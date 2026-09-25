@@ -26,12 +26,39 @@ npm run seed              # 写入演示种子数据
 | DEMO_SMS_CODE | 123456 | 演示短信验证码 |
 | ADMIN_TOTP_DEMO_CODE | 123456 | 后台 TOTP 演示固定码 |
 | ADMIN_DEMO_PASSWORD | 123456 | 后台演示账号登录密码（演示固定值） |
+| ADMIN_TOKEN_SECRET | 空 | 后台令牌签名密钥（HMAC-SHA256；未设置时用派生密钥，仅限本地演示） |
 | WORKER_POLL_INTERVAL_MS | 1500 | Worker 轮询间隔 |
 
 ## 演示账号
 
-- 用户端：任意 11 位手机号 + 验证码 `123456`；种子数据含 2 个演示用户（见 `npm run seed`）。
-- 后台：5 个角色各一个账号（editor01 / clinician01 / tech01 / compliance01 / super01），TOTP 固定码 `123456`；登录密码取 `.env` 中 `ADMIN_DEMO_PASSWORD`（默认演示值见 `.env.example`）。
+- 用户端：任意 11 位手机号 + 验证码 `123456`（取 `.env` 的 `DEMO_SMS_CODE`）；种子数据含 2 个演示用户（见 `npm run seed`）。
+- 后台：5 个角色各一个账号，**无自助注册**，账号由超级管理线下开通：
+
+  | 账号 | 角色 | 权限（最小必要，见 `src/modules/admin/admin.constants.ts`） |
+  |-|-|-|
+  | editor01 | 运营编辑 | content.draft / content.submit |
+  | clinician01 | 临床审核 | content.review / content.publish / content.offline |
+  | tech01 | 技术 | model.manage / eval.manage / switch.manage / evidence.manage |
+  | compliance01 | 合规 | feedback.view / feedback.handle / audit.view / consent.view / audit.export / dual_control.manage |
+  | super01 | 超级管理 | 全部权限（`*`） |
+
+  登录口令取 `.env` 的 `ADMIN_DEMO_PASSWORD`，TOTP 取 `.env` 的 `ADMIN_TOTP_DEMO_CODE`（默认演示值见 `.env.example`，仓库不保存明文）。
+  连续输错 5 次锁定 15 分钟；后台令牌 30 分钟有效（`Authorization: Bearer <admin token>`），与用户端令牌互不通用。
+
+## 后台接口（/admin，需后台令牌；越权返回 40300 并写审计）
+
+| 方法 | 路径 | 说明 | 权限 |
+|-|-|-|-|
+| POST | /admin/auth/login | 账号 + 口令 + TOTP 登录（公开，失败写审计） | — |
+| POST | /admin/auth/logout | 登出（写审计） | 已登录 |
+| GET | /admin/auth/me | 当前后台账号（角色、权限） | 已登录 |
+| GET | /admin/roles | 角色与权限矩阵（B10） | 已登录 |
+| GET | /admin/audit | 审计日志筛选（操作人 / 动作 / 时间范围）+ 分页 | audit.view |
+| GET | /admin/audit/verify | 哈希链校验 | audit.view |
+| POST | /admin/audit/export-request | 审计导出申请（状态待审批） | audit.export |
+| POST | /admin/audit/export-approve | 导出审批（不能审批本人提交的申请） | audit.export |
+| GET | /admin/authorizations | 单条授权记录（T12 authorize-view） | consent.view |
+| GET / PUT | /admin/dual-control/settings | 双人确认开关（写审计） | dual_control.manage |
 
 ## 常用命令
 

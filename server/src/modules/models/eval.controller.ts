@@ -3,6 +3,7 @@ import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsOptional, IsString, MaxLength }
 import { EvalCase } from './eval-scorer';
 import { EvalService } from './eval.service';
 import { CurrentUser } from '../../common/current-user.decorator';
+import { RequirePermission } from '../admin/permission.decorator';
 
 class CreateEvalSetDto {
   /** 评测集名称（如 错误安慰 / 关键遗漏 / 左右侧混淆 / 隐私） */
@@ -38,9 +39,10 @@ class RunEvalDto {
  * - 失败用例（输入 / 期望 / 实际 / 判定）去标识化：手机号 138****1234、姓名「用户」；
  * - runEval 的 result 由 metrics 决定：任一类别失败数 > 0 → 阻断发布。
  *
- * 注意：后台登录鉴权与角色权限在 T14 与后续页面任务完善，本任务先用全局登录守卫占位。
+ * T14：后台守卫（/admin）+ 技术角色权限 eval.manage（越权 40300 并写审计）。
  */
 @Controller('admin/eval')
+@RequirePermission('eval.manage')
 export class EvalController {
   constructor(private readonly evalService: EvalService) {}
 

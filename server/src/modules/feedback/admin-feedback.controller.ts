@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { FeedbackService, HANDLING_ACTIONS } from './feedback.service';
 import { CurrentUser } from '../../common/current-user.decorator';
+import { RequirePermission } from '../admin/permission.decorator';
 
 class FeedbackQueueQueryDto {
   /** 类型筛选：feedback=帮助类型反馈；error_report=错误举报 */
@@ -46,6 +47,8 @@ class HandleFeedbackDto {
  * - 反馈与举报不自动进入训练或内容库（处置动作只做线下转办，不自动改写内容库 / 模型）；
  * - 查看用户原始内容需单条授权（authorize-view），未授权时详情返回「未授权，不可查看」，
  *   授权人、时间、范围写入审计日志（只追加）。
+ *
+ * T14：后台守卫（/admin）+ 角色权限：队列 / 详情 feedback.view，单条授权 consent.view，处置 feedback.handle。
  */
 @Controller('admin/feedback')
 export class AdminFeedbackController {
@@ -53,18 +56,21 @@ export class AdminFeedbackController {
 
   /** 队列：按严重度分级排序（high > medium > low），支持按类型 / 状态筛选，附带四类版本与受影响范围 */
   @Get()
+  @RequirePermission('feedback.view')
   queue(@Query() query: FeedbackQueueQueryDto) {
     return this.feedback.queue({ type: query.type, status: query.status });
   }
 
   /** 详情：四类版本、受影响范围、处理记录；用户原始内容未授权时不可见 */
   @Get(':id')
+  @RequirePermission('feedback.view')
   detail(@Param('id') id: string) {
     return this.feedback.detail(id);
   }
 
   /** 单条授权查看用户原始内容（记录授权人、时间、范围到审计日志） */
   @Post(':id/authorize-view')
+  @RequirePermission('consent.view')
   authorizeView(
     @CurrentUser() user: { id: string },
     @Param('id') id: string,
@@ -75,6 +81,7 @@ export class AdminFeedbackController {
 
   /** 处置动作与处理记录（写 feedback_handling + 审计日志） */
   @Post(':id/handle')
+  @RequirePermission('feedback.handle')
   handle(@CurrentUser() user: { id: string }, @Param('id') id: string, @Body() dto: HandleFeedbackDto) {
     return this.feedback.handle(id, user.id, {
       action: dto.action as (typeof HANDLING_ACTIONS)[number],

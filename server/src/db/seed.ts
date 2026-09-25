@@ -1,10 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { FieldCrypto } from './crypto.service';
 import { APP_DDL, IDENTITY_DDL, ensureEvidenceColumns, ensureFeedbackColumns } from './schema';
 import { localVector } from '../modules/evidence/evidence-retrieval';
 import { RULE_SET_VERSION } from '../modules/safety/safety.rules';
 import { EvalCase, evalResult, scoreCases } from '../modules/models/eval-scorer';
+import { hashAdminPassword } from '../common/password';
+import { permissionsOf } from '../modules/admin/admin.constants';
 
 /**
  * 演示种子数据（全部虚构，不涉及真实用户）。
@@ -12,10 +14,6 @@ import { EvalCase, evalResult, scoreCases } from '../modules/models/eval-scorer'
  */
 
 const DEMO_PASSWORD = process.env.ADMIN_DEMO_PASSWORD?.trim() || '123456';
-
-function hashPassword(pw: string): string {
-  return createHash('sha256').update(`yaoyouju:${pw}`).digest('hex');
-}
 
 const uid = () => randomUUID();
 const now = () => new Date().toISOString();
@@ -71,19 +69,15 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   }
 
   // ---------- 角色与后台账号 ----------
-  const roles: [string, string][] = [
-    ['运营编辑', '内容创建/编辑/提交审核'],
-    ['临床审核', '医学审核/发布/撤回'],
-    ['技术', '模型发布/评测/开关'],
-    ['合规', '审计查看/举报处置/授权'],
-    ['超级管理', '全部权限/成员管理'],
-  ];
+  // 权限矩阵的单一数据源在 modules/admin/admin.constants.ts（ROLE_PERMISSIONS），
+  // 此处按角色名同步写入 role.permissions，供 B10 与数据库查询使用。
+  const roles: string[] = ['运营编辑', '临床审核', '技术', '合规', '超级管理'];
   const roleIds: Record<string, string> = {};
-  for (const [name, perm] of roles) {
+  for (const name of roles) {
     const id = uid();
     roleIds[name] = id;
     app.prepare('INSERT INTO role (id,name,permissions) VALUES (?,?,?)')
-      .run(id, name, JSON.stringify({ summary: perm }));
+      .run(id, name, JSON.stringify({ permissions: permissionsOf(name) }));
   }
   const admins: [string, string][] = [
     ['editor01', '运营编辑'],
@@ -97,7 +91,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
     const id = uid();
     adminIds[name] = id;
     app.prepare('INSERT INTO admin_user (id,name,role_id,mfa_enabled,password_hash,status) VALUES (?,?,?,?,?,?)')
-      .run(id, name, roleIds[role], 1, hashPassword(DEMO_PASSWORD), 'active');
+      .run(id, name, roleIds[role], 1, hashAdminPassword(DEMO_PASSWORD), 'active');
   }
 
   // ---------- 证据库 ----------

@@ -6,6 +6,8 @@ import { HealthController } from './health/health.controller';
 import { HealthService } from './health/health.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { AuthGuard } from './common/auth.guard';
+import { AdminGuard } from './common/admin.guard';
+import { AuditService } from './common/audit.service';
 import { ConsentGuard } from './common/consent.guard';
 import { EpisodesModule } from './modules/episodes/episodes.module';
 import { ReportsModule } from './modules/reports/reports.module';
@@ -18,6 +20,7 @@ import { EvidenceModule } from './modules/evidence/evidence.module';
 import { FeedbackModule } from './modules/feedback/feedback.module';
 import { ModelsModule } from './modules/models/models.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { PermissionGuard } from './modules/admin/permission.guard';
 import { SwitchesModule } from './modules/switches/switches.module';
 
 /**
@@ -57,8 +60,13 @@ import { SwitchesModule } from './modules/switches/switches.module';
   controllers: [HealthController],
   providers: [
     HealthService,
-    // 全局守卫：先校验登录，再校验「健康信息处理」同意（标注 @Public() 的路由跳过）
+    // 全局守卫顺序：用户端登录守卫（/admin 放行）→ 后台守卫（只保护 /admin）
+    // → 权限守卫（@RequirePermission 越权拦截并写审计）→ 同意守卫
+    // AuditService 供 PermissionGuard 写越权审计（无状态实例，各业务模块内的实例互不影响）
+    AuditService,
     { provide: APP_GUARD, useClass: AuthGuard },
+    { provide: APP_GUARD, useClass: AdminGuard },
+    { provide: APP_GUARD, useClass: PermissionGuard },
     { provide: APP_GUARD, useClass: ConsentGuard },
   ],
 })

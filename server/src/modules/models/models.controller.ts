@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { ModelReleasesService } from './models.service';
 import { CurrentUser } from '../../common/current-user.decorator';
+import { RequirePermission } from '../admin/permission.decorator';
 
 class CreateReleaseDto {
   @IsString()
@@ -36,10 +37,10 @@ class RollbackReleaseDto {
  * 发布流程：候选 →（评测门禁）→ 灰度 → 生效，可回滚；生效中的发布被新发布顶替时自动回滚。
  * 门禁未通过时 promote 返回 40900（评测门禁未通过，不能生效）。
  *
- * 注意：后台登录鉴权（账号 + TOTP + 角色权限矩阵，如技术角色的「模型发布 / 评测」权限）
- * 在 T14（后台账号与审计）与后续页面任务实现，本任务先用全局登录守卫占位。
+ * T14：后台守卫（/admin）+ 技术角色权限 model.manage（越权 40300 并写审计）。
  */
 @Controller('admin/models')
+@RequirePermission('model.manage')
 export class ModelsController {
   constructor(private readonly releases: ModelReleasesService) {}
 

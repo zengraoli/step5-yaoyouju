@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { APP_GUARD } from '@nestjs/core';
 import { DbModule } from '../../db/db.module';
@@ -11,7 +12,11 @@ import { SchemaService } from '../../db/schema.service';
 import { AuthService } from '../auth/auth.service';
 import { AuditService } from '../../common/audit.service';
 import { AuthGuard } from '../../common/auth.guard';
+import { AdminGuard } from '../../common/admin.guard';
 import { ConsentGuard } from '../../common/consent.guard';
+import { hashAdminPassword } from '../../common/password';
+import { AdminAuthService } from '../admin/admin-auth.service';
+import { PermissionGuard } from '../admin/permission.guard';
 import { ResponseInterceptor } from '../../common/response.interceptor';
 import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { ModelsController } from './models.controller';
@@ -28,10 +33,14 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
   let db: DbService;
   let dir: string;
   let token: string;
+  /** 运行时生成的后台演示口令（覆盖种子哈希，避免在代码中出现明文） */
+  const adminPassword = randomUUID();
+  const adminTotp = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
 
   beforeAll(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yaoyouju-models-'));
     process.env.DB_DIR = dir;
+    process.env.ADMIN_TOTP_DEMO_CODE = adminTotp;
     const moduleRef = await Test.createTestingModule({
       imports: [DbModule],
       controllers: [ModelsController, EvalController],
@@ -39,9 +48,12 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
         AuditService,
         SchemaService,
         AuthService,
+        AdminAuthService,
         EvalService,
         ModelReleasesService,
         { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_GUARD, useClass: AdminGuard },
+        { provide: APP_GUARD, useClass: PermissionGuard },
         { provide: APP_GUARD, useClass: ConsentGuard },
       ],
     }).compile();
@@ -54,8 +66,9 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
     await app.init();
 
     db = app.get(DbService);
-    // 演示用户 u1（13800001234）作为后台操作者
-    token = app.get(AuthService).login('13800001234', '123456').token;
+    // T14 起 /admin 走后台账号体系：技术角色（model.manage / eval.manage）作为后台操作者
+    db.app.prepare('UPDATE admin_user SET password_hash = ?').run(hashAdminPassword(adminPassword));
+    token = app.get(AdminAuthService).login('tech01', adminPassword, adminTotp).token;
   });
 
   afterAll(async () => {

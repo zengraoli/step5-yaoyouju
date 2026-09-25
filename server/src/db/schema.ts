@@ -14,6 +14,19 @@ CREATE TABLE IF NOT EXISTS identity_profile (
 );
 `;
 
+/**
+ * 审计日志只追加（数据库层兜底，T14）：
+ * node:sqlite 无法在应用层之外禁止改写，用 SQLite 触发器在数据库层拒绝 UPDATE / DELETE。
+ * 哈希链校验见 AuditService.verifyChain；应用写入口只有 AuditService.append。
+ */
+export const AUDIT_LOG_TRIGGERS = `
+CREATE TRIGGER IF NOT EXISTS audit_log_no_update BEFORE UPDATE ON audit_log
+BEGIN SELECT RAISE(ABORT, 'audit_log 只追加，不能修改'); END;
+
+CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log
+BEGIN SELECT RAISE(ABORT, 'audit_log 只追加，不能删除'); END;
+`;
+
 export const APP_DDL = `
 CREATE TABLE IF NOT EXISTS users (
   id             TEXT PRIMARY KEY,
@@ -221,6 +234,17 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL
 );
 
+-- 审计日志导出申请与审批（T14：导出需审批，审批人不能是申请人本人）
+CREATE TABLE IF NOT EXISTS audit_export_request (
+  id           TEXT PRIMARY KEY,
+  applicant_id TEXT,
+  reason       TEXT,
+  status       TEXT NOT NULL DEFAULT '待审批',
+  approver_id  TEXT,
+  approved_at  TEXT,
+  created_at   TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS model_release (
   id                  TEXT PRIMARY KEY,
   model_name          TEXT NOT NULL,
@@ -302,6 +326,9 @@ CREATE TABLE IF NOT EXISTS qa_message (
   followup_question TEXT,
   created_at       TEXT NOT NULL
 );
+
+-- 审计日志只追加：数据库层触发器（T14，见 AUDIT_LOG_TRIGGERS 定义）
+${AUDIT_LOG_TRIGGERS}
 `;
 
 /**
