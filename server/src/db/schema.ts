@@ -100,11 +100,32 @@ CREATE TABLE IF NOT EXISTS followup_summary (
 
 CREATE TABLE IF NOT EXISTS feedback (
   id                TEXT PRIMARY KEY,
+  user_id           TEXT,
   analysis_id       TEXT,
+  content_item_id   TEXT,
   help_type         TEXT,
   unsolved_question TEXT,
   is_error_report   INTEGER NOT NULL DEFAULT 0,
+  category          TEXT,
+  description       TEXT,
+  severity          TEXT,
+  status            TEXT NOT NULL DEFAULT '待处理',
+  report_meta       TEXT,
+  raw_content       TEXT,
+  authorized_by     TEXT,
+  authorized_at     TEXT,
+  authorize_scope   TEXT,
   created_at        TEXT NOT NULL
+);
+
+-- 举报处置处理记录（T12）：一条反馈可多次处置，记录只追加
+CREATE TABLE IF NOT EXISTS feedback_handling (
+  id          TEXT PRIMARY KEY,
+  feedback_id TEXT NOT NULL REFERENCES feedback(id),
+  actor_id    TEXT,
+  action      TEXT NOT NULL,
+  comment     TEXT,
+  created_at  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS safety_event (
@@ -280,7 +301,36 @@ CREATE TABLE IF NOT EXISTS qa_message (
 `;
 
 /**
- * 既有数据库的列增量迁移。
+ * 既有数据库的列增量迁移（T12 反馈与举报）。
+ * `CREATE TABLE IF NOT EXISTS` 不会给已存在的表补列，老库启动时按需 ALTER（幂等）。
+ */
+export function ensureFeedbackColumns(db: {
+  exec(sql: string): unknown;
+  prepare(sql: string): { all(...args: unknown[]): unknown };
+}): void {
+  const cols = db.prepare('PRAGMA table_info(feedback)').all() as { name: string }[];
+  if (cols.length === 0) return; // 表尚未创建（新建库走 APP_DDL）
+  const names = new Set(cols.map((c) => c.name));
+  const additions: [string, string][] = [
+    ['user_id', 'user_id TEXT'],
+    ['content_item_id', 'content_item_id TEXT'],
+    ['category', 'category TEXT'],
+    ['description', 'description TEXT'],
+    ['severity', 'severity TEXT'],
+    ['status', "status TEXT NOT NULL DEFAULT '待处理'"],
+    ['report_meta', 'report_meta TEXT'],
+    ['raw_content', 'raw_content TEXT'],
+    ['authorized_by', 'authorized_by TEXT'],
+    ['authorized_at', 'authorized_at TEXT'],
+    ['authorize_scope', 'authorize_scope TEXT'],
+  ];
+  for (const [name, ddl] of additions) {
+    if (!names.has(name)) db.exec(`ALTER TABLE feedback ADD COLUMN ${ddl}`);
+  }
+}
+
+/**
+ * 既有数据库的列增量迁移（T11 证据入库管线字段）。
  * `CREATE TABLE IF NOT EXISTS` 不会给已存在的表补列，老库启动时按需 ALTER（幂等）。
  */
 export function ensureEvidenceColumns(db: {

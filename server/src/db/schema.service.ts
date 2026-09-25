@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DbService } from './db.service';
-import { APP_DDL, IDENTITY_DDL, ensureEvidenceColumns } from './schema';
+import { APP_DDL, IDENTITY_DDL, ensureEvidenceColumns, ensureFeedbackColumns } from './schema';
 import { seedIfEmpty } from './seed';
 import { FieldCrypto } from './crypto.service';
 
@@ -16,8 +16,9 @@ export class SchemaService implements OnModuleInit {
   onModuleInit(): void {
     this.db.app.exec(APP_DDL);
     this.db.identity.exec(IDENTITY_DDL);
-    // 老库补列（T11 证据入库管线字段）
+    // 老库补列（T11 证据入库管线字段 / T12 反馈与举报字段）
     ensureEvidenceColumns(this.db.app);
+    ensureFeedbackColumns(this.db.app);
     const seeded = seedIfEmpty(this.db.app, this.db.identity, FieldCrypto.fromEnv(this.db.dataDir));
     this.logger.log(seeded ? '数据库结构就绪，已写入演示种子数据' : '数据库结构就绪，已有数据跳过种子写入');
   }

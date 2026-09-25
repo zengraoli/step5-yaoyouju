@@ -1,8 +1,9 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, createHash } from 'node:crypto';
 import { FieldCrypto } from './crypto.service';
-import { APP_DDL, IDENTITY_DDL, ensureEvidenceColumns } from './schema';
+import { APP_DDL, IDENTITY_DDL, ensureEvidenceColumns, ensureFeedbackColumns } from './schema';
 import { localVector } from '../modules/evidence/evidence-retrieval';
+import { RULE_SET_VERSION } from '../modules/safety/safety.rules';
 
 /**
  * 演示种子数据（全部虚构，不涉及真实用户）。
@@ -391,8 +392,31 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
       generated_at: t,
     }), '文本', t);
 
-  app.prepare('INSERT INTO feedback (id,analysis_id,help_type,unsolved_question,is_error_report,created_at) VALUES (?,?,?,?,?,?)')
-    .run(uid(), an1, '看懂了', '', 0, t);
+  // ---------- 反馈与举报（T12） ----------
+  app.prepare('INSERT INTO feedback (id,user_id,analysis_id,help_type,unsolved_question,is_error_report,status,created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .run(uid(), u1, an1, '看懂了', '', 0, '已收到', t);
+
+  // 演示错误举报：自动附带四类版本（分析 / 模型 / 内容 / 规则集）与用户原始内容快照（单条授权后可见）
+  const reportMeta = JSON.stringify({
+    analysis_version: 1,
+    analysis_id: an1,
+    model: { model_release_id: mr1, model_name: '本地模拟模型', prompt_version: 'prompt-v1' },
+    content: { content_item_id: contentIds[0], current_status: '已发布', version: 1 },
+    rule_set_version: RULE_SET_VERSION,
+  });
+  const rawContent = JSON.stringify({
+    records: [
+      { source_type: '自述', occurred_at: day('2026-07-18'), raw_text: '久坐 4 小时后出现腰部酸痛，起身活动可缓解' },
+      { source_type: '报告原文', occurred_at: day('2026-08-05'), raw_text: '腰椎 MRI 平扫（演示文本）：L5/S1 椎间盘轻度膨出，硬膜囊前缘轻度受压。' },
+      { source_type: '医生记录', occurred_at: day('2026-08-06'), raw_text: '医生建议：避免久坐，每 40 分钟起身活动；两周后复查' },
+    ],
+    reported_content: { type: 'content_item', id: contentIds[0], title: '看懂腰椎 MRI 报告：L5/S1 是什么', current_status: '已发布', script: '讲解 L5/S1 位置与报告中常见描述的含义；强调报告未提及不等于没问题。' },
+    note: '用户原始内容快照：仅在本条举报被单条授权后对后台可见',
+  });
+  app.prepare('INSERT INTO feedback (id,user_id,analysis_id,content_item_id,help_type,unsolved_question,is_error_report,category,description,severity,status,report_meta,raw_content,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(uid(), u1, an1, contentIds[0], null, null, 1, '解释与报告不符',
+      '分析解释里写「轻度膨出描述的是较轻的程度」，但报告原文还有「硬膜囊前缘轻度受压」，担心解释弱化了报告描述。',
+      'medium', '待处理', reportMeta, rawContent, t);
 
   // ---------- 用户 2：红旗信号 ----------
   const ep2 = uid();
@@ -441,6 +465,7 @@ if (require.main === module) {
   app.exec(APP_DDL);
   identity.exec(IDENTITY_DDL);
   ensureEvidenceColumns(app);
+  ensureFeedbackColumns(app);
   const created = seedIfEmpty(app, identity, FieldCrypto.fromEnv(dir));
   console.log(created ? '[seed] 已写入演示种子数据' : '[seed] 已有数据，跳过写入');
   app.close();
