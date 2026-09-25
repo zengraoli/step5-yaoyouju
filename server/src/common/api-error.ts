@@ -37,13 +37,22 @@ const MESSAGES: Record<number, string> = {
   [ErrorCode.INTERNAL]: '服务器内部错误',
 };
 
-/** 业务异常：携带中文 message 与登记过的错误码 */
+/** 业务异常：携带中文 message 与登记过的错误码；可附带结构化 data（如安全提示内容） */
 export class ApiException extends HttpException {
   readonly code: ErrorCode;
+  readonly data?: unknown;
 
-  constructor(code: ErrorCode, message?: string) {
-    super({ code, message: message ?? MESSAGES[code] ?? '请求处理失败' }, httpStatus(code));
+  constructor(code: ErrorCode, message?: string, data?: unknown) {
+    super(
+      {
+        code,
+        message: message ?? MESSAGES[code] ?? '请求处理失败',
+        ...(data !== undefined ? { data } : {}),
+      },
+      httpStatus(code),
+    );
     this.code = code;
+    this.data = data;
   }
 }
 

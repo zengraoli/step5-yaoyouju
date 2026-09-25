@@ -33,6 +33,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let code: number = ErrorCode.INTERNAL;
     let message = '服务器内部错误';
+    let data: unknown = null;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -43,8 +44,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
       const body = exception.getResponse();
       if (body && typeof body === 'object') {
-        const b = body as { code?: number; message?: string | string[] };
+        const b = body as { code?: number; message?: string | string[]; data?: unknown };
         if (typeof b.code === 'number') code = b.code;
+        // 透传结构化数据（如安全提示内容）；未提供时保持 null
+        if ('data' in b) data = b.data;
         if (Array.isArray(b.message) && b.message.length > 0) {
           message = b.message.join('；');
         } else if (typeof b.message === 'string' && /[\u4e00-\u9fa5]/.test(b.message)) {
@@ -64,6 +67,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.error(`[${code}] ${message}`);
     }
 
-    res.status(status).json({ code, data: null, message });
+    res.status(status).json({ code, data, message });
   }
 }
