@@ -1,0 +1,68 @@
+/**
+ * 腰有据 · 全局基础样式
+ * 页面背景、字体栈、正文行高按设计规范统一设置；在 App.vue 中引入（全局生效）。
+ * 颜色 / 字号 / 圆角 / 间距一律使用 src/uni.scss 的变量，不散落硬编码。
+ */
+@import '../uni.scss';
+
+page {
+  background-color: $color-bg;
+  font-family: $font-family;
+  font-size: $font-size-body;
+  line-height: $line-height-body;
+  color: $color-text-1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 统一盒模型，避免各端默认差异 */
+view,
+text,
+button,
+input,
+textarea,
+scroll-view,
+swiper,
+swiper-item,
+image,
+navigator {
+  box-sizing: border-box;
+}
+
+/* 页面容器：左右边距 16（移动端规范） */
+.page {
+  min-height: 100vh;
+  padding: $spacing-page;
+  background-color: $color-bg;
+}
+
+/* 页面标题（17px Medium） */
+.page-title {
+  font-size: $font-size-page-title;
+  font-weight: $font-weight-medium;
+  color: $color-text-1;
+  line-height: 1.4;
+}
+
+/* 辅助说明（来源 / 时间，12px） */
+.aux-text {
+  font-size: $font-size-aux;
+  color: $color-text-3;
+  line-height: $line-height-body;
+}
+
+/* 纵向间距工具类 */
+.gap-sm {
+  height: $spacing-sm;
+}
+
+.gap-md {
+  height: $spacing-md;
+}
+
+.gap-lg {
+  height: $spacing-lg;
+}
+
+.gap-xl {
+  height: $spacing-xl;
+}

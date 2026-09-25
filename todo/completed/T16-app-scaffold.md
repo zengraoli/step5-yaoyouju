@@ -1,7 +1,7 @@
 # T16 App 项目骨架与通用组件
 
 阶段：S1 app
-状态：待完成
+状态：已完成（v0.17，2026-09-26）
 设计稿：`docs/design/00-spec.png`（设计规范见 `docs/design/README.md`）
 
 ## 要做什么

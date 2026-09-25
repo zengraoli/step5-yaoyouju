@@ -1,0 +1,71 @@
+/**
+ * 腰有据 · 全局 SCSS 变量（uni-app 规范入口）
+ *
+ * uni-app 会把本文件内容注入到每个组件 / 页面的 <style lang="scss"> 中，
+ * 因此这里【只能放变量定义】，且不要用相对路径 @import 其他文件。
+ * 所有组件与页面无需 import 即可直接使用下列变量。
+ *
+ * 设计规范来源：docs/design/README.md（色彩令牌 / 字体层级 / 圆角 / 尺寸）
+ * 对应的 CSS 自定义属性（运行时 / 内联 style 使用）见 src/theme/tokens.css，两处保持一致。
+ */
+
+/* ============ 色彩令牌（docs/design/README.md） ============ */
+$color-primary: #0f6e74; // 主操作 / 选中 / 品牌
+$color-primary-light: #e3f1f2; // 选中背景 / 提示卡
+$color-bg: #f4f6f8; // 页面背景
+$color-surface: #ffffff; // 卡片 / 输入
+$color-border: #e4e8ee; // 分隔 / 描边
+$color-text-1: #1b2230; // 主文本
+$color-text-2: #5c6675; // 次文本
+$color-text-3: #98a1ae; // 占位 / 弱提示
+$color-ok: #1e9e5a; // 已确认 / 已审核
+$color-warn: #c77700; // 尚未确认 / 未核实
+$color-error: #d93b3b; // 有冲突 / 需就医
+$color-info: #2f6fd8; // 报告原文 / 信息
+
+/* ============ 派生浅色（由规范色值淡化，仅用于状态标签 / 提示条底色） ============ */
+$color-ok-light: #e6f5ec;
+$color-warn-light: #fbf1e0;
+$color-error-light: #fbeaea;
+$color-info-light: #e9f0fc;
+$color-neutral-light: #f1f3f6; // 中性标签底色（自述 / 系统生成 / 已下线 · 更正中）
+
+/* ============ 字体（系统字体栈，不加载外部资源） ============ */
+$font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans SC', 'Source Han Sans SC',
+  'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+
+/* 字体层级 */
+$font-size-page-title: 17px; // 页面标题（Medium）
+$font-size-card-title: 15px; // 卡片标题（Medium）
+$font-size-body: 14px; // 正文（Regular，行高 1.5–1.6）
+$font-size-aux: 12px; // 辅助说明（来源 / 时间）
+$font-size-aux-lg: 13px; // 辅助说明（偏长取值）
+$font-size-tag: 11px; // 标签（Medium）
+
+/* 字重 */
+$font-weight-regular: 400;
+$font-weight-medium: 500;
+
+/* 行高 */
+$line-height-body: 1.5;
+
+/* ============ 圆角 ============ */
+$radius-card: 12px; // 卡片
+$radius-button: 10px; // 按钮
+$radius-tag: 4px; // 标签
+$radius-pill: 999px; // 芯片（胶囊，规范未单列）
+
+/* ============ 间距与尺寸 ============ */
+$spacing-page: 16px; // 页面边距（移动端）
+$spacing-xs: 4px;
+$spacing-sm: 8px;
+$spacing-md: 12px;
+$spacing-lg: 16px;
+$spacing-xl: 20px;
+$spacing-xxl: 24px;
+$tap-size: 44px; // 最小点击区域 44×44
+
+/* 组件常用尺寸 */
+$tabbar-height: 50px; // 自定义 TabBar 高度（不含安全区）
+$button-height: 44px; // 按钮高度（= 最小点击区域）
+$input-height: 44px; // 输入框高度
