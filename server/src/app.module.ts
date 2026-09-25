@@ -10,6 +10,7 @@ import { ConsentGuard } from './common/consent.guard';
 import { EpisodesModule } from './modules/episodes/episodes.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AnalysesModule } from './modules/analyses/analyses.module';
+import { QaModule } from './modules/qa/qa.module';
 import { SafetyModule } from './modules/safety/safety.module';
 import { ContentsModule } from './modules/contents/contents.module';
 import { EvidenceModule } from './modules/evidence/evidence.module';
@@ -24,6 +25,7 @@ import { SwitchesModule } from './modules/switches/switches.module';
  * - episodes：病程记录服务（/episodes）
  * - reports：报告解析服务（/reports）
  * - analyses：分析编排服务（/analyses）
+ * - qa：问与解释（/qa/sessions）
  * - safety：安全规则引擎（被分析编排调用，命中写安全事件）
  * - contents：内容库服务（/contents）
  * - evidence：证据库检索（Worker 侧受控检索）
@@ -41,6 +43,7 @@ import { SwitchesModule } from './modules/switches/switches.module';
     EpisodesModule,
     ReportsModule,
     AnalysesModule,
+    QaModule,
     SafetyModule,
     ContentsModule,
     EvidenceModule,
