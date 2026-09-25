@@ -290,6 +290,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   const switches: [string, boolean, string][] = [
     ['个性化分析', true, '默认开启'],
     ['视频推荐', true, '默认开启'],
+    ['拍照提取', false, 'OCR 为模拟实现，默认关闭'],
     ['案例卡片', false, '二期预留，暂不开放'],
   ];
   for (const [key, enabled, reason] of switches) {

@@ -62,7 +62,7 @@ describe('T02 数据模型与种子数据', () => {
     expect(count('SELECT COUNT(*) n FROM evidence_chunk')).toBeGreaterThanOrEqual(12);
     expect(count('SELECT COUNT(*) n FROM role')).toBe(5);
     expect(count('SELECT COUNT(*) n FROM admin_user')).toBe(5);
-    expect(count('SELECT COUNT(*) n FROM feature_switch')).toBe(3);
+    expect(count('SELECT COUNT(*) n FROM feature_switch')).toBe(4);
     expect(count('SELECT COUNT(*) n FROM eval_set')).toBe(1);
     expect(count('SELECT COUNT(*) n FROM safety_event')).toBe(1);
 
