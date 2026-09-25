@@ -11,6 +11,7 @@ import { EpisodesModule } from './modules/episodes/episodes.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AnalysesModule } from './modules/analyses/analyses.module';
 import { QaModule } from './modules/qa/qa.module';
+import { FollowupModule } from './modules/followup/followup.module';
 import { SafetyModule } from './modules/safety/safety.module';
 import { ContentsModule } from './modules/contents/contents.module';
 import { EvidenceModule } from './modules/evidence/evidence.module';
@@ -26,6 +27,7 @@ import { SwitchesModule } from './modules/switches/switches.module';
  * - reports：报告解析服务（/reports）
  * - analyses：分析编排服务（/analyses）
  * - qa：问与解释（/qa/sessions）
+ * - followup：复诊摘要（/episodes/{id}/followup）
  * - safety：安全规则引擎（被分析编排调用，命中写安全事件）
  * - contents：内容库服务（/contents）
  * - evidence：证据库检索（Worker 侧受控检索）
@@ -44,6 +46,7 @@ import { SwitchesModule } from './modules/switches/switches.module';
     ReportsModule,
     AnalysesModule,
     QaModule,
+    FollowupModule,
     SafetyModule,
     ContentsModule,
     EvidenceModule,
