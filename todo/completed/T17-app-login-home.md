@@ -1,7 +1,7 @@
 # T17 登录授权与首页
 
 阶段：S1 app
-状态：待完成
+状态：已完成（v0.18，2026-09-26）
 设计稿：`docs/design/app/A01.png`、`docs/design/app/A14.png`
 
 ## 要做什么

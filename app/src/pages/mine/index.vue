@@ -7,6 +7,7 @@
 import AppCard from '../../components/AppCard.vue'
 import AppButton from '../../components/AppButton.vue'
 import EmergencyEntry from '../../components/EmergencyEntry.vue'
+import TabBar from '../../components/TabBar.vue'
 import { getBaseUrl, setBaseUrl } from '../../api/request'
 
 /** 切换 API 基础地址（演示用：指向本地 server 3200） */
@@ -29,7 +30,10 @@ function onResetBaseUrl() {
       <view class="gap-sm" />
       <AppButton type="secondary" @click="onResetBaseUrl">恢复默认地址</AppButton>
     </AppCard>
+    <!-- 底部导航占位 -->
+    <view class="tabbar-placeholder" />
   </view>
+  <TabBar current="mine" />
 </template>
 
 <style lang="scss">

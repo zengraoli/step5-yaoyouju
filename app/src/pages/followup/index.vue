@@ -5,6 +5,7 @@
  */
 import AppCard from '../../components/AppCard.vue'
 import EmergencyEntry from '../../components/EmergencyEntry.vue'
+import TabBar from '../../components/TabBar.vue'
 </script>
 
 <template>
@@ -16,7 +17,10 @@ import EmergencyEntry from '../../components/EmergencyEntry.vue'
     <AppCard title="占位页面" subtitle="T23 复诊摘要预览与导出">
       <text class="placeholder-text">这里将展示复诊摘要预览与导出：固定六段结构，区分自述、报告原文与医生记录；未核实项保留，用户预览后自主导出。</text>
     </AppCard>
+    <!-- 底部导航占位 -->
+    <view class="tabbar-placeholder" />
   </view>
+  <TabBar current="followup" />
 </template>
 
 <style lang="scss">

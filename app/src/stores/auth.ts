@@ -56,6 +56,11 @@ export const useAuthStore = defineStore('auth', {
       return res
     },
 
+    /** 获取短信验证码（演示固定码 123456，返回脱敏手机号） */
+    async sendSmsCode(phone: string): Promise<{ sent: boolean; masked: string }> {
+      return authApi.sendSmsCode(phone)
+    },
+
     applyLogin(res: LoginResult): void {
       this.token = res.token
       this.userId = res.user.id

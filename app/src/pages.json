@@ -1,9 +1,18 @@
 {
   "pages": [
     {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "腰有据",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
       "path": "pages/index/index",
       "style": {
         "navigationBarTitleText": "当前情况",
+        "navigationStyle": "custom",
         "enablePullDownRefresh": false
       }
     },
@@ -50,33 +59,5 @@
     "navigationBarBorderStyle": "white",
     "backgroundColor": "#F4F6F8",
     "backgroundTextStyle": "dark"
-  },
-  "tabBar": {
-    "color": "#98A1AE",
-    "selectedColor": "#0F6E74",
-    "backgroundColor": "#FFFFFF",
-    "borderStyle": "white",
-    "list": [
-      {
-        "pagePath": "pages/index/index",
-        "text": "当前情况"
-      },
-      {
-        "pagePath": "pages/qa/index",
-        "text": "问与解释"
-      },
-      {
-        "pagePath": "pages/timeline/index",
-        "text": "病程"
-      },
-      {
-        "pagePath": "pages/followup/index",
-        "text": "复诊准备"
-      },
-      {
-        "pagePath": "pages/mine/index",
-        "text": "我的"
-      }
-    ]
   }
 }

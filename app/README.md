@@ -22,8 +22,12 @@ npm run typecheck
 ```
 
 > 后端默认指向 `http://127.0.0.1:3200`（本地 server，启动方式见 `server/README.md`）。
-> 后端未启动时，首页「接口与登录态自检」会显示接口异常，就医提示页展示静态兜底内容（产品红线：该页始终可达）。
+> 后端未启动时，首页会提示数据加载失败，就医提示页展示静态兜底内容（产品红线：该页始终可达）。
 > API 基础地址可在「我的」页切换（`src/api/request.ts` 的 `setBaseUrl`）。
+>
+> 演示登录：任意 11 位手机号 + 验证码 `123456`（验证码只写日志，见 `docs/brief.md`）。
+> 首次进入是登录与授权页（A01），需勾选两条协议（含「单独同意：处理我的健康信息」）才能登录；
+> 已登录用户再次进入直接到首页（A14 当前情况）。
 
 ## 目录结构
 
@@ -46,10 +50,16 @@ app/
     ├── api/                   # 接口封装
     │   ├── request.ts         # 统一请求：baseURL 可配置、Bearer token、{code,data,message}
     │   ├── auth.ts            # sms-code / login / me / consents / grant / revoke
+    │   ├── episodes.ts        # 病程列表 / 详情 / 今天状态 / 内联确认（PATCH events）
+    │   ├── analyses.ts        # 生成一页分析（POST /analyses）与任务状态
+    │   ├── followup.ts        # 最近一份复诊摘要（GET /episodes/{id}/followup）
+    │   ├── contents.ts        # 已发布内容列表（含服务端推荐理由）
     │   ├── safety.ts          # emergency-notice（就医提示，公开）
     │   └── switches.ts        # switches（功能开关，公开）
     ├── stores/
     │   └── auth.ts            # 登录态（Pinia）：token 持久化到 uni.storage
+    ├── utils/
+    │   └── system.ts          # 状态栏高度、北京时间与相对日期、文本截断、复查间隔解析
     ├── components/            # 通用组件（自绘 SVG 图标，不加载外部资源）
     │   ├── AppIcon.vue        # SVG 图标集（24×24 线性图标，currentColor 着色）
     │   ├── AppButton.vue      # 按钮：主 / 次 / 柔和 / 危险·就医；disabled、loading；44×44；圆角 10
@@ -60,7 +70,8 @@ app/
     │   ├── TabBar.vue         # 底部五个入口（自绘 SVG 图标，当前项 primary）
     │   └── EmergencyEntry.vue # 就医提示入口（红色，任意页面可引入，无需登录）
     └── pages/
-        ├── index/index.vue    # 当前情况（首页占位演示：主题 + 组件 + 接口自检）
+        ├── login/login.vue    # 启动 · 登录与授权（A01）
+        ├── index/index.vue    # 当前情况（A14 首页：待确认项 / 一页分析摘要 / 快捷入口 / 复诊倒计时）
         ├── qa/index.vue       # 问与解释（占位，T21 实现）
         ├── timeline/index.vue # 病程（占位，T22 实现）
         ├── followup/index.vue # 复诊准备（占位，T23 实现）
@@ -98,8 +109,9 @@ app/
 
 ## 已知问题
 
-1. 原生 tabBar 为文字标签：uni-app 原生 tabBar 只支持图片图标，自绘 SVG 图标由 `components/TabBar.vue` 承载（用于非 tab 页，如就医提示页）。若后续需要主入口也带 SVG 图标，需改用自定义 tabBar 方案。
+1. 底部五个入口由 `components/TabBar.vue` 自绘承载（uni-app H5 原生 tabBar 只支持图片图标，不加载外部资源，故未使用原生 tabBar）；切换用 `uni.reLaunch`，五个入口互等、不堆叠页面栈。
 2. `sass` 使用 `@import` 语法（Dart Sass 已标记弃用，未来版本需迁移 `@use`）；当前构建仅有弃用警告，不影响产物。
 3. 小程序端（mp-weixin 等）未适配：SVG 内联与部分 CSS（`env(safe-area-inset-bottom)`）需按平台调整，本任务只以 H5 验收。
-4. 登录页（A01）在 T17 实现；当前首页占位页可查看登录态，但暂未提供登录入口。
+4. 首页「最新一页分析」摘要由病程事件组合而成：server 暂无「取某病程最新一次分析」接口（只有按 id 查询），因此展示「已知 / 未知 / 下一步」与「生成一页分析」入口；一页分析详情页（A07）在 T20 实现。
 5. 就医提示页的动作按钮（拨打 120 / 查找医院 / 联系主治医生）在演示环境中只弹出提示，不真正拨号或跳转。
+6. 页面样式按设计稿 375 宽度用 rpx（750rpx = 375px）书写；T16 通用组件内部用 px，两者在 375 宽度下等价，宽屏浏览器中组件不随宽度缩放。

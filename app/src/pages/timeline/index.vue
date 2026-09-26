@@ -6,6 +6,7 @@
  */
 import AppCard from '../../components/AppCard.vue'
 import EmergencyEntry from '../../components/EmergencyEntry.vue'
+import TabBar from '../../components/TabBar.vue'
 </script>
 
 <template>
@@ -17,7 +18,10 @@ import EmergencyEntry from '../../components/EmergencyEntry.vue'
     <AppCard title="占位页面" subtitle="T22 病程时间线 · 记录今天">
       <text class="placeholder-text">这里将展示按事件记录的病程时间线，区分自述、报告原文与医生记录；「记录今天」以生活任务组织，允许跳过，不复用昨日答案。</text>
     </AppCard>
+    <!-- 底部导航占位 -->
+    <view class="tabbar-placeholder" />
   </view>
+  <TabBar current="timeline" />
 </template>
 
 <style lang="scss">

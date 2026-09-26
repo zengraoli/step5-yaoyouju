@@ -17,7 +17,7 @@ export interface ApiResponse<T> {
 export interface RequestOptions {
   /** 接口路径，如 /auth/login */
   url: string
-  method?: 'GET' | 'POST'
+  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   data?: Record<string, unknown>
   /** 是否需要登录态，默认 true；公开接口（验证码 / 登录 / 就医提示 / 开关）传 false */
   auth?: boolean
@@ -50,7 +50,8 @@ export function request<T>(options: RequestOptions): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     uni.request({
       url: getBaseUrl() + url,
-      method,
+      // uni-app 的 RequestOptions.method 未包含 PATCH，服务端病程纠正使用 PATCH，这里做受控转换
+      method: method as UniApp.RequestOptions['method'],
       data,
       header: {
         'Content-Type': 'application/json',

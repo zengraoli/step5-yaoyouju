@@ -6,6 +6,7 @@
  */
 import AppCard from '../../components/AppCard.vue'
 import EmergencyEntry from '../../components/EmergencyEntry.vue'
+import TabBar from '../../components/TabBar.vue'
 </script>
 
 <template>
@@ -17,7 +18,10 @@ import EmergencyEntry from '../../components/EmergencyEntry.vue'
     <AppCard title="占位页面" subtitle="T21 问与解释">
       <text class="placeholder-text">这里将展示基于当前情况的对话：每条解释都能看到来源，系统生成内容带版本号；越界问题（诊断、用药、手术）明确不答，可转为复诊问题。</text>
     </AppCard>
+    <!-- 底部导航占位 -->
+    <view class="tabbar-placeholder" />
   </view>
+  <TabBar current="qa" />
 </template>
 
 <style lang="scss">

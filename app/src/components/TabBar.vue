@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
  * 底部 TabBar（信息架构固定五个入口：当前情况 / 问与解释 / 病程 / 复诊准备 / 我的）
- * - 自绘 SVG 图标，当前项使用 primary 色
- * - 五个入口均为 tabBar 页面，使用 uni.switchTab 切换
- * 说明：五个主入口的底部导航由 pages.json 原生 tabBar 承载；
- *      本组件用于非 tab 页（如就医提示页）保持底部导航可达。
+ * - 自绘 SVG 图标，当前项使用 primary 色（对齐 A14 设计稿：图标 + 文字标签）
+ * - 五个入口由本组件承载（uni-app H5 原生 tabBar 只支持图片图标，见 app/README.md 已知问题），
+ *   因此用 reLaunch 切换，保证五个入口互等且不堆叠页面栈
+ * 说明：本组件同时用于 tab 页与非 tab 页（如就医提示页），保持底部导航始终可达。
  */
 import { computed } from 'vue'
 import AppIcon, { type IconName } from './AppIcon.vue'
@@ -54,7 +54,8 @@ const currentKey = computed<TabKey | null>(() => props.current ?? currentFromRou
 function onTap(item: TabItem) {
   if (item.key === currentKey.value) return
   emit('change', item.key)
-  uni.switchTab({ url: item.path })
+  // reLaunch：五个入口互等切换，不堆叠页面栈（非原生 tabBar，故不用 switchTab）
+  uni.reLaunch({ url: item.path })
 }
 </script>
 
