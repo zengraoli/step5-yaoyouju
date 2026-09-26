@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { DbModule } from '../../db/db.module';
+import { SwitchesModule } from '../switches/switches.module';
 import { AuditService } from '../../common/audit.service';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminDashboardController } from './admin-dashboard.controller';
+import { AdminSafetyController } from './admin-safety.controller';
 import { DashboardService } from './dashboard.service';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminRolesController } from './admin-roles.controller';
@@ -21,8 +23,10 @@ import { AdminDualControlController } from './dual-control.controller';
  * 导出 AdminAuthService 供全局 AdminGuard 注入。
  */
 @Module({
-  imports: [DbModule],
+  imports: [
+    SwitchesModule,DbModule],
   controllers: [
+    AdminSafetyController,
     AdminDashboardController,
     AdminAuthController,
     AdminRolesController,
