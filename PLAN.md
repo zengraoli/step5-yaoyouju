@@ -9,3 +9,4 @@
 | S2 web | T26–T30 | Web 端 W01–W08 |
 | S3 admin | T31–T39 | 后台 B01–B12 |
 | S4 收尾 | T40–T42 | 三端联调、设计走查、README 与已知问题 |
+| S5 android | T43–T50 | 原生 Android 客户端，功能与设计同 App 端 A01–A18 |
