@@ -52,3 +52,50 @@ export function getLatestFollowup(episodeId: string): Promise<FollowupSummaryVie
     url: `/episodes/${encodeURIComponent(episodeId)}/followup`,
   })
 }
+
+/** 导出的复诊摘要（文本带头部与水印脚注；PDF / 图片由浏览器打印生成） */
+export interface FollowupExportView {
+  id: string
+  episode_id: string
+  format: '文本' | 'PDF' | '图片'
+  export_format: '文本' | 'PDF' | '图片'
+  exported_at: string
+  /** 文本：完整纯文本；PDF / 图片：浏览器打印说明文本 */
+  text: string
+  browser_print: boolean
+  note: string
+}
+
+/** 生成复诊摘要（固定六段；未核实项保留并标记） */
+export function generateFollowup(episodeId: string): Promise<FollowupSummaryView> {
+  return request<FollowupSummaryView>({
+    url: `/episodes/${encodeURIComponent(episodeId)}/followup/generate`,
+    method: 'POST',
+  })
+}
+
+/** 预览后纠正（编辑各段文字、增删问题、调整顺序） */
+export function correctFollowup(
+  episodeId: string,
+  summaryId: string,
+  input: { sections: FollowupSection[] },
+): Promise<FollowupSummaryView> {
+  return request<FollowupSummaryView>({
+    url: `/episodes/${encodeURIComponent(episodeId)}/followup/${encodeURIComponent(summaryId)}`,
+    method: 'PUT',
+    data: { ...input },
+  })
+}
+
+/** 导出：文本返回纯文本；PDF / 图片标记为浏览器打印生成 */
+export function exportFollowup(
+  episodeId: string,
+  summaryId: string,
+  format: '文本' | 'PDF' | '图片',
+): Promise<FollowupExportView> {
+  return request<FollowupExportView>({
+    url: `/episodes/${encodeURIComponent(episodeId)}/followup/${encodeURIComponent(summaryId)}/export`,
+    method: 'POST',
+    data: { format },
+  })
+}
