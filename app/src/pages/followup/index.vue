@@ -81,12 +81,8 @@ async function init() {
       summary.value = null
       return
     }
-    try {
-      summary.value = await getLatestFollowup(episodeId.value)
-    } catch {
-      // 还没有生成过：不自动生成，展示引导（生成由用户主动触发）
-      summary.value = null
-    }
+    // 还没有生成过时接口返回 null（空状态，不产生 404 噪音）；不自动生成，由用户主动触发
+    summary.value = await getLatestFollowup(episodeId.value).catch(() => null)
   } finally {
     loading.value = false
   }

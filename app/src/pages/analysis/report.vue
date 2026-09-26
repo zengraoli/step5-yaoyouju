@@ -10,6 +10,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import AppButton from '../../components/AppButton.vue'
 import AppCard from '../../components/AppCard.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import AppNotice from '../../components/AppNotice.vue'

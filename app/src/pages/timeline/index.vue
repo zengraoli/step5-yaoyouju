@@ -85,8 +85,9 @@ async function loadTimeline(episodeId: string): Promise<{ date: string; events: 
 
 async function loadFollowupCount(episodeId: string) {
   try {
+    // 尚未生成过摘要时接口返回 null（不是错误），不计问题数
     const summary = await getLatestFollowup(episodeId)
-    const section = summary.content.sections.find((s) => s.key === 'questions')
+    const section = summary?.content.sections.find((s) => s.key === 'questions')
     followupQuestionCount.value = section ? section.items.length : 0
   } catch {
     followupQuestionCount.value = 0

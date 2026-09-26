@@ -161,7 +161,7 @@ function onBack() {
           <view class="player__play">
             <AppIcon name="play" :size="30" />
           </view>
-          <text class="player__caption">示意动画：{{ detail.title }}（非本人人像）</text>
+          <text class="player__caption">《{{ detail.title }}》示意动画（{{ detail.type }} · 非本人人像）</text>
         </view>
         <view class="player__bar">
           <view class="player__progress" />

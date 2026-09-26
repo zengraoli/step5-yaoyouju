@@ -56,6 +56,12 @@ const routes: RouteRecordRaw[] = [
         meta: { nav: 'models', title: '模型与评测', permission: 'model.manage' },
       },
       {
+        path: 'eval',
+        name: 'eval',
+        component: () => import('@/views/eval/EvalView.vue'),
+        meta: { nav: 'eval', title: '评测集与回归', permission: 'eval.manage' },
+      },
+      {
         path: 'users',
         name: 'users',
         component: () => import('@/views/users/UsersView.vue'),

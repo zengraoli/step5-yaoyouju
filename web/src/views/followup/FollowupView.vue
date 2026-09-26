@@ -70,11 +70,8 @@ async function init() {
       return
     }
     episodeId.value = active.id
-    try {
-      summary.value = await getLatestFollowup(active.id)
-    } catch {
-      summary.value = null
-    }
+    // 尚未生成过时返回 null（空状态，不产生 404 噪音）
+    summary.value = await getLatestFollowup(active.id).catch(() => null)
     syncQuestions()
   } finally {
     loading.value = false

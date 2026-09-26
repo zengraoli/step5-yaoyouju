@@ -361,7 +361,9 @@ describe('T09 复诊摘要（六段生成 / 预览 / 纠正 / 导出）', () => 
 
     const empty = newEpisode('尚未生成摘要的病程');
     const none = await latest(empty);
-    expect(none.body.code).toBe(40400);
+    // 尚未生成过：返回 200 + null（空状态，不是客户端错误）
+    expect(none.body.code).toBe(0);
+    expect(none.body.data).toBeNull();
   });
 
   it('未登录 40100 / 未同意 40310 / 越权与他人资源 404', async () => {

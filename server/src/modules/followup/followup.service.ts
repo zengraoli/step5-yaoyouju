@@ -147,16 +147,17 @@ export class FollowupService {
     return this.view(row);
   }
 
-  /** 最新一份摘要（含六段 content、生成时间、是否已导出） */
-  latest(userId: string, episodeId: string): FollowupSummaryView {
+  /**
+   * 最新一份摘要（含六段 content、生成时间、是否已导出）。
+   * 尚未生成过时返回 null（200）而非 404：「暂无摘要」是正常空状态，不是客户端错误，
+   * 避免各端在空数据时产生控制台 404 噪音。
+   */
+  latest(userId: string, episodeId: string): FollowupSummaryView | null {
     this.ownedEpisode(userId, episodeId);
     const row = this.db.app
       .prepare('SELECT * FROM followup_summary WHERE episode_id = ? ORDER BY rowid DESC LIMIT 1')
       .get(episodeId) as SummaryRow | undefined;
-    if (!row) {
-      throw new ApiException(ErrorCode.NOT_FOUND, '复诊摘要不存在，请先生成');
-    }
-    return this.view(row);
+    return row ? this.view(row) : null;
   }
 
   /**

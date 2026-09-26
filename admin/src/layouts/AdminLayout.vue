@@ -23,6 +23,7 @@ const ALL_MENUS: MenuItem[] = [
   { key: 'feedback', label: '举报与反馈', path: '/feedback', permission: 'feedback.view' },
   { key: 'safety', label: '安全与开关', path: '/safety', permission: 'switch.manage' },
   { key: 'models', label: '模型与评测', path: '/models', permission: 'model.manage' },
+  { key: 'eval', label: '评测集与回归', path: '/eval', permission: 'eval.manage' },
   { key: 'users', label: '用户与权限', path: '/users', permission: 'user.manage' },
   { key: 'audit', label: '审计日志', path: '/audit', permission: 'audit.view' },
   { key: 'cases', label: '案例投稿', path: '/cases', permission: 'case.manage' },

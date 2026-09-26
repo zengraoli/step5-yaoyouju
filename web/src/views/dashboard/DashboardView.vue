@@ -35,6 +35,7 @@ import {
 import { getStructured, type StructuredItem } from '@/api/reports'
 import { getLatestAnalysis, type AnalysisView } from '@/api/analyses'
 import { listContents, type ContentListItem } from '@/api/contents'
+import { getLatestFollowup, QUESTIONS_SECTION_KEY } from '@/api/followup'
 import { beijingDate, relativeDayLabel, weeksSince } from '@/utils/date'
 
 const auth = useAuthStore()
@@ -46,6 +47,8 @@ const today = ref<{ date: string; logged: boolean } | null>(null)
 const structuredItems = ref<StructuredItem[]>([])
 const analysis = ref<AnalysisView | null>(null)
 const recommends = ref<ContentListItem[]>([])
+/** 复诊问题数（来自复诊摘要问题清单段；null = 尚未生成） */
+const followupQuestionCount = ref<number | null>(null)
 const submitting = ref('')
 
 onMounted(async () => {
@@ -66,12 +69,15 @@ async function load() {
       return
     }
     episode.value = await getEpisode(active.id)
-    const [todayRes, structured, latest, contents] = await Promise.all([
+    const [todayRes, structured, latest, contents, followup] = await Promise.all([
       getTodayStatus(active.id).catch(() => null),
       getStructured(active.id).catch(() => null),
       getLatestAnalysis(active.id).catch(() => null),
       listContents().catch(() => [] as ContentListItem[]),
+      getLatestFollowup(active.id).catch(() => null),
     ])
+    const questionSection = followup?.content.sections.find((s) => s.key === QUESTIONS_SECTION_KEY)
+    followupQuestionCount.value = questionSection ? questionSection.items.length : null
     today.value = todayRes ? { date: todayRes.date, logged: todayRes.logged } : null
     structuredItems.value = structured?.items ?? []
     analysis.value = latest
@@ -305,7 +311,7 @@ const headerMeta = computed<string>(() => {
                 { key: 'today', title: '记录今天', desc: '约 1 分钟 · 允许跳过', path: '/timeline?record=1' },
                 { key: 'report', title: '录入报告', desc: '粘贴文字 · 原文对照', path: '/analysis?input=report' },
                 { key: 'qa', title: '问与解释', desc: '基于当前上下文', path: '/qa' },
-                { key: 'followup', title: '复诊准备', desc: '4 个问题待确认', path: '/followup' },
+                { key: 'followup', title: '复诊准备', desc: followupQuestionCount === null ? '一页摘要，可导出' : `${followupQuestionCount} 个问题待确认`, path: '/followup' },
               ]"
               :key="entry.key"
               class="quick-card"

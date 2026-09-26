@@ -61,7 +61,7 @@ const authorizations = ref<Authorization[]>([])
 const dualControl = ref<DualControlSettings | null>(null)
 const operating = ref('')
 
-const isSuper = computed<boolean>(() => auth.role === '超级管理' || auth.hasPermission('*'))
+const isSuper = computed<boolean>(() => auth.role === '超级管理员' || auth.hasPermission('*'))
 
 onMounted(async () => {
   await load()
@@ -73,12 +73,14 @@ async function load() {
     const [u, r, a, d] = await Promise.all([
       request<AdminUser[]>({ url: '/admin/users' }),
       request<{ roles: RoleItem[] } | RoleItem[]>({ url: '/admin/roles' }),
-      request<Authorization[]>({ url: '/admin/authorizations' }).catch(() => [] as Authorization[]),
+      request<Authorization[] | { items: Authorization[] }>({ url: '/admin/authorizations' }).catch(
+        () => [] as Authorization[],
+      ),
       request<DualControlSettings>({ url: '/admin/dual-control/settings' }).catch(() => null),
     ])
     users.value = u
     roles.value = Array.isArray(r) ? r : r.roles ?? []
-    authorizations.value = a
+    authorizations.value = Array.isArray(a) ? a : (a.items ?? [])
     dualControl.value = d
   } finally {
     loading.value = false
@@ -94,30 +96,38 @@ function confirmAction(message: string): boolean {
 }
 
 /** 权限矩阵：权限点 × 角色 */
-const PERMISSION_ROWS: { key: string; label: string }[] = [
+/**
+ * 权限矩阵行（与服务端 PermissionGuard 实际执行的权限一一对应）。
+ * parts 为复合单元格（如「初筛 / 临床复核」分别对应 feedback.view / feedback.handle）；
+ * partial 为「发起 / 申请」类部分许可（设计稿 ◐）。
+ */
+const PERMISSION_ROWS: { key: string; label: string; parts?: string[]; partial?: string }[] = [
   { key: 'content.draft', label: '内容：编辑草稿 / 提交' },
   { key: 'content.review', label: '内容：审定 / 退回' },
-  { key: 'content.publish', label: '内容：发布（双人）' },
+  { key: 'content.publish', label: '内容：发布（双人）', partial: 'content.submit' },
   { key: 'content.offline', label: '内容：撤回 / 应急下线' },
   { key: 'evidence.manage', label: '证据库：录入 / 核实 / 停用' },
-  { key: 'feedback.view', label: '举报：初筛 / 临床复核' },
-  { key: 'consent.view', label: '用户资料：脱敏查看 / 明文（单条授权）' },
-  { key: 'switch.manage', label: '功能开关 / 模型发布' },
+  { key: 'feedback.view', label: '举报：初筛 / 临床复核', parts: ['feedback.view', 'feedback.handle'] },
+  { key: 'consent.view', label: '用户资料：脱敏查看 / 明文（单条授权）', parts: ['consent.view', 'feedback.handle'] },
+  { key: 'switch.manage', label: '功能开关 / 模型发布', parts: ['switch.manage', 'model.manage'] },
   { key: 'eval.manage', label: '评测集 / 评测运行' },
-  { key: 'user.manage', label: '成员与角色 / 审计导出审批' },
+  { key: 'user.manage', label: '成员与角色 / 审计导出审批', parts: ['user.manage', 'audit.export'] },
 ]
 
+/** 矩阵列：展示名与服务端角色名一致（服务端 ROLE_PERMISSIONS 键） */
 const ROLE_COLUMNS = ['运营编辑', '临床审核', '技术负责人', '合规支持', '超级管理员']
 
-function hasPerm(role: string, key: string): 'full' | 'partial' | 'none' {
+function hasPerm(role: string, key: string): boolean {
   const r = roles.value.find((x) => x.name === role)
-  if (!r) return 'none'
-  if (r.permissions.includes('*')) return 'full'
-  if (r.permissions.includes(key)) return 'full'
-  // 部分权限：同组前缀
-  const prefix = key.split('.')[0]
-  if (r.permissions.some((p) => p.startsWith(prefix))) return 'partial'
-  return 'none'
+  if (!r) return false
+  return r.permissions.includes('*') || r.permissions.includes(key)
+}
+
+/** 复合单元格：逐段渲染 ✓ / —（如 初筛 / 临床复核） */
+function cellParts(role: string, row: (typeof PERMISSION_ROWS)[number]): string[] {
+  if (row.parts) return row.parts.map((p) => (hasPerm(role, p) ? '✓' : '—'))
+  if (row.partial && hasPerm(role, row.partial) && !hasPerm(role, row.key)) return ['◐']
+  return [hasPerm(role, row.key) ? '✓' : '—']
 }
 
 function roleBadge(role: string): 'confirmed' | 'unconfirmed' | 'unverified' | 'self' {
@@ -243,9 +253,10 @@ function onInvite() {
             <tr v-for="row in PERMISSION_ROWS" :key="row.key">
               <td>{{ row.label }}</td>
               <td v-for="c in ROLE_COLUMNS" :key="c" class="matrix__cell">
-                <span v-if="hasPerm(c, row.key) === 'full'" class="matrix__full">✓</span>
-                <span v-else-if="hasPerm(c, row.key) === 'partial'" class="matrix__partial">◐</span>
-                <span v-else class="matrix__none">—</span>
+                <template v-for="(mark, mi) in cellParts(c, row)" :key="mi">
+                  <span :class="mark === '✓' ? 'matrix__full' : mark === '◐' ? 'matrix__partial' : 'matrix__none'">{{ mark }}</span>
+                  <span v-if="mi < cellParts(c, row).length - 1" class="matrix__sep"> / </span>
+                </template>
               </td>
             </tr>
           </tbody>

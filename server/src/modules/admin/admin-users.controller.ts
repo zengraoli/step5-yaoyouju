@@ -16,8 +16,8 @@ class InviteUserDto {
   @MaxLength(100)
   name!: string;
 
-  @ApiProperty({ description: '角色', enum: ['运营编辑', '临床审核', '技术', '合规', '超级管理'] })
-  @IsIn(['运营编辑', '临床审核', '技术', '合规', '超级管理'])
+  @ApiProperty({ description: '角色', enum: ['运营编辑', '临床审核', '技术负责人', '合规支持', '超级管理员'] })
+  @IsIn(['运营编辑', '临床审核', '技术负责人', '合规支持', '超级管理员'])
   role!: string;
 
   @ApiProperty({ description: '初始口令（仅传输与哈希，不落明文）' })

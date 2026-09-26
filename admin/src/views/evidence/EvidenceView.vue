@@ -100,22 +100,25 @@ async function load() {
   loading.value = true
   errorText.value = ''
   try {
-    const res = await request<{ items: EvidenceListItem[]; stats?: Record<string, number> }>({
-      url: '/admin/evidence',
-      data: {
-        source_type: filters.value.source_type === '全部' ? undefined : filters.value.source_type,
-        active:
-          filters.value.status === '全部'
-            ? undefined
-            : filters.value.status === '已启用'
-              ? true
-              : false,
-      },
-    })
-    items.value = res.items
-    stats.value = res.stats ?? computeStats(res.items)
+    const query = {
+      source_type: filters.value.source_type === '全部' ? undefined : filters.value.source_type,
+      active:
+        filters.value.status === '全部'
+          ? undefined
+          : filters.value.status === '已启用'
+            ? true
+            : false,
+    }
+    // 列表（带筛选）与统计（全量口径，不受筛选影响）分开请求；接口返回裸数组
+    const [list, all] = await Promise.all([
+      request<EvidenceListItem[]>({ url: '/admin/evidence', data: query }),
+      request<EvidenceListItem[]>({ url: '/admin/evidence' }),
+    ])
+    items.value = Array.isArray(list) ? list : []
+    stats.value = computeStats(Array.isArray(all) ? all : [])
   } catch (e) {
     errorText.value = e instanceof Error ? e.message : '数据加载失败'
+    items.value = []
   } finally {
     loading.value = false
   }

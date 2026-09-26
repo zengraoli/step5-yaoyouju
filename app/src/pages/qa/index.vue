@@ -85,7 +85,7 @@ async function ensureSession(): Promise<void> {
   if (list.length > 0) {
     sessionId.value = list[0].id
     const detail = await getQaSession(sessionId.value)
-    messages.value = detail.messages
+    messages.value = detail?.messages ?? []
     return
   }
   const episodes = await listEpisodes()

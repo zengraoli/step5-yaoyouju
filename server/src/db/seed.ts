@@ -71,7 +71,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   // ---------- 角色与后台账号 ----------
   // 权限矩阵的单一数据源在 modules/admin/admin.constants.ts（ROLE_PERMISSIONS），
   // 此处按角色名同步写入 role.permissions，供 B10 与数据库查询使用。
-  const roles: string[] = ['运营编辑', '临床审核', '技术', '合规', '超级管理'];
+  const roles: string[] = ['运营编辑', '临床审核', '技术负责人', '合规支持', '超级管理员'];
   const roleIds: Record<string, string> = {};
   for (const name of roles) {
     const id = uid();
@@ -82,9 +82,9 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   const admins: [string, string][] = [
     ['editor01', '运营编辑'],
     ['clinician01', '临床审核'],
-    ['tech01', '技术'],
-    ['compliance01', '合规'],
-    ['super01', '超级管理'],
+    ['tech01', '技术负责人'],
+    ['compliance01', '合规支持'],
+    ['super01', '超级管理员'],
   ];
   const adminIds: Record<string, string> = {};
   for (const [name, role] of admins) {
@@ -100,7 +100,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
       title: '《腰背痛基层诊疗指南（演示摘录）》',
       source_type: '指南',
       url: 'local://evidence/guideline-lowback',
-      license: '演示数据',
+      license: '可引用',
       verified: '2026-06-10',
       chunks: [
         '急性腰背痛多数与姿势、久坐、肌肉疲劳有关，适当活动和休息有助于恢复。',
@@ -112,7 +112,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
       title: '《腰椎 MRI 报告常见术语说明（演示）》',
       source_type: '审核科普',
       url: 'local://evidence/mri-terms',
-      license: '演示数据',
+      license: '可引用',
       verified: '2026-06-12',
       chunks: [
         'L5/S1 指第 5 节腰椎与第 1 节骶椎之间的椎间盘，是腰痛相关报告常提到的位置。',
@@ -124,7 +124,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
       title: '《久坐与腰背痛：观察性研究汇总（演示）》',
       source_type: '研究',
       url: 'local://evidence/sitting-study',
-      license: '演示数据',
+      license: '可引用',
       verified: '2026-06-15',
       chunks: [
         '长时间保持坐姿与腰背痛发生风险升高相关，间断起身活动可能有帮助。',
@@ -135,7 +135,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
       title: '《急性腰痛运动干预随机对照试验（演示）》',
       source_type: '研究',
       url: 'local://evidence/exercise-rct',
-      license: '演示数据',
+      license: '可引用',
       verified: '2026-06-18',
       chunks: [
         '在演示数据中，循序渐进的活动比严格卧床更有利于急性期功能恢复。',
@@ -146,7 +146,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
       title: '《腰痛自我管理清单（演示）》',
       source_type: '审核科普',
       url: 'local://evidence/self-care',
-      license: '演示数据',
+      license: '待确认',
       verified: '2026-06-20',
       chunks: [
         '可以记录每天能坐多久、睡眠影响和最担心的问题，复诊时交给医生。',
@@ -157,7 +157,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
       title: '《何时需要尽快就医：红旗信号（演示）》',
       source_type: '指南',
       url: 'local://evidence/red-flags',
-      license: '演示数据',
+      license: '仅内部',
       verified: '2026-06-22',
       chunks: [
         '下肢进行性无力、麻木范围扩大、大小便控制变化属于需要尽快就医的信号。',

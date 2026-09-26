@@ -217,14 +217,20 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
       roles: { id: string; name: string; permissions: string[] }[];
       catalog: { code: string; label: string }[];
     };
-    expect(data.roles.map((r) => r.name)).toEqual(['运营编辑', '临床审核', '技术', '合规', '超级管理']);
+    expect(data.roles.map((r) => r.name)).toEqual([
+      '运营编辑',
+      '临床审核',
+      '技术负责人',
+      '合规支持',
+      '超级管理员',
+    ]);
     const byName = new Map(data.roles.map((r) => [r.name, r.permissions]));
     expect(byName.get('运营编辑')).toEqual(['content.draft', 'content.submit']);
     expect(byName.get('临床审核')).toEqual(['content.review', 'content.publish', 'content.offline']);
-    expect(byName.get('技术')).toEqual(['model.manage', 'eval.manage', 'switch.manage', 'evidence.manage']);
-    expect(byName.get('合规')).toContain('audit.view');
-    expect(byName.get('合规')).toContain('feedback.handle');
-    expect(byName.get('超级管理')).toEqual(['*']);
+    expect(byName.get('技术负责人')).toEqual(['model.manage', 'eval.manage', 'switch.manage', 'evidence.manage']);
+    expect(byName.get('合规支持')).toContain('audit.view');
+    expect(byName.get('合规支持')).toContain('feedback.handle');
+    expect(byName.get('超级管理员')).toEqual(['*']);
     expect(data.catalog.length).toBeGreaterThanOrEqual(15);
     expect(data.catalog.every((c) => c.code && c.label)).toBe(true);
   });
@@ -244,7 +250,7 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     expect(loginItem).toBeTruthy();
     expect(loginItem.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(loginItem.target).toBe(`admin_user:${adminIds.super01}`);
-    expect(loginItem.actor_role).toBe('超级管理');
+    expect(loginItem.actor_role).toBe('超级管理员');
     expect(typeof loginItem.hash).toBe('string');
     const createdTimes = actorItems.map((i) => i.created_at);
     expect(createdTimes).toEqual([...createdTimes].sort().reverse());
@@ -430,7 +436,7 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     const item = data.items[0];
     expect(item.action).toBe('feedback.authorize_view');
     expect(item.actor_name).toBe('compliance01');
-    expect(item.actor_role).toBe('合规');
+    expect(item.actor_role).toBe('合规支持');
     expect(item.target).toBe('feedback:demo-feedback-id');
     expect((item.diff as { scope: string }).scope).toBe('核对报告原文表述');
     expect(typeof item.hash).toBe('string');

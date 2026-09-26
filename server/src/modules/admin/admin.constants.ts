@@ -12,8 +12,8 @@ export const ALL_PERMISSIONS = '*';
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
   运营编辑: ['content.draft', 'content.submit'],
   临床审核: ['content.review', 'content.publish', 'content.offline'],
-  技术: ['model.manage', 'eval.manage', 'switch.manage', 'evidence.manage'],
-  合规: [
+  技术负责人: ['model.manage', 'eval.manage', 'switch.manage', 'evidence.manage'],
+  合规支持: [
     'feedback.view',
     'feedback.handle',
     'audit.view',
@@ -21,7 +21,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'audit.export',
     'dual_control.manage',
   ],
-  超级管理: [ALL_PERMISSIONS],
+  超级管理员: [ALL_PERMISSIONS],
 };
 
 /** 权限中文说明（供 B10 权限矩阵展示） */
