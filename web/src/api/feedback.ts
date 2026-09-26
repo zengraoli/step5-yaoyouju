@@ -27,3 +27,25 @@ export function submitErrorReport(input: {
 }): Promise<unknown> {
   return request({ url: '/feedback/error-report', method: 'POST', data: { ...input } })
 }
+
+/** 我提交的反馈与举报（含处理状态） */
+export interface FeedbackItem {
+  id: string
+  analysis_id: string | null
+  content_item_id?: string | null
+  help_type: string | null
+  unsolved_question: string | null
+  is_error_report: number
+  category: string | null
+  description: string | null
+  severity: string | null
+  status: string
+  report_meta?: unknown
+  versions?: unknown
+  created_at: string
+}
+
+/** 我提交的反馈与举报列表 */
+export function listMyFeedback(): Promise<FeedbackItem[]> {
+  return request<FeedbackItem[]>({ url: '/feedback/mine' })
+}

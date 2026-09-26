@@ -24,3 +24,50 @@ export interface ContentListItem {
 export function listContents(type?: string): Promise<ContentListItem[]> {
   return request<ContentListItem[]>({ url: '/contents', data: type ? { type } : undefined })
 }
+
+/** 内容版本（版本链） */
+export interface ContentVersionView {
+  version: number
+  script: string
+  subtitle_text: string
+  asset_key: string | null
+  published_at: string | null
+  is_current: boolean
+}
+
+/** 审核记录 */
+export interface ReviewRecordView {
+  id: string
+  decision: string
+  review_scope: string | null
+  comment: string | null
+  reviewer_id: string | null
+  reviewer_name: string | null
+  reviewed_at: string
+}
+
+/** 内容详情：适用范围、版本、审核记录、下线开关、字幕与文字替代 */
+export interface ContentDetail {
+  id: string
+  type: string
+  title: string
+  applicable_scope: string
+  not_applicable: string
+  current_status: string
+  offline: boolean
+  current_version: {
+    version: number
+    script: string
+    subtitle_text: string
+    asset_key: string | null
+    published_at: string
+  } | null
+  versions: ContentVersionView[]
+  review_records: ReviewRecordView[]
+  disclaimer: string
+}
+
+/** 内容详情（已下线 / 非已发布返回 404） */
+export function getContentDetail(contentId: string): Promise<ContentDetail> {
+  return request<ContentDetail>({ url: `/contents/${encodeURIComponent(contentId)}` })
+}

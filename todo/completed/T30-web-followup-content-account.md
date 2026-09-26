@@ -1,7 +1,7 @@
 # T30 复诊准备、内容库、账户与数据
 
 阶段：S2 web
-状态：待完成
+状态：已完成（v0.31，2026-09-26）
 设计稿：`docs/design/web/W06.png`、`docs/design/web/W07.png`、`docs/design/web/W08.png`
 
 ## 要做什么
