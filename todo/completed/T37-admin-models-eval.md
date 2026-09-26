@@ -1,7 +1,7 @@
 # T37 模型发布与评测
 
 阶段：S3 admin
-状态：待完成
+状态：已完成（v0.38，2026-09-26）
 设计稿：`docs/design/admin/B08.png`、`docs/design/admin/B09.png`
 
 ## 要做什么

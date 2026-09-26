@@ -6,7 +6,7 @@ import { AdminContext } from '../admin/admin-auth.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { EvidenceService } from './evidence.service';
 
-class EvidenceDocBody {
+class AdminEvidenceDocBody {
   @ApiProperty()
   @IsString()
   @MaxLength(200)
@@ -42,7 +42,7 @@ class EvidenceDocBody {
   active?: boolean;
 }
 
-class EvidenceActiveBody {
+class AdminEvidenceActiveBody {
   @ApiProperty({ description: 'true 启用 / false 停用' })
   @IsBoolean()
   active!: boolean;
@@ -93,7 +93,7 @@ export class AdminEvidenceController {
   @ApiOperation({ summary: '新建证据文档' })
   @RequirePermission('evidence.manage')
   @Post()
-  create(@CurrentUser() admin: AdminContext, @Body() body: EvidenceDocBody) {
+  create(@CurrentUser() admin: AdminContext, @Body() body: AdminEvidenceDocBody) {
     return this.evidence.create(admin.id, body);
   }
 
@@ -103,7 +103,7 @@ export class AdminEvidenceController {
   update(
     @CurrentUser() admin: AdminContext,
     @Param('id') id: string,
-    @Body() body: EvidenceDocBody,
+    @Body() body: AdminEvidenceDocBody,
   ) {
     return this.evidence.update(admin.id, id, body);
   }
@@ -114,7 +114,7 @@ export class AdminEvidenceController {
   setActive(
     @CurrentUser() admin: AdminContext,
     @Param('id') id: string,
-    @Body() body: EvidenceActiveBody,
+    @Body() body: AdminEvidenceActiveBody,
   ) {
     return this.evidence.setActive(admin.id, id, body.active, body.reason);
   }
