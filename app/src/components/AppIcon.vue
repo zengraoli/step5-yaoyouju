@@ -33,6 +33,7 @@ export type IconName =
   | 'send'
   | 'filter'
   | 'plus'
+  | 'search'
 
 interface IconShape {
   /** 路径 d 值 */
@@ -179,6 +180,10 @@ const ICONS: Record<IconName, IconShape> = {
   filter: { paths: ['M4 5.4h16l-6.2 7.2v5.2l-3.6 2v-7.2z'] },
   // 新增（加号）
   plus: { paths: ['M12 4.8v14.4', 'M4.8 12h14.4'] },
+  // 搜索（放大镜）
+  search: {
+    paths: ['M10.8 17.6a6.8 6.8 0 1 0 0-13.6 6.8 6.8 0 0 0 0 13.6z', 'M15.6 15.6 20.4 20.4'],
+  },
 }
 
 const props = withDefaults(

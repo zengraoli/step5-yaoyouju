@@ -65,6 +65,22 @@
       }
     },
     {
+      "path": "pages/content/index",
+      "style": {
+        "navigationBarTitleText": "审核内容库",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/content/detail",
+      "style": {
+        "navigationBarTitleText": "审核视频",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
       "path": "pages/feedback/index",
       "style": {
         "navigationBarTitleText": "反馈与错误举报",
