@@ -1,7 +1,7 @@
 # T38 用户权限与审计日志
 
 阶段：S3 admin
-状态：待完成
+状态：已完成（v0.39，2026-09-26）
 设计稿：`docs/design/admin/B10.png`、`docs/design/admin/B11.png`
 
 ## 要做什么
