@@ -1,0 +1,23 @@
+{
+  "pages": {
+    "web-W01-login": {"url": "http://127.0.0.1:5202/login", "width": 1440},
+    "web-W02-dashboard": {"url": "http://127.0.0.1:5202/dashboard", "width": 1440},
+    "web-W03-analysis": {"url": "http://127.0.0.1:5202/analysis", "width": 1440},
+    "web-W04-qa": {"url": "http://127.0.0.1:5202/qa", "width": 1440},
+    "web-W05-timeline": {"url": "http://127.0.0.1:5202/timeline", "width": 1440},
+    "web-W06-followup": {"url": "http://127.0.0.1:5202/followup", "width": 1440},
+    "web-W07-contents": {"url": "http://127.0.0.1:5202/contents", "width": 1440},
+    "web-W08-account": {"url": "http://127.0.0.1:5202/account", "width": 1440},
+    "admin-B01-login": {"url": "http://127.0.0.1:5203/login", "width": 1440},
+    "admin-B02-dashboard": {"url": "http://127.0.0.1:5203/dashboard", "width": 1440},
+    "admin-B03-contents": {"url": "http://127.0.0.1:5203/contents", "width": 1440},
+    "admin-B04-content-detail": {"url": "http://127.0.0.1:5203/contents", "width": 1440},
+    "admin-B05-evidence": {"url": "http://127.0.0.1:5203/evidence", "width": 1440},
+    "admin-B06-feedback": {"url": "http://127.0.0.1:5203/feedback", "width": 1440},
+    "admin-B07-safety": {"url": "http://127.0.0.1:5203/safety", "width": 1440},
+    "admin-B08-models": {"url": "http://127.0.0.1:5203/models", "width": 1440},
+    "admin-B10-users": {"url": "http://127.0.0.1:5203/users", "width": 1440},
+    "admin-B11-audit": {"url": "http://127.0.0.1:5203/audit", "width": 1440},
+    "admin-B12-cases": {"url": "http://127.0.0.1:5203/cases", "width": 1440}
+  }
+}
