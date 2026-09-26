@@ -30,6 +30,7 @@ export type IconName =
   | 'pulse'
   | 'heart'
   | 'ellipsis'
+  | 'send'
 
 interface IconShape {
   /** 路径 d 值 */
@@ -167,6 +168,10 @@ const ICONS: Record<IconName, IconShape> = {
       { cx: 18.6, cy: 12, r: 1.5 },
     ],
     paths: [],
+  },
+  // 发送（纸飞机）
+  send: {
+    paths: ['M20.4 3.6 2.9 9.9l6.3 2.4 2.4 6.3z', 'M20.4 3.6 9.2 12.3'],
   },
 }
 
