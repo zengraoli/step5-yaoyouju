@@ -57,6 +57,22 @@
       }
     },
     {
+      "path": "pages/analysis/report",
+      "style": {
+        "navigationBarTitleText": "原文对照",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/feedback/index",
+      "style": {
+        "navigationBarTitleText": "反馈与错误举报",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
       "path": "pages/qa/index",
       "style": {
         "navigationBarTitleText": "问与解释",

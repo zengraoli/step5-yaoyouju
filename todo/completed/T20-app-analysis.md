@@ -1,7 +1,7 @@
 # T20 一页分析与原文对照
 
 阶段：S1 app
-状态：待完成
+状态：已完成（v0.21，2026-09-26）
 设计稿：`docs/design/app/A07.png`、`docs/design/app/A08.png`
 
 ## 要做什么

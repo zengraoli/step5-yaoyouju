@@ -32,10 +32,79 @@ export interface AnalysisTaskView {
   /** queued 时的重试次数 */
   attempts?: number
   /** completed 时的一页分析详情 */
-  analysis?: unknown
+  analysis?: AnalysisView
   /** failed 时的原因与回退内容 */
   reason?: string
-  fallback?: unknown
+  fallback?: FallbackSections
+}
+
+/** 一页分析（五段固定结构；每条解释都带来源） */
+export interface AnalysisView {
+  id: string
+  episode_id: string
+  version: number
+  model_release_id: string | null
+  safety_flag: string
+  created_at: string
+  sections: AnalysisSections
+  retrieval_snapshot: Record<string, unknown> | null
+  disclaimer: string
+}
+
+/** 当前确认的信息与来源 */
+export interface KnownItem {
+  text: string
+  source: string
+  care_event_id?: string
+}
+
+/** 一条解释及其引用（可核实陈述） */
+export interface ExplainItem {
+  text: string
+  citations: {
+    evidence_doc_id: string
+    doc_title: string
+    statement: string
+    supported: boolean
+  }[]
+}
+
+/** 下一步 / 复诊问题 */
+export interface NextItem {
+  text: string
+  type: string
+}
+
+/** 推荐视频（带推荐理由） */
+export interface VideoItem {
+  content_item_id: string
+  title: string
+  reason: string
+}
+
+export interface AnalysisSections {
+  known: KnownItem[]
+  explain: ExplainItem[]
+  unknown: string[]
+  next: NextItem[]
+  videos: VideoItem[]
+  meta: {
+    model_release: string
+    generated_at: string
+    version: number
+    disclaimer: string
+    [key: string]: unknown
+  }
+}
+
+/** 回退内容（个性化分析关闭 / 服务不可用） */
+export interface FallbackSections {
+  known: KnownItem[]
+  explain: { text: string }[]
+  unknown: string[]
+  next: NextItem[]
+  videos: unknown[]
+  meta: { fallback: true; reason: string; disclaimer: string; version: number }
 }
 
 /** 命中的安全规则（来自 409 响应 data.matched） */
@@ -78,5 +147,12 @@ export function createAnalysis(input: CreateAnalysisInput): Promise<CreateAnalys
 export function getAnalysisTask(taskId: string): Promise<AnalysisTaskView> {
   return request<AnalysisTaskView>({
     url: `/analyses/task/${encodeURIComponent(taskId)}`,
+  })
+}
+
+/** 一页分析详情（五段结构 + 每条解释的来源） */
+export function getAnalysis(analysisId: string): Promise<AnalysisView> {
+  return request<AnalysisView>({
+    url: `/analyses/${encodeURIComponent(analysisId)}`,
   })
 }

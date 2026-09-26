@@ -29,6 +29,7 @@ export type IconName =
   | 'report'
   | 'pulse'
   | 'heart'
+  | 'ellipsis'
 
 interface IconShape {
   /** 路径 d 值 */
@@ -157,6 +158,15 @@ const ICONS: Record<IconName, IconShape> = {
     paths: [
       'M12 20.2S4.2 15.4 4.2 9.8A4.3 4.3 0 0 1 12 7.2a4.3 4.3 0 0 1 7.8 2.6c0 5.6-7.8 10.4-7.8 10.4z',
     ],
+  },
+  // 更多（三点）
+  ellipsis: {
+    circles: [
+      { cx: 5.4, cy: 12, r: 1.5 },
+      { cx: 12, cy: 12, r: 1.5 },
+      { cx: 18.6, cy: 12, r: 1.5 },
+    ],
+    paths: [],
   },
 }
 
