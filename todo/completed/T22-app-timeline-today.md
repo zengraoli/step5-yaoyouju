@@ -1,7 +1,7 @@
 # T22 病程时间线与记录今天
 
 阶段：S1 app
-状态：待完成
+状态：已完成（v0.23，2026-09-26）
 设计稿：`docs/design/app/A10.png`、`docs/design/app/A11.png`
 
 ## 要做什么

@@ -73,6 +73,14 @@
       }
     },
     {
+      "path": "pages/timeline/record",
+      "style": {
+        "navigationBarTitleText": "记录今天",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
       "path": "pages/qa/index",
       "style": {
         "navigationBarTitleText": "问与解释",

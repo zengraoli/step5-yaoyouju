@@ -31,6 +31,8 @@ export type IconName =
   | 'heart'
   | 'ellipsis'
   | 'send'
+  | 'filter'
+  | 'plus'
 
 interface IconShape {
   /** 路径 d 值 */
@@ -173,6 +175,10 @@ const ICONS: Record<IconName, IconShape> = {
   send: {
     paths: ['M20.4 3.6 2.9 9.9l6.3 2.4 2.4 6.3z', 'M20.4 3.6 9.2 12.3'],
   },
+  // 筛选（漏斗）
+  filter: { paths: ['M4 5.4h16l-6.2 7.2v5.2l-3.6 2v-7.2z'] },
+  // 新增（加号）
+  plus: { paths: ['M12 4.8v14.4', 'M4.8 12h14.4'] },
 }
 
 const props = withDefaults(
