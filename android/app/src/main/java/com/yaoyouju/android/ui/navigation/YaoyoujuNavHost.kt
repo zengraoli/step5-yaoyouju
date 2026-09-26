@@ -20,7 +20,10 @@ import com.yaoyouju.android.ui.screens.HomeScreen
 import com.yaoyouju.android.ui.screens.ChangeScreen
 import com.yaoyouju.android.ui.screens.EmergencyScreen
 import com.yaoyouju.android.ui.screens.AnalysisScreen
+import com.yaoyouju.android.ui.screens.ContentDetailScreen
+import com.yaoyouju.android.ui.screens.ContentListScreen
 import com.yaoyouju.android.ui.screens.ConfusionScreen
+import com.yaoyouju.android.ui.screens.FollowupScreen
 import com.yaoyouju.android.ui.screens.ReportDiffScreen
 import com.yaoyouju.android.ui.screens.PlaceholderScreen
 import com.yaoyouju.android.ui.screens.QaScreen
@@ -109,9 +112,17 @@ fun YaoyoujuApp(deepLinkRoute: String? = null) {
                 composable(Routes.QA) { QaScreen(navController) }
                 composable(Routes.TIMELINE) { TimelineScreen(navController) }
                 composable(Routes.TODAY) { TodayScreen(navController) }
-                composable(Routes.FOLLOWUP) { PlaceholderScreen(title = "A12 复诊摘要", code = "A12") }
-                composable(Routes.CONTENTS) { PlaceholderScreen(title = "A13 审核内容库", code = "A13") }
-                composable(Routes.CONTENT_DETAIL) { PlaceholderScreen(title = "A15 视频详情", code = "A15") }
+                composable(Routes.FOLLOWUP) { FollowupScreen(navController) }
+                composable(Routes.CONTENTS) { ContentListScreen(navController) }
+                composable(
+    route = Routes.CONTENT_DETAIL + "?contentId={contentId}",
+    arguments = listOf(navArgument("contentId") { defaultValue = "" }),
+) { entry ->
+    ContentDetailScreen(
+        navController = navController,
+        contentId = entry.arguments?.getString("contentId") ?: "",
+    )
+}
                 composable(Routes.FEEDBACK) { PlaceholderScreen(title = "A16 反馈与举报", code = "A16") }
                 composable(Routes.MINE) { PlaceholderScreen(title = "A17 我的", code = "A17") }
                 composable(Routes.FALLBACK) { PlaceholderScreen(title = "A18 服务不可用回退", code = "A18") }

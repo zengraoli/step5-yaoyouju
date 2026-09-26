@@ -467,7 +467,7 @@ private fun FollowupCountdownCard(followup: FollowupSummaryView?) {
                 )
             } else {
                 Text(
-                    text = "最近摘要：" + (followup.content?.take(60) ?: "内容待生成"),
+                    text = "最近摘要：已生成 " + followup.content.sections.size + " 段",
                     fontSize = 12.sp,
                     color = Text2,
                     maxLines = 2,

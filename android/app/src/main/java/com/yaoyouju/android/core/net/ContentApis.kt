@@ -202,15 +202,6 @@ interface FollowupApi {
     suspend fun latest(@Path("id") id: String): Response<ApiResponse<FollowupSummaryView>>
 }
 
-@kotlinx.serialization.Serializable
-data class FollowupSummaryView(
-    val id: String,
-    @kotlinx.serialization.SerialName("episode_id") val episodeId: String,
-    val content: String? = null,
-    @kotlinx.serialization.SerialName("created_at") val createdAt: String? = null,
-)
-
-/** 报告录入与结构化核对（对应 server reports.controller.ts） */
 interface ReportsApi {
     @POST("reports")
     suspend fun create(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<ApiResponse<ReportView>>
@@ -376,4 +367,163 @@ data class TimelineItem(
     @kotlinx.serialization.SerialName("source_type") val sourceType: String = "自述",
     @kotlinx.serialization.SerialName("verify_status") val verifyStatus: String? = null,
     @kotlinx.serialization.SerialName("occurred_at") val occurredAt: String? = null,
+)
+
+/** 复诊摘要（对应 server followup.controller.ts，App A12） */
+interface FollowupApi2 {
+    @POST("episodes/{id}/followup/generate")
+    suspend fun generate(@Path("id") id: String): Response<ApiResponse<FollowupSummaryView>>
+
+    @GET("episodes/{id}/followup")
+    suspend fun latest(@Path("id") id: String): Response<ApiResponse<FollowupSummaryView>>
+
+    @retrofit2.http.PUT("episodes/{id}/followup/{summaryId}")
+    suspend fun correct(
+        @Path("id") id: String,
+        @Path("summaryId") summaryId: String,
+        @Body body: Map<String, @JvmSuppressWildcards Any?>,
+    ): Response<ApiResponse<FollowupSummaryView>>
+
+    @POST("episodes/{id}/followup/{summaryId}/export")
+    suspend fun export(
+        @Path("id") id: String,
+        @Path("summaryId") summaryId: String,
+        @Body body: Map<String, @JvmSuppressWildcards Any?>,
+    ): Response<ApiResponse<FollowupExportView>>
+}
+
+@kotlinx.serialization.Serializable
+data class FollowupSummaryView(
+    val id: String,
+    @kotlinx.serialization.SerialName("episode_id") val episodeId: String,
+    val content: FollowupContentView,
+    @kotlinx.serialization.SerialName("generated_at") val generatedAt: String? = null,
+    val corrected: Boolean = false,
+    val exported: Boolean = false,
+    @kotlinx.serialization.SerialName("export_format") val exportFormat: String? = null,
+    @kotlinx.serialization.SerialName("exported_at") val exportedAt: String? = null,
+    val disclaimer: String = "仅整理你提供的信息，不构成诊断",
+)
+
+@kotlinx.serialization.Serializable
+data class FollowupContentView(
+    val sections: List<FollowupSection> = emptyList(),
+    @kotlinx.serialization.SerialName("generated_at") val generatedAt: String? = null,
+    val corrected: Boolean = false,
+    @kotlinx.serialization.SerialName("corrected_at") val correctedAt: String? = null,
+    val disclaimer: String = "仅整理你提供的信息，不构成诊断",
+)
+
+@kotlinx.serialization.Serializable
+data class FollowupSection(
+    val key: String,
+    val title: String,
+    val items: List<FollowupItem> = emptyList(),
+)
+
+@kotlinx.serialization.Serializable
+data class FollowupItem(
+    val text: String,
+    @kotlinx.serialization.SerialName("verify_status") val verifyStatus: String? = null,
+    @kotlinx.serialization.SerialName("source_type") val sourceType: String? = null,
+)
+
+@kotlinx.serialization.Serializable
+data class FollowupExportView(
+    val id: String,
+    @kotlinx.serialization.SerialName("episode_id") val episodeId: String,
+    val format: String,
+    val content: String,
+    @kotlinx.serialization.SerialName("exported_at") val exportedAt: String? = null,
+)
+
+/** 内容库（对应 server contents.controller.ts，App A13 / A15） */
+interface ContentsApi2 {
+    @GET("contents")
+    suspend fun list(@retrofit2.http.Query("type") type: String? = null): Response<ApiResponse<List<ContentListItem2>>>
+
+    @GET("contents/{id}")
+    suspend fun detail(@Path("id") id: String): Response<ApiResponse<ContentDetail>>
+}
+
+@kotlinx.serialization.Serializable
+data class ContentListItem2(
+    val id: String,
+    val type: String,
+    val title: String,
+    @kotlinx.serialization.SerialName("applicable_scope") val applicableScope: String = "",
+    @kotlinx.serialization.SerialName("not_applicable") val notApplicable: String = "",
+    val version: Int? = null,
+    @kotlinx.serialization.SerialName("published_at") val publishedAt: String? = null,
+    @kotlinx.serialization.SerialName("recommend_reason") val recommendReason: String = "",
+)
+
+@kotlinx.serialization.Serializable
+data class ContentDetail(
+    val id: String,
+    val type: String,
+    val title: String,
+    @kotlinx.serialization.SerialName("applicable_scope") val applicableScope: String,
+    @kotlinx.serialization.SerialName("not_applicable") val notApplicable: String,
+    @kotlinx.serialization.SerialName("current_status") val currentStatus: String,
+    val offline: Boolean = false,
+    @kotlinx.serialization.SerialName("current_version") val currentVersion: ContentCurrentVersion? = null,
+    val versions: List<ContentVersionView> = emptyList(),
+    @kotlinx.serialization.SerialName("review_records") val reviewRecords: List<ReviewRecordView> = emptyList(),
+    val disclaimer: String = "",
+)
+
+@kotlinx.serialization.Serializable
+data class ContentCurrentVersion(
+    val version: Int,
+    val script: String,
+    @kotlinx.serialization.SerialName("subtitle_text") val subtitleText: String = "",
+    @kotlinx.serialization.SerialName("asset_key") val assetKey: String? = null,
+    @kotlinx.serialization.SerialName("published_at") val publishedAt: String,
+)
+
+@kotlinx.serialization.Serializable
+data class ContentVersionView(
+    val version: Int,
+    val script: String = "",
+    @kotlinx.serialization.SerialName("subtitle_text") val subtitleText: String = "",
+    @kotlinx.serialization.SerialName("published_at") val publishedAt: String? = null,
+)
+
+@kotlinx.serialization.Serializable
+data class ReviewRecordView(
+    val id: String,
+    @kotlinx.serialization.SerialName("reviewer_role") val reviewerRole: String,
+    val decision: String,
+    val comment: String? = null,
+    @kotlinx.serialization.SerialName("reviewed_at") val reviewedAt: String,
+)
+
+/** 用户端反馈（对应 server feedback.controller.ts，App A16） */
+interface FeedbackApi {
+    @POST("feedback")
+    suspend fun help(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<ApiResponse<FeedbackItem>>
+
+    @POST("feedback/error-report")
+    suspend fun errorReport(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<ApiResponse<FeedbackItem>>
+
+    @GET("feedback/mine")
+    suspend fun mine(): Response<ApiResponse<List<FeedbackItem>>>
+
+    @GET("feedback/{id}")
+    suspend fun detail(@Path("id") id: String): Response<ApiResponse<FeedbackItem>>
+}
+
+@kotlinx.serialization.Serializable
+data class FeedbackItem(
+    val id: String,
+    @kotlinx.serialization.SerialName("analysis_id") val analysisId: String? = null,
+    @kotlinx.serialization.SerialName("help_type") val helpType: String? = null,
+    @kotlinx.serialization.SerialName("unsolved_question") val unsolvedQuestion: String? = null,
+    @kotlinx.serialization.SerialName("content_item_id") val contentItemId: String? = null,
+    val category: String? = null,
+    val description: String? = null,
+    val severity: String? = null,
+    val status: String = "待处理",
+    @kotlinx.serialization.SerialName("created_at") val createdAt: String,
 )
