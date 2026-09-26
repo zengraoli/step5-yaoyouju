@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与 docs/design/README.md 色彩令牌一致 -->
+    <color name="primary">#0F6E74</color>
+    <color name="primary_light">#E3F1F2</color>
+    <color name="bg">#F4F6F8</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text_1">#1B2230</color>
+    <color name="text_2">#5C6675</color>
+    <color name="text_3">#98A1AE</color>
+    <color name="ok">#1E9E5A</color>
+    <color name="warn">#C77700</color>
+    <color name="error">#D93B3B</color>
+    <color name="info">#2F6FD8</color>
+    <color name="dark_nav">#12202B</color>
+</resources>
