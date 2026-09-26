@@ -19,7 +19,9 @@ import com.yaoyouju.android.ui.screens.LoginScreen
 import com.yaoyouju.android.ui.screens.HomeScreen
 import com.yaoyouju.android.ui.screens.ChangeScreen
 import com.yaoyouju.android.ui.screens.EmergencyScreen
+import com.yaoyouju.android.ui.screens.AnalysisScreen
 import com.yaoyouju.android.ui.screens.ConfusionScreen
+import com.yaoyouju.android.ui.screens.ReportDiffScreen
 import com.yaoyouju.android.ui.screens.PlaceholderScreen
 import com.yaoyouju.android.ui.screens.ReportInputScreen
 import com.yaoyouju.android.ui.screens.ReportVerifyScreen
@@ -75,8 +77,32 @@ fun YaoyoujuApp(deepLinkRoute: String? = null) {
                 composable(Routes.CONFUSION) { ConfusionScreen(navController) }
                 composable(Routes.REPORT_INPUT) { ReportInputScreen(navController) }
                 composable(Routes.REPORT_VERIFY) { ReportVerifyScreen(navController) }
-                composable(Routes.ANALYSIS) { PlaceholderScreen(title = "A07 一页理性分析", code = "A07") }
-                composable(Routes.REPORT_DIFF) { PlaceholderScreen(title = "A08 原文对照", code = "A08") }
+                composable(
+    route = Routes.ANALYSIS + "?taskId={taskId}&analysisId={analysisId}",
+    arguments = listOf(
+        navArgument("taskId") { defaultValue = "" },
+        navArgument("analysisId") { defaultValue = "" },
+    ),
+) { entry ->
+    AnalysisScreen(
+        navController = navController,
+        taskId = entry.arguments?.getString("taskId") ?: "",
+        analysisId = entry.arguments?.getString("analysisId") ?: "",
+    )
+}
+                composable(
+    route = Routes.REPORT_DIFF + "?analysisId={analysisId}&explainIndex={explainIndex}",
+    arguments = listOf(
+        navArgument("analysisId") { defaultValue = "" },
+        navArgument("explainIndex") { defaultValue = 0 },
+    ),
+) { entry ->
+    ReportDiffScreen(
+        navController = navController,
+        analysisId = entry.arguments?.getString("analysisId") ?: "",
+        explainIndex = entry.arguments?.getInt("explainIndex") ?: 0,
+    )
+}
                 composable(Routes.QA) { PlaceholderScreen(title = "A09 问与解释", code = "A09") }
                 composable(Routes.TIMELINE) { PlaceholderScreen(title = "A10 病程时间线", code = "A10") }
                 composable(Routes.TODAY) { PlaceholderScreen(title = "A11 记录今天", code = "A11") }
