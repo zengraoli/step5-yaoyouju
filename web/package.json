@@ -1,0 +1,25 @@
+{
+  "name": "yaoyouju-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "腰有据 · 用户端 Web",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "pinia": "^3.0.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "typescript": "^5.5.0",
+    "vite": "^7.0.0",
+    "vue-tsc": "^3.0.0"
+  }
+}

@@ -1,0 +1,54 @@
+/**
+ * 主题变量（与 App 端、后台三端一致，见 docs/design/README.md 设计规范）
+ * 颜色 / 字号 / 圆角 / 间距全部走变量，不在页面散落硬编码。
+ */
+:root {
+  /* 色彩令牌 */
+  --color-primary: #0f6e74;
+  --color-primary-light: #e3f1f2;
+  --color-bg: #f4f6f8;
+  --color-surface: #ffffff;
+  --color-border: #e4e8ee;
+  --color-text-1: #1b2230;
+  --color-text-2: #5c6675;
+  --color-text-3: #98a1ae;
+  --color-ok: #1e9e5a;
+  --color-warn: #c77700;
+  --color-error: #d93b3b;
+  --color-info: #2f6fd8;
+
+  /* 浅色底（提示条 / 标签） */
+  --color-ok-light: #e6f5ec;
+  --color-warn-light: #fbf1e0;
+  --color-error-light: #fbeaea;
+  --color-info-light: #e9f0fc;
+  --color-neutral-light: #f1f3f6;
+
+  /* 字体（系统字体栈，不加载外部资源） */
+  --font-family: 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui,
+    -apple-system, sans-serif;
+  --font-size-page-title: 20px; /* 桌面端页面标题 */
+  --font-size-card-title: 16px; /* 桌面端卡片标题 */
+  --font-size-body: 14px;
+  --font-size-aux: 13px;
+  --font-size-aux-sm: 12px;
+  --font-size-tag: 12px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --line-height-body: 1.6;
+
+  /* 圆角 */
+  --radius-card: 12px;
+  --radius-button: 10px;
+  --radius-tag: 4px;
+  --radius-pill: 999px;
+
+  /* 间距（桌面端页面边距 24–40） */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 20px;
+  --spacing-xxl: 24px;
+  --spacing-page: 40px;
+}
