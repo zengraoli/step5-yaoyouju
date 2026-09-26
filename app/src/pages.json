@@ -25,6 +25,38 @@
       }
     },
     {
+      "path": "pages/confusion/select",
+      "style": {
+        "navigationBarTitleText": "你现在最想解决什么",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/report/input",
+      "style": {
+        "navigationBarTitleText": "录入报告与医嘱",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/report/verify",
+      "style": {
+        "navigationBarTitleText": "核对整理后的信息",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
+      "path": "pages/analysis/index",
+      "style": {
+        "navigationBarTitleText": "一页分析",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
       "path": "pages/qa/index",
       "style": {
         "navigationBarTitleText": "问与解释",

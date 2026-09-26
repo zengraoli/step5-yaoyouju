@@ -25,7 +25,6 @@ import AppIcon from '../../components/AppIcon.vue'
 import AppNotice from '../../components/AppNotice.vue'
 import { useAuthStore } from '../../stores/auth'
 import { addCareEvent, createEpisode, listEpisodes } from '../../api/episodes'
-import { createAnalysis, safetyNoticeFromError } from '../../api/analyses'
 import {
   RED_FLAG_NONE_KEY,
   RED_FLAG_OPTIONS,
@@ -160,7 +159,7 @@ function buildSummary(): string {
   return lines.join('\n')
 }
 
-/** 下一步：写入病程事件 → 提交分析（命中红旗走就医提示分支） */
+/** 下一步：写入病程事件 → 进入 A04 选择主要困惑（分析在核对后生成） */
 async function onSubmit() {
   if (submitting.value) return
   if (!auth.isLoggedIn) {
@@ -179,27 +178,9 @@ async function onSubmit() {
       verify_status: '尚未确认',
       occurred_at: new Date().toISOString(),
     })
-    try {
-      const result = await createAnalysis({ episode_id: episodeId, symptom_change: summary })
-      toast(
-        result.status === 'queued'
-          ? '已记录这次确认，一页分析任务已提交'
-          : '已记录这次确认；个性化分析暂不可用，已改用可用的回退内容',
-      )
-      goBack()
-    } catch (e) {
-      // 命中红旗（40910/40911）：响应 data 即就医提示内容，立即展示、不阻断
-      const notice = safetyNoticeFromError(e)
-      if (notice) {
-        goNotice(
-          notice.matched.map((m) => m.label),
-          notice.matched.some((m) => m.severity === 'high'),
-          notice.rule_set_version,
-        )
-      } else {
-        toast(e instanceof Error ? e.message : '提交分析失败，请稍后重试')
-      }
-    }
+    // 命中红旗的选项在勾选时已立即提示就医（见 onToggleRedFlag）；
+    // 服务端安全规则在「生成一页分析」时再次校验（A06）。
+    uni.navigateTo({ url: '/pages/confusion/select' })
   } catch (e) {
     toast(e instanceof Error ? e.message : '保存失败，请稍后重试')
   } finally {
