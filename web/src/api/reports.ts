@@ -27,3 +27,14 @@ export function getStructured(
     url: `/episodes/${encodeURIComponent(episodeId)}/structured`,
   })
 }
+
+/** 录入报告（粘贴文字为主） */
+export function createReport(input: {
+  episode_id: string
+  report_date?: string | null
+  raw_text: string
+  source_type?: string
+  verify_status?: string
+}): Promise<unknown> {
+  return request({ url: '/reports', method: 'POST', data: { ...input } })
+}

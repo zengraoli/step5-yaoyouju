@@ -42,3 +42,24 @@ export function createAnalysis(input: {
     data: { ...input },
   })
 }
+
+/** 一页分析详情（五段结构 + 每条解释的来源） */
+export function getAnalysis(analysisId: string): Promise<AnalysisView> {
+  return request<AnalysisView>({ url: `/analyses/${encodeURIComponent(analysisId)}` })
+}
+
+export type AnalysisTaskStatus = 'queued' | 'completed' | 'failed'
+
+export interface AnalysisTaskView {
+  status: AnalysisTaskStatus
+  task_id: string
+  attempts?: number
+  analysis?: unknown
+  reason?: string
+  fallback?: unknown
+}
+
+/** 查询分析任务状态（排队中 / 完成 / 失败回退） */
+export function getAnalysisTask(taskId: string): Promise<AnalysisTaskView> {
+  return request<AnalysisTaskView>({ url: `/analyses/task/${encodeURIComponent(taskId)}` })
+}
