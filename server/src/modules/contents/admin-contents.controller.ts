@@ -186,6 +186,12 @@ export class AdminContentsController {
     return this.contents.publish(admin.id, id);
   }
 
+  @ApiOperation({ summary: '引用定位预览（下线前查看受影响的页面）' })
+  @Get(':id/impact')
+  impact(@CurrentUser() admin: AdminContext, @Param('id') id: string) {
+    return this.contents.impactPreview(id);
+  }
+
   @ApiOperation({ summary: '一键下线（发布 → 已下线，返回引用定位）' })
   @RequirePermission('content.offline')
   @Post(':id/take-offline')

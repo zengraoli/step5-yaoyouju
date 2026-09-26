@@ -504,6 +504,11 @@ export class ContentsService {
     return { content: this.detailOf(this.loadItem(itemId)), references };
   }
 
+  /** 引用定位预览（下线前查看哪些分析引用了该内容；B04） */
+  impactPreview(itemId: string): ReferenceReport {
+    return this.locateReferences(itemId);
+  }
+
   /** 后台内容详情：任何状态都可查看（草稿 / 待审 / 已下线等；B04） */
   adminDetail(itemId: string): ContentDetail {
     return this.detailOf(this.loadItem(itemId));
