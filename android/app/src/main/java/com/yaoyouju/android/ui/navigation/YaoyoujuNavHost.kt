@@ -23,6 +23,9 @@ import com.yaoyouju.android.ui.screens.AnalysisScreen
 import com.yaoyouju.android.ui.screens.ContentDetailScreen
 import com.yaoyouju.android.ui.screens.ContentListScreen
 import com.yaoyouju.android.ui.screens.ConfusionScreen
+import com.yaoyouju.android.ui.screens.FallbackScreen
+import com.yaoyouju.android.ui.screens.FeedbackScreen
+import com.yaoyouju.android.ui.screens.MineScreen
 import com.yaoyouju.android.ui.screens.FollowupScreen
 import com.yaoyouju.android.ui.screens.ReportDiffScreen
 import com.yaoyouju.android.ui.screens.PlaceholderScreen
@@ -123,9 +126,25 @@ fun YaoyoujuApp(deepLinkRoute: String? = null) {
         contentId = entry.arguments?.getString("contentId") ?: "",
     )
 }
-                composable(Routes.FEEDBACK) { PlaceholderScreen(title = "A16 反馈与举报", code = "A16") }
-                composable(Routes.MINE) { PlaceholderScreen(title = "A17 我的", code = "A17") }
-                composable(Routes.FALLBACK) { PlaceholderScreen(title = "A18 服务不可用回退", code = "A18") }
+                composable(
+    route = Routes.FEEDBACK + "?analysisId={analysisId}",
+    arguments = listOf(navArgument("analysisId") { defaultValue = "" }),
+) { entry ->
+    FeedbackScreen(
+        navController = navController,
+        analysisId = entry.arguments?.getString("analysisId") ?: "",
+    )
+}
+                composable(Routes.MINE) { MineScreen(navController) }
+                composable(
+    route = Routes.FALLBACK + "?taskId={taskId}",
+    arguments = listOf(navArgument("taskId") { defaultValue = "" }),
+) { entry ->
+    FallbackScreen(
+        navController = navController,
+        taskId = entry.arguments?.getString("taskId") ?: "",
+    )
+}
             }
         }
     }

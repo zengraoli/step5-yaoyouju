@@ -82,13 +82,24 @@ app/src/main/java/com/yaoyouju/android/
 ## 测试
 
 ```bash
-./gradlew testDebugUnitTest    # 单元测试（deep link 映射、响应解析）
+./gradlew testDebugUnitTest    # 单元测试（deep link 映射、响应解析、页面逻辑）
 ```
 
-截图测试（Roborazzi）在 T50 中加入：`./gradlew recordRoborazziDebug`。
+截图测试（Roborazzi）：
+
+```bash
+# 录制 / 更新截图（输出到 android/screenshots/）
+gradlew.bat recordRoborazziDebug
+
+# 校验截图（不重新录制，仅与已提交截图比对）
+gradlew.bat verifyRoborazziDebug
+```
+
+覆盖 A01–A18 全部页面（`ScreenShotsTest`，Robolectric + Compose）。
+数据来自 server 接口的页面在无网络环境下渲染空态 / 加载态 / 静态兜底内容。
 
 ## 已知问题
 
 - 大模型 / OCR 均为 server 侧模拟实现，客户端不调用任何外部服务；
-- 当前页面为占位骨架（T43），A01–A18 逐页实现在 T44–T50；
+- 数据来自 server 接口的页面，在无网络截图测试中渲染空态 / 加载态；
 - 真机调试依赖 `adb reverse`，模拟器可直接访问 127.0.0.1。
