@@ -443,12 +443,52 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   app.prepare('INSERT INTO followup_summary (id,episode_id,content,export_format,exported_at) VALUES (?,?,?,?,?)')
     .run(fs1, ep1, JSON.stringify({
       sections: [
-        { key: 'onset', title: '起病与时间', items: ['2026-07-18 久坐后腰痛（自述，已确认）'] },
-        { key: 'symptom', title: '当前症状', items: ['腰部酸痛，起身可缓解（自述）', '近一周右臀轻微放射感（自述，尚未确认）'] },
-        { key: 'report', title: '检查与报告', items: ['2026-08-05 腰椎 MRI：L5/S1 轻度膨出（报告原文）', '报告未描述下肢肌力（报告未提及）'] },
-        { key: 'advice', title: '既往医嘱与行动', items: ['每 40 分钟起身活动（医生记录）', '每天步行 20 分钟（自述）'] },
-        { key: 'worry', title: '我的主要担心', items: ['放射感是否说明加重（尚未确认）'] },
-        { key: 'questions', title: '想请医生确认的问题', items: ['下肢肌力与放射感需要查体吗', '两周后复查需要重点看什么'] },
+        {
+          key: 'onset',
+          title: '起病与时间',
+          items: [
+            { text: '2026-07-18 久坐后腰痛', source: '自述', verify_status: '已确认', care_event_id: ev1 },
+          ],
+        },
+        {
+          key: 'symptom',
+          title: '当前症状',
+          items: [
+            { text: '腰部酸痛，起身活动可缓解', source: '自述', verify_status: '已确认', care_event_id: ev1 },
+            { text: '近一周右臀轻微放射感', source: '自述', verify_status: '尚未确认', care_event_id: ev5 },
+          ],
+        },
+        {
+          key: 'report',
+          title: '检查与报告',
+          items: [
+            { text: '2026-08-05 腰椎 MRI：L5/S1 椎间盘轻度膨出，硬膜囊前缘轻度受压', source: '报告原文', verify_status: '已确认', care_event_id: ev2 },
+            { text: '报告未描述下肢肌力情况（报告未提及）', source: '报告原文', verify_status: '尚未确认', care_event_id: ev2 },
+          ],
+        },
+        {
+          key: 'advice',
+          title: '既往医嘱与行动',
+          items: [
+            { text: '每 40 分钟起身活动；两周后复查', source: '医生记录', verify_status: '已确认', care_event_id: ev3 },
+            { text: '每天步行 20 分钟', source: '自述', verify_status: '已确认', care_event_id: ev4 },
+          ],
+        },
+        {
+          key: 'worry',
+          title: '我的主要担心',
+          items: [
+            { text: '放射感是否说明加重', source: '自述', verify_status: '尚未确认', care_event_id: ev5 },
+          ],
+        },
+        {
+          key: 'questions',
+          title: '想请医生确认的问题',
+          items: [
+            { text: '下肢肌力与放射感需要查体吗', source: '自述', verify_status: '尚未确认', from: '用户加入' },
+            { text: '两周后复查需要重点看什么', source: '自述', verify_status: '尚未确认', from: '用户加入' },
+          ],
+        },
       ],
       generated_at: t,
     }), '文本', t);

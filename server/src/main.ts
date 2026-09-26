@@ -7,6 +7,12 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // 三端（App H5 5201 / Web 5202 / Admin 5203）均为跨域访问，开启 CORS（Bearer 令牌，不带 Cookie）
+  app.enableCors({
+    origin: true,
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

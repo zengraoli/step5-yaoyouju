@@ -17,7 +17,7 @@ class SuggestionDto {
   suggestion!: string;
 }
 
-class ReasonDto {
+class CaseReasonDto {
   @ApiProperty({ description: '退回原因', required: false })
   @IsOptional()
   @IsString()
@@ -111,7 +111,7 @@ export class AdminCasesController {
   @ApiOperation({ summary: '退回给用户编辑' })
   @RequirePermission('case.manage')
   @Post(':id/return')
-  returnToUser(@CurrentAdmin() admin: AdminContext, @Param('id') id: string, @Body() dto: ReasonDto) {
+  returnToUser(@CurrentAdmin() admin: AdminContext, @Param('id') id: string, @Body() dto: CaseReasonDto) {
     this.db.app.prepare('UPDATE case_submission SET status = ? WHERE id = ?').run('待修改', id);
     this.audit.append(admin.id, 'case.return', `case_submission:${id}`, { reason: dto.reason });
     return { id, status: '待修改' };

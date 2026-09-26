@@ -68,7 +68,18 @@ const auth = useAuthStore()
 
 const loading = ref(true)
 const items = ref<QueueItem[]>([])
-const stats = ref({ pending: 0, pendingHigh: 0, pendingMedium: 0, pendingLow: 0, reviewing: 0, closed: 0 })
+const stats = ref({
+  pending: 0,
+  pendingHigh: 0,
+  pendingMedium: 0,
+  pendingLow: 0,
+  reviewing: 0,
+  closed: 0,
+  helpTotal: 0,
+  helpUnderstood: 0,
+  helpNext: 0,
+  helpNone: 0,
+})
 const tab = ref<'error_report' | 'feedback'>('error_report')
 const selectedId = ref('')
 const detail = ref<FeedbackDetail | null>(null)
@@ -89,9 +100,17 @@ async function load() {
       data: { type: tab.value },
     })
     items.value = list
-    // 统计（全部类型）
-    const all = await request<QueueItem[]>({ url: '/admin/feedback' })
+    // 统计（全部类型；帮助类型反馈按 7 天窗口汇总）
+    const [all, help7d] = await Promise.all([
+      request<QueueItem[]>({ url: '/admin/feedback' }),
+      request<QueueItem[]>({ url: '/admin/feedback', data: { type: 'feedback' } }),
+    ])
     const open = all.filter((i) => i.status !== '已关闭' && i.status !== '无需处理')
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000
+    const recent = help7d.filter((i) => new Date(i.created_at).getTime() >= weekAgo)
+    const helpTotal = recent.length
+    const pct = (k: string) =>
+      helpTotal > 0 ? Math.round((recent.filter((i) => i.help_type === k).length / helpTotal) * 100) : 0
     stats.value = {
       pending: open.length,
       pendingHigh: open.filter((i) => i.severity === 'high').length,
@@ -99,6 +118,10 @@ async function load() {
       pendingLow: open.filter((i) => i.severity === 'low').length,
       reviewing: all.filter((i) => i.status === '临床复核中' || i.status === '已分配').length,
       closed: all.filter((i) => i.status === '已关闭').length,
+      helpTotal,
+      helpUnderstood: pct('看懂了'),
+      helpNext: pct('知道下一步'),
+      helpNone: pct('都不好'),
     }
   } finally {
     loading.value = false
@@ -224,8 +247,8 @@ const affectedText = computed<string>(() => {
       </AppCard>
       <AppCard class="stat-card">
         <p class="stat-card__label">帮助类型反馈（7 天）</p>
-        <p class="stat-card__value">186</p>
-        <p class="stat-card__sub">看懂 62% · 知道下一步 24% · 都不好 14%</p>
+        <p class="stat-card__value">{{ stats.helpTotal }}</p>
+        <p class="stat-card__sub">看懂 {{ stats.helpUnderstood }}% · 知道下一步 {{ stats.helpNext }}% · 都不好 {{ stats.helpNone }}%</p>
       </AppCard>
     </div>
 

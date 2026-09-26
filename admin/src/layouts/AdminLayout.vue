@@ -3,7 +3,7 @@
  * 后台整体布局：侧边栏按角色显示菜单（最小必要）+ 顶栏（标题 / 环境标识 / 账号）。
  * 路由守卫按权限拦截越权访问（见 router/index.ts）。
  */
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
@@ -37,6 +37,17 @@ const menus = computed<MenuItem[]>(() =>
 )
 
 const activeKey = computed(() => (route.meta.nav as string) ?? '')
+
+// 刷新后恢复身份：有令牌但缺少账号信息时拉取一次（角色与权限用于菜单与细粒度校验）
+onMounted(() => {
+  if (auth.isLoggedIn && !auth.admin) {
+    auth.fetchMe().catch(() => {
+      // 令牌失效：清理并回到登录页
+      auth.logout()
+      router.push('/login')
+    })
+  }
+})
 
 function onLogout() {
   auth.logout()

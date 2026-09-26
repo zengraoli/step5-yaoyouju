@@ -32,15 +32,28 @@ export function setAdminToken(token: string): void {
 export async function request<T>(options: RequestOptions): Promise<T> {
   const { url, method = 'GET', data, auth = true } = options
   const token = getAdminToken()
+  // GET/HEAD 不允许带 body：查询参数拼到 URL 上
+  let target = getBaseUrl() + url
+  let payload: string | undefined
+  if (data && method !== 'GET') {
+    payload = JSON.stringify(data)
+  } else if (data && method === 'GET') {
+    const qs = new URLSearchParams()
+    for (const [k, v] of Object.entries(data)) {
+      if (v !== undefined && v !== null && v !== '') qs.append(k, String(v))
+    }
+    const q = qs.toString()
+    if (q) target += (target.includes('?') ? '&' : '?') + q
+  }
   let res: Response
   try {
-    res = await fetch(getBaseUrl() + url, {
+    res = await fetch(target, {
       method,
       headers: {
         'Content-Type': 'application/json',
         ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: data ? JSON.stringify(data) : undefined,
+      body: payload,
     })
   } catch {
     throw new Error('网络连接失败，请检查网络后重试')

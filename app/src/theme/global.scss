@@ -5,6 +5,11 @@
  */
 @import '../uni.scss';
 
+html,
+body {
+  background-color: $color-bg;
+}
+
 page {
   background-color: $color-bg;
   font-family: $font-family;
