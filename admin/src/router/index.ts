@@ -26,6 +26,12 @@ const routes: RouteRecordRaw[] = [
         meta: { nav: 'contents', title: '内容库', permission: 'content.draft' },
       },
       {
+        path: 'contents/:id',
+        name: 'content-detail',
+        component: () => import('@/views/contents/ContentDetailView.vue'),
+        meta: { nav: 'contents', title: '内容详情', permission: 'content.draft' },
+      },
+      {
         path: 'evidence',
         name: 'evidence',
         component: () => import('@/views/evidence/EvidenceView.vue'),

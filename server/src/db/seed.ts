@@ -205,7 +205,7 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
     },
     {
       type: '视频', title: '腿麻了一定是椎间盘突出吗', scope: '担心下肢症状的用户',
-      notApplicable: '已确诊需手术评估', status: '待审',
+      notApplicable: '已确诊需手术评估', status: '待医学审核',
       versions: [{ script: '说明下肢症状的多种可能，提示需要医生查体确认，不作诊断。', sub: '字幕：下肢症状原因很多，需要医生查体确认。', published: null }],
     },
     {

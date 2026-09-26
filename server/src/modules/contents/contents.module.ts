@@ -3,6 +3,7 @@ import { DbModule } from '../../db/db.module';
 import { SwitchesModule } from '../switches/switches.module';
 import { ContentsService } from './contents.service';
 import { ContentsController } from './contents.controller';
+import { AdminContentsController } from './admin-contents.controller';
 
 /**
  * 内容库服务（/contents）。
@@ -12,7 +13,7 @@ import { ContentsController } from './contents.controller';
  */
 @Module({
   imports: [DbModule, SwitchesModule],
-  controllers: [ContentsController],
+  controllers: [ContentsController, AdminContentsController],
   providers: [ContentsService],
 })
 export class ContentsModule {}

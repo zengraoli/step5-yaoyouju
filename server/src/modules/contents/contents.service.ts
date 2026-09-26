@@ -504,6 +504,80 @@ export class ContentsService {
     return { content: this.detailOf(this.loadItem(itemId)), references };
   }
 
+  /** 后台内容详情：任何状态都可查看（草稿 / 待审 / 已下线等；B04） */
+  adminDetail(itemId: string): ContentDetail {
+    return this.detailOf(this.loadItem(itemId));
+  }
+
+  /** 后台内容列表（筛选 + 状态统计 + 分页；B03） */
+  listForAdmin(
+    actorId: string,
+    input: {
+      type?: string;
+      status?: string;
+      scope?: string;
+      reviewer?: string;
+      page?: number;
+      pageSize?: number;
+    },
+  ) {
+    const page = Math.max(1, input.page ?? 1);
+    const pageSize = Math.min(50, Math.max(5, input.pageSize ?? 10));
+    let rows = this.db.app
+      .prepare(`SELECT * FROM content_item ORDER BY created_at DESC, rowid DESC`)
+      .all() as ContentItemRow[];
+    if (input.type && input.type !== '全部') rows = rows.filter((r) => r.type === input.type);
+    if (input.status && input.status !== '全部') rows = rows.filter((r) => r.current_status === input.status);
+    if (input.scope && input.scope !== '全部') {
+      rows = rows.filter((r) => (r.applicable_scope ?? '').includes(input.scope as string));
+    }
+    if (input.reviewer && input.reviewer !== '全部') {
+      rows = rows.filter((r) =>
+        this.reviewRecordsOf(r.id).some((rec) => rec.reviewer_name === input.reviewer),
+      );
+    }
+    const total = rows.length;
+    const start = (page - 1) * pageSize;
+    const paged = rows.slice(start, start + pageSize);
+    const items = paged.map((r) => {
+      const current = this.currentPublishedVersion(r.id) ?? this.latestVersion(r.id);
+      const records = this.reviewRecordsOf(r.id);
+      const reviewer = records.find((rec) => rec.decision === '通过')?.reviewer_name ?? records[0]?.reviewer_name ?? null;
+      const references = this.locateReferences(r.id);
+      return {
+        id: r.id,
+        type: r.type,
+        title: r.title,
+        status: r.current_status,
+        current_version: current?.version ?? null,
+        reviewer,
+        published_at: this.currentPublishedVersion(r.id)?.published_at ?? null,
+        reference_count: references.count,
+        offline: r.offline_switch === 1,
+        applicable_scope: r.applicable_scope ?? '',
+      };
+    });
+    // 状态统计（不受筛选影响的口径：全量）
+    const all = this.db.app.prepare(`SELECT current_status, COUNT(*) n FROM content_item GROUP BY current_status`).all() as {
+      current_status: string;
+      n: number;
+    }[];
+    const stats: Record<string, number> = { 已发布: 0, 待医学审核: 0, 草稿: 0, 更正中: 0, 已撤回: 0, 已下线: 0, 已审定: 0 };
+    for (const row of all) stats[row.current_status] = row.n;
+    void actorId;
+    return { items, stats, total, page, page_size: pageSize };
+  }
+
+  /** 批量下线（需双人确认；B03） */
+  batchTakeOffline(operatorId: string, ids: string[], reason: string) {
+    const results: { id: string; status: string; references: number }[] = [];
+    for (const id of ids) {
+      const result = this.takeOffline(operatorId, id, { reason: reason || '批量下线' });
+      results.push({ id, status: result.content.current_status, references: result.references.count });
+    }
+    return { offline: results.length, items: results };
+  }
+
   /** 发现严重问题：已发布 → 已撤回（同样立即对用户端不可见） */
   withdraw(operatorId: string, itemId: string, input: ReasonInput = {}): ContentDetail {
     const item = this.loadItem(itemId);
