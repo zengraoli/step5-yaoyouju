@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { DbModule } from '../../db/db.module';
 import { AuditService } from '../../common/audit.service';
 import { AdminAuthService } from './admin-auth.service';
+import { AdminDashboardController } from './admin-dashboard.controller';
+import { DashboardService } from './dashboard.service';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminRolesController } from './admin-roles.controller';
 import { AdminAuditService } from './admin-audit.service';
@@ -21,13 +23,15 @@ import { AdminDualControlController } from './dual-control.controller';
 @Module({
   imports: [DbModule],
   controllers: [
+    AdminDashboardController,
     AdminAuthController,
     AdminRolesController,
     AdminAuditController,
     AdminAuthorizationsController,
     AdminDualControlController,
   ],
-  providers: [AdminAuthService, AdminAuditService, DualControlService, AuditService],
+  providers: [
+    DashboardService,AdminAuthService, AdminAuditService, DualControlService, AuditService],
   exports: [AdminAuthService],
 })
 export class AdminModule {}
