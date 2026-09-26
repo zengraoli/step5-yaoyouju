@@ -91,11 +91,23 @@ export interface CreateEpisodeInput {
   onset_certainty?: string
 }
 
+export interface CreateEventInput {
+  /** 事件类型：报告 / 症状 / 医嘱 / 行动 / 结局 */
+  event_type: string
+  /** 发生时间（UTC ISO8601） */
+  occurred_at: string
+  /** 来源类型：自述 / 报告原文 / 医生记录 */
+  source_type: string
+  /** 原文片段（结构化摘要） */
+  raw_text?: string | null
+  /** 核实状态：未确认的问题不默认阴性，一律「尚未确认」 */
+  verify_status?: string
+}
+
 /** 我的病程列表 */
 export function listEpisodes(): Promise<EpisodeListItem[]> {
   return request<EpisodeListItem[]>({ url: '/episodes' })
 }
-
 /** 创建病程（新用户空状态引导） */
 export function createEpisode(input: CreateEpisodeInput): Promise<EpisodeDetail> {
   return request<EpisodeDetail>({ url: '/episodes', method: 'POST', data: { ...input } })
@@ -117,5 +129,14 @@ export function confirmEvent(episodeId: string, eventId: string): Promise<CareEv
     url: `/episodes/${encodeURIComponent(episodeId)}/events/${encodeURIComponent(eventId)}`,
     method: 'PATCH',
     data: { verify_status: '已确认' },
+  })
+}
+
+/** 新增病程事件（如关键变化确认的结构化摘要；未回答的问题不默认阴性） */
+export function addCareEvent(episodeId: string, input: CreateEventInput): Promise<CareEventView> {
+  return request<CareEventView>({
+    url: `/episodes/${encodeURIComponent(episodeId)}/events`,
+    method: 'POST',
+    data: { ...input },
   })
 }

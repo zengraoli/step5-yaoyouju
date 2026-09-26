@@ -17,6 +17,14 @@
       }
     },
     {
+      "path": "pages/change/confirm",
+      "style": {
+        "navigationBarTitleText": "当前关键变化确认",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
       "path": "pages/qa/index",
       "style": {
         "navigationBarTitleText": "问与解释",
@@ -47,7 +55,8 @@
     {
       "path": "pages/emergency/notice",
       "style": {
-        "navigationBarTitleText": "就医提示",
+        "navigationBarTitleText": "需要及时寻求专业帮助",
+        "navigationStyle": "custom",
         "enablePullDownRefresh": false
       }
     }

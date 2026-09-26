@@ -5,6 +5,8 @@ import { DEFAULT_API_BASE_URL, STORAGE_KEYS } from '../utils/constants'
  * - baseURL 可配置（默认 http://127.0.0.1:3200，可在「我的」页切换）
  * - 自动携带 Authorization: Bearer <token>
  * - 统一处理响应体 { code, data, message }：code 为 0 时 resolve data，否则 reject 中文 message
+ *   （HTTP 状态码非 2xx 但响应体是统一结构时同样按业务错误处理，
+ *     如命中红旗的 40910/40911：message 为中文提示，data 为就医提示内容）
  */
 
 /** 后端统一响应体 */
@@ -21,6 +23,20 @@ export interface RequestOptions {
   data?: Record<string, unknown>
   /** 是否需要登录态，默认 true；公开接口（验证码 / 登录 / 就医提示 / 开关）传 false */
   auth?: boolean
+}
+
+/**
+ * 业务错误（code 非 0）：message 为中文；安全规则等异常附带结构化 data
+ * （如 POST /analyses 命中红旗时 40910/40911 响应里的就医提示内容）。
+ */
+export interface ApiError extends Error {
+  code?: number
+  data?: unknown
+}
+
+/** 读取业务错误附带的结构化 data（无则返回 undefined） */
+export function apiErrorData(error: unknown): unknown {
+  return error instanceof Error ? (error as ApiError).data : undefined
 }
 
 /** 当前 API 基础地址：本地存储优先，其次默认值 */
@@ -59,13 +75,18 @@ export function request<T>(options: RequestOptions): Promise<T> {
       },
       success: (res) => {
         const body = res.data as ApiResponse<T> | undefined
-        if (res.statusCode >= 200 && res.statusCode < 300 && body && typeof body === 'object') {
+        if (body && typeof body === 'object' && typeof (body as { code?: unknown }).code === 'number') {
           if (body.code === 0) {
             resolve(body.data)
           } else {
-            // 业务错误：code 非 0，message 为中文
-            reject(new Error(body.message || '请求失败，请稍后重试'))
+            // 业务错误：code 非 0，message 为中文；结构化 data（如就医提示）一并透出
+            const err = new Error(body.message || '请求失败，请稍后重试') as ApiError
+            err.code = body.code
+            err.data = body.data
+            reject(err)
           }
+        } else if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(body as T)
         } else {
           reject(new Error(`服务暂时不可用（${res.statusCode}），请稍后重试`))
         }

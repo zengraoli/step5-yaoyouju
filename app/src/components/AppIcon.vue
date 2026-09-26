@@ -23,6 +23,9 @@ export type IconName =
   | 'upload'
   | 'calendar'
   | 'play'
+  | 'back'
+  | 'location'
+  | 'file'
 
 interface IconShape {
   /** 路径 d 值 */
@@ -117,6 +120,22 @@ const ICONS: Record<IconName, IconShape> = {
   },
   // 播放（内容推荐）
   play: { paths: ['M9.2 6.4 18.6 12l-9.4 5.6z'] },
+  // 返回（子页面导航栏）
+  back: { paths: ['M14.8 5.2 8.4 12l6.4 6.8'] },
+  // 定位（查找附近医院）
+  location: {
+    paths: ['M12 21.2s6.6-6 6.6-10.8a6.6 6.6 0 1 0-13.2 0C5.4 15.2 12 21.2 12 21.2z'],
+    circles: [{ cx: 12, cy: 10.2, r: 2.5 }],
+  },
+  // 文档（就诊交接摘要 / 报告）
+  file: {
+    paths: [
+      'M14 3.6H7.4a1.6 1.6 0 0 0-1.6 1.6v13.6a1.6 1.6 0 0 0 1.6 1.6h9.2a1.6 1.6 0 0 0 1.6-1.6V8.4z',
+      'M14 3.6v4.8h4.2',
+      'M8.8 12.6h6.4',
+      'M8.8 15.8h4.4',
+    ],
+  },
 }
 
 const props = withDefaults(
