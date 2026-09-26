@@ -23,6 +23,9 @@ import com.yaoyouju.android.ui.screens.AnalysisScreen
 import com.yaoyouju.android.ui.screens.ConfusionScreen
 import com.yaoyouju.android.ui.screens.ReportDiffScreen
 import com.yaoyouju.android.ui.screens.PlaceholderScreen
+import com.yaoyouju.android.ui.screens.QaScreen
+import com.yaoyouju.android.ui.screens.TimelineScreen
+import com.yaoyouju.android.ui.screens.TodayScreen
 import com.yaoyouju.android.ui.screens.ReportInputScreen
 import com.yaoyouju.android.ui.screens.ReportVerifyScreen
 
@@ -103,9 +106,9 @@ fun YaoyoujuApp(deepLinkRoute: String? = null) {
         explainIndex = entry.arguments?.getInt("explainIndex") ?: 0,
     )
 }
-                composable(Routes.QA) { PlaceholderScreen(title = "A09 问与解释", code = "A09") }
-                composable(Routes.TIMELINE) { PlaceholderScreen(title = "A10 病程时间线", code = "A10") }
-                composable(Routes.TODAY) { PlaceholderScreen(title = "A11 记录今天", code = "A11") }
+                composable(Routes.QA) { QaScreen(navController) }
+                composable(Routes.TIMELINE) { TimelineScreen(navController) }
+                composable(Routes.TODAY) { TodayScreen(navController) }
                 composable(Routes.FOLLOWUP) { PlaceholderScreen(title = "A12 复诊摘要", code = "A12") }
                 composable(Routes.CONTENTS) { PlaceholderScreen(title = "A13 审核内容库", code = "A13") }
                 composable(Routes.CONTENT_DETAIL) { PlaceholderScreen(title = "A15 视频详情", code = "A15") }

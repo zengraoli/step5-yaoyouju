@@ -288,3 +288,92 @@ data class StructuredSummary(
     val unconfirmed: Int = 0,
     val conflict: Int = 0,
 )
+
+/** 问与解释（对应 server qa.controller.ts，App A09） */
+interface QaApi {
+    @POST("qa/sessions")
+    suspend fun createSession(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<ApiResponse<QaSessionDetail>>
+
+    @GET("qa/sessions")
+    suspend fun listSessions(): Response<ApiResponse<List<QaSessionListItem>>>
+
+    @GET("qa/sessions/{id}")
+    suspend fun session(@Path("id") id: String): Response<ApiResponse<QaSessionDetail>>
+
+    @POST("qa/sessions/{id}/messages")
+    suspend fun ask(
+        @Path("id") id: String,
+        @Body body: Map<String, @JvmSuppressWildcards Any?>,
+    ): Response<ApiResponse<AskResult>>
+
+    @POST("qa/sessions/{id}/close")
+    suspend fun close(@Path("id") id: String): Response<ApiResponse<QaSessionDetail>>
+}
+
+@kotlinx.serialization.Serializable
+data class QaCitation(
+    val kind: String,
+    @kotlinx.serialization.SerialName("evidence_doc_id") val evidenceDocId: String? = null,
+    @kotlinx.serialization.SerialName("care_event_id") val careEventId: String? = null,
+    @kotlinx.serialization.SerialName("analysis_id") val analysisId: String? = null,
+    @kotlinx.serialization.SerialName("source_label") val sourceLabel: String? = null,
+    val statement: String? = null,
+)
+
+@kotlinx.serialization.Serializable
+data class QaMessageView(
+    val id: String,
+    val role: String,
+    val content: String,
+    val citations: List<QaCitation> = emptyList(),
+    val refused: Boolean = false,
+    @kotlinx.serialization.SerialName("followup_question") val followupQuestion: String? = null,
+    @kotlinx.serialization.SerialName("add_to_followup") val addToFollowup: Boolean = false,
+    @kotlinx.serialization.SerialName("created_at") val createdAt: String,
+)
+
+@kotlinx.serialization.Serializable
+data class QaSessionDetail(
+    val id: String,
+    @kotlinx.serialization.SerialName("episode_id") val episodeId: String? = null,
+    @kotlinx.serialization.SerialName("created_at") val createdAt: String,
+    val messages: List<QaMessageView> = emptyList(),
+)
+
+@kotlinx.serialization.Serializable
+data class QaSessionListItem(
+    val id: String,
+    @kotlinx.serialization.SerialName("episode_id") val episodeId: String? = null,
+    @kotlinx.serialization.SerialName("created_at") val createdAt: String,
+    @kotlinx.serialization.SerialName("message_count") val messageCount: Int = 0,
+)
+
+@kotlinx.serialization.Serializable
+data class AskResult(
+    @kotlinx.serialization.SerialName("session_id") val sessionId: String,
+    @kotlinx.serialization.SerialName("user_message_id") val userMessageId: String,
+    @kotlinx.serialization.SerialName("assistant_message_id") val assistantMessageId: String,
+)
+
+/** 病程时间线（对应 server episodes.controller.ts） */
+interface TimelineApi {
+    @GET("episodes/{id}/timeline")
+    suspend fun timeline(@Path("id") id: String): Response<ApiResponse<List<TimelineGroup>>>
+}
+
+@kotlinx.serialization.Serializable
+data class TimelineGroup(
+    val date: String,
+    val items: List<TimelineItem> = emptyList(),
+)
+
+@kotlinx.serialization.Serializable
+data class TimelineItem(
+    val id: String,
+    @kotlinx.serialization.SerialName("event_type") val eventType: String,
+    val label: String,
+    val detail: String? = null,
+    @kotlinx.serialization.SerialName("source_type") val sourceType: String = "自述",
+    @kotlinx.serialization.SerialName("verify_status") val verifyStatus: String? = null,
+    @kotlinx.serialization.SerialName("occurred_at") val occurredAt: String? = null,
+)
