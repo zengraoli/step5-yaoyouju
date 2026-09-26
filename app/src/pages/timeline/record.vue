@@ -341,6 +341,7 @@ function onBack() {
             placeholder="例如：会不会越来越严重 / 要不要换医院…"
             placeholder-class="q-card__textarea-placeholder"
             :maxlength="200"
+            :adjust-position="false"
           />
         </view>
       </view>

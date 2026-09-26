@@ -11,22 +11,41 @@ interface MenuItem {
   key: string
   label: string
   path: string
-  /** 所需权限（最小必要；不展示无权限菜单） */
+  /** 所需权限（单一；不传时所有后台角色可见） */
   permission?: string
+  /** 任一权限即可见（按 B10 角色职责） */
+  anyOf?: string[]
 }
 
-/** 全部菜单（按权限过滤后显示） */
+/**
+ * 全部菜单。anyOf = 具备任一权限即可见（按 B10 角色职责）：
+ * - 内容库：运营编辑（草稿）/ 临床审核（审定发布下线）/ 超级管理
+ * - 医学证据库：运营编辑（录入）/ 临床审核（核实停用）/ 超级管理
+ * - 举报与反馈：运营编辑（初筛）/ 临床审核（处置）/ 超级管理（合规不读举报）
+ * - 安全与开关：临床审核（非高危）/ 技术负责人 / 超级管理
+ * - 用户与权限：合规支持（监督：单条授权 / 双人确认）/ 超级管理
+ */
 const ALL_MENUS: MenuItem[] = [
   { key: 'dashboard', label: '仪表盘', path: '/dashboard' },
-  { key: 'contents', label: '内容库', path: '/contents', permission: 'content.draft' },
-  { key: 'evidence', label: '医学证据库', path: '/evidence', permission: 'evidence.manage' },
-  { key: 'feedback', label: '举报与反馈', path: '/feedback', permission: 'feedback.view' },
-  { key: 'safety', label: '安全与开关', path: '/safety', permission: 'switch.manage' },
-  { key: 'models', label: '模型与评测', path: '/models', permission: 'model.manage' },
-  { key: 'eval', label: '评测集与回归', path: '/eval', permission: 'eval.manage' },
-  { key: 'users', label: '用户与权限', path: '/users', permission: 'user.manage' },
-  { key: 'audit', label: '审计日志', path: '/audit', permission: 'audit.view' },
-  { key: 'cases', label: '案例投稿', path: '/cases', permission: 'case.manage' },
+  {
+    key: 'contents',
+    label: '内容库',
+    path: '/contents',
+    anyOf: ['content.draft', 'content.review', 'content.publish', 'content.offline'],
+  },
+  {
+    key: 'evidence',
+    label: '医学证据库',
+    path: '/evidence',
+    anyOf: ['evidence.ingest', 'evidence.verify', 'evidence.deactivate'],
+  },
+  { key: 'feedback', label: '举报与反馈', path: '/feedback', anyOf: ['feedback.view', 'feedback.handle'] },
+  { key: 'safety', label: '安全与开关', path: '/safety', anyOf: ['switch.manage', 'switch.manage_low'] },
+  { key: 'models', label: '模型与评测', path: '/models', anyOf: ['model.manage'] },
+  { key: 'eval', label: '评测集与回归', path: '/eval', anyOf: ['eval.manage'] },
+  { key: 'users', label: '用户与权限', path: '/users', anyOf: ['user.view', 'user.manage'] },
+  { key: 'audit', label: '审计日志', path: '/audit', anyOf: ['audit.view'] },
+  { key: 'cases', label: '案例投稿', path: '/cases', anyOf: ['case.manage'] },
 ]
 
 const auth = useAuthStore()
@@ -34,7 +53,12 @@ const route = useRoute()
 const router = useRouter()
 
 const menus = computed<MenuItem[]>(() =>
-  ALL_MENUS.filter((m) => !m.permission || auth.hasPermission(m.permission)),
+  ALL_MENUS.filter(
+    (m) =>
+      (!m.permission && !m.anyOf) ||
+      (m.permission ? auth.hasPermission(m.permission) : false) ||
+      (m.anyOf ? m.anyOf.some((p) => auth.hasPermission(p)) : false),
+  ),
 )
 
 const activeKey = computed(() => (route.meta.nav as string) ?? '')

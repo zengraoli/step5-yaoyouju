@@ -16,6 +16,11 @@ import { ResponseInterceptor } from '../../common/response.interceptor';
 import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { EvidenceController } from './evidence.controller';
+import { AdminEvidenceController } from './admin-evidence.controller';
+import { AdminAuthController } from '../admin/admin-auth.controller';
+import { AdminAuthService } from '../admin/admin-auth.service';
+import { AdminGuard } from '../../common/admin.guard';
+import { PermissionGuard } from '../admin/permission.guard';
 import { EvidenceService } from './evidence.service';
 import {
   LOCAL_VECTOR_DIM,
@@ -143,6 +148,23 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
   let token: string;
 
   const api = () => request(app.getHttpServer());
+
+  /** 后台登录（拿 admin token），口令与 TOTP 取演示环境变量 */
+  async function adminLogin(name: string): Promise<string> {
+    const res = await api()
+      .post('/admin/auth/login')
+      .send({
+        name,
+        password: process.env.ADMIN_DEMO_PASSWORD ?? '123456',
+        totp: process.env.ADMIN_TOTP_DEMO_CODE ?? '123456',
+      });
+    return (res.body.data as { token: string }).token;
+  }
+
+  /** 后台请求头 */
+  function AH(token: string): { Authorization: string } {
+    return { Authorization: 'Bearer ' + token };
+  }
   const H = () => ({ Authorization: `Bearer ${token}` });
   const adminId = (name: string): string =>
     (db.app.prepare('SELECT id FROM admin_user WHERE name=?').get(name) as { id: string }).id;
@@ -160,13 +182,16 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
     process.env.DB_DIR = dir;
     const moduleRef = await Test.createTestingModule({
       imports: [DbModule],
-      controllers: [EvidenceController],
+      controllers: [EvidenceController, AdminAuthController, AdminEvidenceController],
       providers: [
         AuthService,
         EvidenceService,
         AuditService,
         SchemaService,
+        AdminAuthService,
         { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_GUARD, useClass: AdminGuard },
+        { provide: APP_GUARD, useClass: PermissionGuard },
         { provide: APP_GUARD, useClass: ConsentGuard },
       ],
     }).compile();
@@ -641,9 +666,9 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
     expect((pipeline.body.data as Pipeline).status).toBe('已切分');
     expect((pipeline.body.data as Pipeline).chunk_count).toBeGreaterThan(0);
 
+    // 停用影响预览属于后台职责：用户侧路由已移除（40400），后台接口另测
     const impact = await api().get(`/evidence/${doc.id}/impact`).set(H());
-    expect(impact.body.code).toBe(0);
-    expect((impact.body.data as Impact).doc_id).toBe(doc.id);
+    expect(impact.body.code).toBe(40400);
 
     // 不存在的 ID → 40400
     expect((await api().get('/evidence/not-exist').set(H())).body.code).toBe(40400);
@@ -671,16 +696,22 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
     expect(getData.results[0].license).toBeTruthy();
   });
 
-  it('HTTP：新建 → 停用 → 检索不到 → 影响预览有数据 → 恢复', async () => {
-    // 新建一篇只含独特关键词的证据
+  it('HTTP：用户侧写接口已关闭，后台可新建 → 入库 → 停用 → 恢复', async () => {
+    // 普通用户 token 调用户侧写接口：路由已移除（40400）
+    expect((await api().post('/evidence').set(H()).send({ title: 'x', source_type: '指南' })).body.code).toBe(40400);
+    expect((await api().post('/evidence/whatever/ingest').set(H())).body.code).toBe(40400);
+    expect((await api().post('/evidence/whatever/active').set(H()).send({ active: false })).body.code).toBe(40400);
+
+    // 后台账号通过 /admin/evidence 新建一篇只含独特关键词的证据
+    const adminToken = await adminLogin('clinician01');
     const created = await api()
-      .post('/evidence')
-      .set(H())
+      .post('/admin/evidence')
+      .set(AH(adminToken))
       .send({
         title: '《演示全流程（T11）》',
         source_type: '指南',
         source_url: 'local://evidence/t11-flow',
-        license: '演示数据',
+        license: '可引用',
         verified_at: '2026-09-24',
         raw_text: `${LONG_TEXT}\n${FLOW_MARK}流程验证：停用后这篇证据不能再被检索到。`,
       });
@@ -688,15 +719,15 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
     const docId = created.body.data.id as string;
 
     // 入库 → 检索得到
-    const ingest = await api().post(`/evidence/${docId}/ingest`).set(H());
+    const ingest = await api().post(`/admin/evidence/${docId}/ingest`).set(AH(adminToken));
     expect(ingest.body.code).toBe(0);
     expect((ingest.body.data as Pipeline).chunk_count).toBeGreaterThan(2);
 
     const found = await api().get(`/evidence/search?q=${encodeURIComponent(FLOW_MARK)}`).set(H());
     expect((found.body.data as SearchResult).results.some((r) => r.doc_id === docId)).toBe(true);
 
-    // 停用 → 检索不到，影响预览可查
-    const off = await api().post(`/evidence/${docId}/active`).set(H()).send({
+    // 停用 → 检索不到，影响预览可查（后台接口）
+    const off = await api().post(`/admin/evidence/${docId}/active`).set(AH(adminToken)).send({
       active: false,
       reason: '演示：来源待复核',
     });
@@ -705,29 +736,41 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
     expect(off.body.data.impact.doc_id).toBe(docId);
     expect(off.body.data.impact.confirm_hint).toBeTruthy();
 
+    // 停用影响预览：后台可查（含引用定位），用户侧不可查
+    const impactAdmin = await api().get(`/admin/evidence/${docId}/impact`).set(AH(adminToken));
+    expect(impactAdmin.body.code).toBe(0);
+    expect((await api().get(`/evidence/${docId}/impact`).set(H())).body.code).toBe(40400);
+
     const gone = await api().get(`/evidence/search?q=${encodeURIComponent(FLOW_MARK)}`).set(H());
     expect((gone.body.data as SearchResult).results).toEqual([]);
     const inactiveList = await api().get('/evidence?active=false').set(H());
     expect((inactiveList.body.data as DocItem[]).some((d) => d.id === docId)).toBe(true);
 
-    // 编辑后恢复启用 → 又能检索到
+    // 编辑后恢复启用 → 又能检索到（后台接口）
     const patched = await api()
-      .patch(`/evidence/${docId}`)
-      .set(H())
+      .patch(`/admin/evidence/${docId}`)
+      .set(AH(adminToken))
       .send({ title: '《演示全流程（T11）已修订》' });
     expect(patched.body.code).toBe(0);
     expect(patched.body.data.title).toBe('《演示全流程（T11）已修订》');
 
-    await api().post(`/evidence/${docId}/active`).set(H()).send({ active: true });
+    await api().post(`/admin/evidence/${docId}/active`).set(AH(adminToken)).send({ active: true });
     const back = await api().get(`/evidence/search?q=${encodeURIComponent(FLOW_MARK)}`).set(H());
     expect((back.body.data as SearchResult).results.some((r) => r.doc_id === docId)).toBe(true);
 
-    // 参数校验：来源类型非法 / 标题为空
+    // 参数校验：来源类型非法（后台接口）
     const bad = await api()
-      .post('/evidence')
-      .set(H())
+      .post('/admin/evidence')
+      .set(AH(adminToken))
       .send({ title: 'x', source_type: '报纸' });
     expect(bad.body.code).toBe(40000);
+
+    // 普通用户令牌调后台证据接口 → 40100（非后台账号，AdminGuard 拒绝）
+    const denied = await api()
+      .post('/admin/evidence')
+      .set(H())
+      .send({ title: 'x', source_type: '指南' });
+    expect(denied.body.code).toBe(40100);
   });
 });
 

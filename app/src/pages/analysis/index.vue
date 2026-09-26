@@ -58,8 +58,12 @@ const feedbackDone = ref('')
 const checkedQuestions = ref<number[]>([])
 let timer: ReturnType<typeof setInterval> | undefined
 
+/** 分析 ID（从首页「查看一页分析」进入时传入） */
+const analysisId = ref('')
+
 onLoad((options) => {
   taskId.value = typeof options?.task_id === 'string' ? options.task_id : ''
+  analysisId.value = typeof options?.id === 'string' ? options.id : ''
 })
 
 onMounted(() => {
@@ -67,10 +71,25 @@ onMounted(() => {
   if (taskId.value) {
     void poll()
     timer = setInterval(() => void poll(), POLL_INTERVAL)
+  } else if (analysisId.value) {
+    // 直接查看已有的一页分析（GET /analyses/{id}）
+    void loadExisting()
   } else {
     errorText.value = '缺少分析任务信息，请从核对信息页重新生成'
   }
 })
+
+/** 载入已有分析（首页入口） */
+async function loadExisting() {
+  try {
+    const { getAnalysis } = await import('../../api/analyses')
+    const detail = await getAnalysis(analysisId.value)
+    analysis.value = detail
+    task.value = { status: 'completed', task_id: '', analysis: detail }
+  } catch (e) {
+    errorText.value = e instanceof Error ? e.message : '分析加载失败'
+  }
+}
 
 onUnmounted(() => {
   if (timer) clearInterval(timer)

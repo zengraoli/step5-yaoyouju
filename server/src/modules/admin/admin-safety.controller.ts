@@ -6,6 +6,8 @@ import { AdminContext } from './admin-auth.service';
 import { CurrentAdmin } from '../../common/current-admin.decorator';
 import { DbService } from '../../db/db.service';
 import { SwitchesService, SWITCH_KEYS } from '../switches/switches.service';
+import { HIGH_RISK_SWITCHES, hasPermission } from './admin.constants';
+import { ApiException, ErrorCode } from '../../common/api-error';
 import { RED_FLAG_RULES, OUT_OF_SCOPE_RULES, RULE_SET_VERSION } from '../safety/safety.rules';
 
 class UpdateSwitchDto {
@@ -148,8 +150,8 @@ export class AdminSafetyController {
     }));
   }
 
-  @ApiOperation({ summary: '变更应急开关（立即生效，写审计）' })
-  @RequirePermission('switch.manage')
+  @ApiOperation({ summary: '变更应急开关（立即生效，写审计；高危开关需 switch.manage）' })
+  @RequirePermission('switch.manage_low')
   @Put('switches/:key')
   updateSwitch(
     @CurrentAdmin() admin: AdminContext,
@@ -158,6 +160,10 @@ export class AdminSafetyController {
   ) {
     if (!SWITCH_KEYS.includes(key as (typeof SWITCH_KEYS)[number])) {
       throw new (class extends Error {})(`开关名称必须是：${SWITCH_KEYS.join(' / ')}`);
+    }
+    // 高危开关（个性化分析）只允许技术负责人 / 超级管理变更（B10：临床审核仅非高危）
+    if (HIGH_RISK_SWITCHES.includes(key) && !hasPermission(admin.permissions, 'switch.manage')) {
+      throw new ApiException(ErrorCode.FORBIDDEN, '高危开关变更需要技术负责人或超级管理员');
     }
     return this.switches.setEnabled(key, dto.enabled, dto.reason?.trim() || '后台变更', admin.id);
   }

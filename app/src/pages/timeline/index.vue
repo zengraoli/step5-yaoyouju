@@ -104,7 +104,7 @@ const stats = computed(() => {
   return {
     records: events.length,
     reports: events.filter((e) => e.report).length,
-    analyses: events.filter((e) => e.event_type === '行动' && /【系统生成/.test(e.raw_text ?? '')).length,
+    analyses: episode.value?.analysis_count ?? 0,
     questions: followupQuestionCount.value,
   }
 })
@@ -112,7 +112,10 @@ const stats = computed(() => {
 /** 起点说明：约 YYYY-MM 中旬（自述，具体日期尚未确认） */
 const onsetLabel = computed<string>(() => {
   const onset = episode.value?.onset_date
+  const certainty = episode.value?.onset_certainty ?? '尚未确认'
   if (!onset) return '起点：尚未确认'
+  // 用户选了确切日期且已确认 → 显示确切日期；否则显示「约某月（尚未确认）」
+  if (certainty === '已确认') return `起点：${onset}（自述，已确认）`
   const month = onset.slice(0, 7)
   return `起点：约 ${month.replace('-', '年')}月（自述，具体日期尚未确认）`
 })

@@ -113,13 +113,15 @@ const stats = computed(() => {
   return {
     records: events.length,
     reports: events.filter((e) => e.report).length,
-    analyses: events.filter((e) => e.event_type === '行动' && /【系统生成/.test(e.raw_text ?? '')).length,
+    analyses: episode.value?.analysis_count ?? 0,
   }
 })
 
 const onsetLabel = computed<string>(() => {
   const onset = episode.value?.onset_date
   if (!onset) return '起点时间尚未确认'
+  const certainty = episode.value?.onset_certainty ?? '尚未确认'
+  if (certainty === '已确认') return `起点：${onset}（自述，已确认）`
   return `起点约 ${onset.slice(0, 7).replace('-', ' 年 ')} 月（自述，具体日期尚未确认）`
 })
 

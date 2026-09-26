@@ -106,12 +106,24 @@ const PERMISSION_ROWS: { key: string; label: string; parts?: string[]; partial?:
   { key: 'content.review', label: '内容：审定 / 退回' },
   { key: 'content.publish', label: '内容：发布（双人）', partial: 'content.submit' },
   { key: 'content.offline', label: '内容：撤回 / 应急下线' },
-  { key: 'evidence.manage', label: '证据库：录入 / 核实 / 停用' },
+  {
+    key: 'evidence.ingest',
+    label: '证据库：录入 / 核实 / 停用',
+    parts: ['evidence.ingest', 'evidence.verify', 'evidence.deactivate'],
+  },
   { key: 'feedback.view', label: '举报：初筛 / 临床复核', parts: ['feedback.view', 'feedback.handle'] },
   { key: 'consent.view', label: '用户资料：脱敏查看 / 明文（单条授权）', parts: ['consent.view', 'feedback.handle'] },
-  { key: 'switch.manage', label: '功能开关 / 模型发布', parts: ['switch.manage', 'model.manage'] },
+  {
+    key: 'switch.manage',
+    label: '功能开关 / 模型发布',
+    parts: ['switch.manage', 'switch.manage_low', 'model.manage'],
+  },
   { key: 'eval.manage', label: '评测集 / 评测运行' },
-  { key: 'user.manage', label: '成员与角色 / 审计导出审批', parts: ['user.manage', 'audit.export'] },
+  {
+    key: 'user.view',
+    label: '成员与角色 / 审计导出审批',
+    parts: ['user.view', 'user.manage', 'audit.export'],
+  },
 ]
 
 /** 矩阵列：展示名与服务端角色名一致（服务端 ROLE_PERMISSIONS 键） */

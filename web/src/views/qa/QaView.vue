@@ -22,6 +22,7 @@ import {
   createQaSession,
   getQaSession,
   listQaSessions,
+  type QaCitation,
   type QaMessageView,
   type QaSessionListItem,
 } from '@/api/qa'
@@ -187,6 +188,16 @@ function onAddFollowup(question: string) {
 }
 
 const answeredCount = computed(() => messages.value.filter((m) => m.role === 'assistant').length)
+
+/** 引用卡片状态标签：按引用类型映射（一页分析→系统生成；证据→审核科普；病程事件按来源） */
+function citeTag(c: QaCitation): { key: 'quote' | 'self' | 'generated' | 'reviewed'; text: string } {
+  if (c.kind === 'analysis') return { key: 'generated', text: '系统生成' }
+  if (c.kind === 'evidence_doc') return { key: 'reviewed', text: '审核科普' }
+  const label = c.source_label ?? ''
+  if (label.includes('报告原文')) return { key: 'quote', text: '报告原文' }
+  if (label.includes('医生记录')) return { key: 'self', text: '医生记录' }
+  return { key: 'self', text: '自述' }
+}
 </script>
 
 <template>
@@ -213,8 +224,8 @@ const answeredCount = computed(() => messages.value.filter((m) => m.role === 'as
                 <p class="chat__text">{{ m.content }}</p>
                 <div v-for="(c, j) in m.citations" :key="j" class="chat__cite">
                   <div class="chat__cite-tags">
-                    <StatusTag status="quote" text="报告原文" />
-                    <span class="chat__cite-source">来源：{{ c.label ?? '审核科普' }}</span>
+                    <StatusTag :status="citeTag(c).key" :text="citeTag(c).text" />
+                    <span class="chat__cite-source">来源：{{ c.source_label ?? c.label ?? '审核科普' }}</span>
                   </div>
                   <p v-if="c.statement" class="chat__cite-quote">“{{ c.statement }}”</p>
                 </div>

@@ -134,7 +134,7 @@ export class QaService {
   // ---------- 会话 ----------
 
   /** 创建会话（可关联 episode）；episode 必须是本人的 */
-  create(userId: string, input: { episode_id?: string | null }): QaSessionListItem {
+  create(userId: string, input: { episode_id?: string | null }): QaSessionDetail {
     const episodeId = input.episode_id?.trim() || null;
     if (episodeId) this.ownedEpisode(userId, episodeId);
     const id = randomUUID();
@@ -143,7 +143,8 @@ export class QaService {
       .prepare(`INSERT INTO qa_session (id, user_id, episode_id, created_at) VALUES (?, ?, ?, ?)`)
       .run(id, userId, episodeId, now);
     this.logger.log(`[qa] 创建会话 ${id}${episodeId ? `（episode ${episodeId}）` : ''}`);
-    return { id, episode_id: episodeId, created_at: now, message_count: 0, last_message: null };
+    // 返回完整会话详情（含空 messages），避免前端把 undefined 当数组赋值
+    return { id, episode_id: episodeId, created_at: now, messages: [] };
   }
 
   /** 当前用户的会话历史（含最近一条消息摘要与时间） */

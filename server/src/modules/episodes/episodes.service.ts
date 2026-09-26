@@ -95,6 +95,14 @@ export class EpisodesService {
         `SELECT * FROM care_event WHERE episode_id = ? ORDER BY occurred_at DESC, reported_at DESC`,
       )
       .all(episodeId) as Record<string, unknown>[];
+    const analysisCount = this.db.app
+      .prepare('SELECT COUNT(*) AS n FROM analysis WHERE episode_id = ?')
+      .get(episodeId) as { n: number };
+    const latestAnalysis = this.db.app
+      .prepare(
+        'SELECT id FROM analysis WHERE episode_id = ? ORDER BY version DESC, created_at DESC LIMIT 1',
+      )
+      .get(episodeId) as { id: string } | undefined;
     return {
       id: ep.id,
       title: ep.title,
@@ -102,6 +110,8 @@ export class EpisodesService {
       onset_certainty: ep.onset_certainty ?? UNCONFIRMED,
       status: ep.status,
       created_at: ep.created_at,
+      analysis_count: analysisCount.n,
+      latest_analysis_id: latestAnalysis?.id ?? null,
       events: events.map((e) => this.eventView(e)),
     };
   }

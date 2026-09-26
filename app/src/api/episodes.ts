@@ -73,6 +73,10 @@ export interface EpisodeDetail {
   onset_certainty: string
   status: string
   created_at: string
+  /** 该病程已生成的一页分析数量（服务端统计） */
+  analysis_count: number
+  /** 最新一页分析 ID（没有则为 null） */
+  latest_analysis_id: string | null
   /** 按发生时间倒序（最新在前） */
   events: CareEventView[]
 }

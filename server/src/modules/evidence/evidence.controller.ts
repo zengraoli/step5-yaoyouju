@@ -1,8 +1,7 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 import { EvidenceService } from './evidence.service';
-import { CurrentUser } from '../../common/current-user.decorator';
 
 /** 列表筛选：来源类型（指南 / 研究 / 审核科普）、启用状态 */
 class ListEvidenceQuery {
@@ -14,78 +13,6 @@ class ListEvidenceQuery {
   @IsOptional()
   @IsString()
   active?: string;
-}
-
-/** 新建 / 编辑证据文档 */
-class EvidenceDocBody {
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  title?: string;
-
-  @IsOptional()
-  @IsString()
-  source_type?: string;
-
-  @IsOptional()
-  @IsString()
-  source_url?: string | null;
-
-  @IsOptional()
-  @IsString()
-  license?: string | null;
-
-  @IsOptional()
-  @IsString()
-  verified_at?: string | null;
-
-  @IsOptional()
-  @IsString()
-  raw_text?: string | null;
-
-  @IsOptional()
-  @IsBoolean()
-  active?: boolean;
-}
-
-/** 新建证据文档（标题与来源类型必填） */
-class EvidenceCreateBody {
-  @IsString()
-  @MaxLength(200)
-  title!: string;
-
-  @IsString()
-  source_type!: string;
-
-  @IsOptional()
-  @IsString()
-  source_url?: string | null;
-
-  @IsOptional()
-  @IsString()
-  license?: string | null;
-
-  @IsOptional()
-  @IsString()
-  verified_at?: string | null;
-
-  @IsOptional()
-  @IsString()
-  raw_text?: string | null;
-
-  @IsOptional()
-  @IsBoolean()
-  active?: boolean;
-}
-
-/** 停用 / 启用 */
-class EvidenceActiveBody {
-  @IsBoolean()
-  active!: boolean;
-
-  @IsOptional()
-  @IsString()
-  reason?: string | null;
 }
 
 /** 检索（POST /evidence/search） */
@@ -104,8 +31,9 @@ class EvidenceSearchBody {
 /**
  * 医学证据库（B05：来源类型 / 许可 / 核实日期；入库管线状态；停用影响预览）。
  *
- * 读接口（列表 / 详情 / 检索 / 管线状态 / 影响预览）与写接口（新建 / 编辑 / 停用启用 / 入库）
- * 都要求登录；写接口的 actor_id 记录到审计日志（T14 后台账号体系落地后改为后台身份）。
+ * 仅保留读接口（检索 / 列表 / 详情 / 管线状态），要求登录。
+ * 写接口（新建 / 编辑 / 停用启用 / 入库）与停用影响预览属于后台管理职责，
+ * 统一在 /admin/evidence 下由后台账号操作（越权 403 并写审计）。
  */
 @ApiTags('证据库')
 @Controller('evidence')
@@ -157,47 +85,6 @@ export class EvidenceController {
     return this.evidence.pipeline(id);
   }
 
-  /** 停用影响预览：引用该证据的分析列表（分析 ID、episode、版本、引用的 statement） */
-  @ApiOperation({ summary: '停用影响预览：引用该证据的分析列表' })
-  @Get(':id/impact')
-  impact(@Param('id') id: string) {
-    return this.evidence.impactPreview(id);
-  }
-
-  /** 新建证据文档（标题、来源类型、来源地址、许可、核实日期） */
-  @ApiOperation({ summary: '新建证据文档' })
-  @Post()
-  create(@CurrentUser() user: { id: string }, @Body() body: EvidenceCreateBody) {
-    return this.evidence.create(user.id, body);
-  }
-
-  /** 编辑证据文档（改动写审计） */
-  @ApiOperation({ summary: '编辑证据文档（改动写审计）' })
-  @Patch(':id')
-  update(@CurrentUser() user: { id: string }, @Param('id') id: string, @Body() body: EvidenceDocBody) {
-    return this.evidence.update(user.id, id, body);
-  }
-
-  /** 停用 / 启用：停用时返回影响预览，供审核人确认；启用立即生效 */
-  @ApiOperation({ summary: '停用 / 启用证据文档（停用时返回影响预览）' })
-  @Post(':id/active')
-  setActive(
-    @CurrentUser() user: { id: string },
-    @Param('id') id: string,
-    @Body() body: EvidenceActiveBody,
-  ) {
-    return this.evidence.setActive(user.id, id, body.active, body.reason);
-  }
-
-  /**
-   * 切分入库：把文档原文切分为片段写入 evidence_chunk，并计算本地 16 维向量。
-   * 幂等：重复 ingest 不会重复产生片段（按位置更新）。
-   */
-  @ApiOperation({ summary: '切分入库（切分片段并计算本地向量，幂等）' })
-  @Post(':id/ingest')
-  ingest(@CurrentUser() user: { id: string }, @Param('id') id: string) {
-    return this.evidence.ingest(user.id, id);
-  }
 }
 
 /** limit 解析：非正整数回落默认值 5，上限 50 */

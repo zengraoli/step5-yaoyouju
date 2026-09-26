@@ -43,7 +43,8 @@ export class AdminUsersController {
     private readonly audit: AuditService,
   ) {}
 
-  @ApiOperation({ summary: '成员表（MFA / 状态 / 最近登录；不含明文口令）' })
+  @ApiOperation({ summary: '成员表（MFA / 状态 / 最近登录；不含明文口令；合规监督 / 超级管理可读）' })
+  @RequirePermission('user.view')
   @Get()
   list() {
     const rows = this.db.app

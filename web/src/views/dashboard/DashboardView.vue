@@ -235,7 +235,12 @@ const headerMeta = computed<string>(() => {
   const latest = [...events.value].sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1))[0]
   if (latest) parts.push(`上次记录：${relativeDayLabel(beijingDate(latest.occurred_at))}`)
   if (episode.value.onset_date) {
-    parts.push(`起病约 ${episode.value.onset_date.slice(0, 7).replace('-', ' 年 ')} 月（尚未确认）`)
+    // 已确认的确切日期 → 显示确切日期；否则显示「约某月（尚未确认）」
+    if (episode.value.onset_certainty === '已确认') {
+      parts.push(`起病 ${episode.value.onset_date}（已确认）`)
+    } else {
+      parts.push(`起病约 ${episode.value.onset_date.slice(0, 7).replace('-', ' 年 ')} 月（尚未确认）`)
+    }
   } else {
     parts.push('起病时间尚未确认')
   }

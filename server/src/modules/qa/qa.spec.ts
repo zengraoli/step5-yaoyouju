@@ -74,8 +74,8 @@ describe('T08 问与解释', () => {
     expect(res.body.code).toBe(0);
     sessionId = res.body.data.id;
     expect(res.body.data.episode_id).toBe(episodeId);
-    expect(res.body.data.message_count).toBe(0);
-    expect(res.body.data.last_message).toBeNull();
+    expect(res.body.data.messages).toEqual([]);
+    // create 返回完整会话详情（QaSessionDetail），不再返回列表摘要字段
 
     // 未登录
     const anon = await api().post('/qa/sessions').send({});

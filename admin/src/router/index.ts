@@ -23,19 +23,19 @@ const routes: RouteRecordRaw[] = [
         path: 'contents',
         name: 'contents',
         component: () => import('@/views/contents/ContentsView.vue'),
-        meta: { nav: 'contents', title: '内容库', permission: 'content.draft' },
+        meta: { nav: 'contents', title: '内容库', permission: 'content.review' },
       },
       {
         path: 'contents/:id',
         name: 'content-detail',
         component: () => import('@/views/contents/ContentDetailView.vue'),
-        meta: { nav: 'contents', title: '内容详情', permission: 'content.draft' },
+        meta: { nav: 'contents', title: '内容详情', permission: 'content.review' },
       },
       {
         path: 'evidence',
         name: 'evidence',
         component: () => import('@/views/evidence/EvidenceView.vue'),
-        meta: { nav: 'evidence', title: '医学证据库', permission: 'evidence.manage' },
+        meta: { nav: 'evidence', title: '医学证据库', permission: 'evidence.ingest' },
       },
       {
         path: 'feedback',
@@ -47,7 +47,7 @@ const routes: RouteRecordRaw[] = [
         path: 'safety',
         name: 'safety',
         component: () => import('@/views/safety/SafetyView.vue'),
-        meta: { nav: 'safety', title: '安全与开关', permission: 'switch.manage' },
+        meta: { nav: 'safety', title: '安全与开关', permission: 'switch.manage_low' },
       },
       {
         path: 'models',
@@ -65,7 +65,7 @@ const routes: RouteRecordRaw[] = [
         path: 'users',
         name: 'users',
         component: () => import('@/views/users/UsersView.vue'),
-        meta: { nav: 'users', title: '用户与权限', permission: 'user.manage' },
+        meta: { nav: 'users', title: '用户与权限', permission: 'user.view' },
       },
       {
         path: 'audit',

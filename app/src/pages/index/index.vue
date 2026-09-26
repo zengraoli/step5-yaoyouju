@@ -352,6 +352,17 @@ async function onGenerateAnalysis() {
   }
 }
 
+/** 查看已有的一页分析（GET /analyses/{id}） */
+function onViewAnalysis() {
+  const id = episode.value?.latest_analysis_id
+  if (!id) {
+    toast('还没有一页分析，请先生成')
+    return
+  }
+  const target = '/pages/analysis/index?id=' + encodeURIComponent(id)
+  uni.navigateTo({ url: target })
+}
+
 /** 空状态：引导创建病程 */
 async function onCreateEpisode() {
   if (creating.value) return
@@ -494,7 +505,17 @@ function eventText(event: CareEventView): string {
           <view class="gap-sm" />
           <text class="aux-text">{{ analysisNote }}</text>
           <view class="gap-md" />
-          <AppButton type="soft" block :loading="generating" @click="onGenerateAnalysis">生成一页分析</AppButton>
+          <AppButton
+            v-if="episode?.latest_analysis_id"
+            type="soft"
+            block
+            @click="onViewAnalysis"
+          >
+            查看一页分析
+          </AppButton>
+          <AppButton v-else type="soft" block :loading="generating" @click="onGenerateAnalysis">
+            生成一页分析
+          </AppButton>
         </AppCard>
 
         <!-- 快捷入口 -->

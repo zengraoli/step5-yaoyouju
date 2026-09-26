@@ -11,6 +11,9 @@ export interface QaCitation {
   evidence_doc_id?: string
   care_event_id?: string
   analysis_id?: string
+  /** 来源说明（服务端 source_label：证据文档标题 / 病程事件来源 / 分析版本） */
+  source_label?: string
+  /** 兼容旧字段名 */
   label?: string
   statement?: string
 }

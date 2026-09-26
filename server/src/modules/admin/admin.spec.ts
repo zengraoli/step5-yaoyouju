@@ -23,6 +23,7 @@ import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { hashAdminPassword } from '../../common/password';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminRolesController } from './admin-roles.controller';
+import { AdminUsersController } from './admin-users.controller';
 import { AdminAuditController } from './admin-audit.controller';
 import { AdminAuthorizationsController } from './admin-authorizations.controller';
 import { AdminDualControlController } from './dual-control.controller';
@@ -61,6 +62,7 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
         AdminAuditController,
         AdminAuthorizationsController,
         AdminDualControlController,
+        AdminUsersController,
         AuthController,
         ModelsController,
       ],
@@ -133,7 +135,13 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     expect(data.token.startsWith('av1.')).toBe(true);
     expect(data.admin.name).toBe('editor01');
     expect(data.admin.role.name).toBe('运营编辑');
-    expect(data.admin.permissions).toEqual(['content.draft', 'content.submit']);
+    expect(data.admin.permissions).toEqual([
+      'content.draft',
+      'content.submit',
+      'evidence.ingest',
+      'feedback.view',
+      'consent.view',
+    ]);
     expect(data.admin.mfa_enabled).toBe(true);
 
     const me = await api().get('/admin/auth/me').set(H(tokens.editor01));
@@ -190,9 +198,9 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     const dual = await api().get('/admin/dual-control/settings').set(H(tokens.tech01));
     expect(dual.body.code).toBe(40300);
 
-    // 运营编辑没有 consent.view（单条授权记录）
-    const authorizations = await api().get('/admin/authorizations').set(H(tokens.editor01));
-    expect(authorizations.body.code).toBe(40300);
+    // 运营编辑没有 user.view（后台成员列表）
+    const members = await api().get('/admin/users').set(H(tokens.editor01));
+    expect(members.body.code).toBe(40300);
 
     // 运营编辑没有 audit.export（导出申请）
     const exportReq = await api()
@@ -225,12 +233,34 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
       '超级管理员',
     ]);
     const byName = new Map(data.roles.map((r) => [r.name, r.permissions]));
-    expect(byName.get('运营编辑')).toEqual(['content.draft', 'content.submit']);
-    expect(byName.get('临床审核')).toEqual(['content.review', 'content.publish', 'content.offline']);
-    expect(byName.get('技术负责人')).toEqual(['model.manage', 'eval.manage', 'switch.manage', 'evidence.manage']);
+    expect(byName.get('运营编辑')).toEqual([
+      'content.draft',
+      'content.submit',
+      'evidence.ingest',
+      'feedback.view',
+      'consent.view',
+    ]);
+    expect(byName.get('临床审核')).toEqual([
+      'content.review',
+      'content.publish',
+      'content.offline',
+      'evidence.ingest',
+      'evidence.verify',
+      'evidence.deactivate',
+      'feedback.view',
+      'feedback.handle',
+      'consent.view',
+      'switch.manage_low',
+    ]);
+    expect(byName.get('技术负责人')).toEqual(['switch.manage', 'model.manage', 'eval.manage', 'consent.view']);
     expect(byName.get('合规支持')).toContain('audit.view');
-    expect(byName.get('合规支持')).toContain('feedback.handle');
-    expect(byName.get('超级管理员')).toEqual(['*']);
+    expect(byName.get('合规支持')).toContain('audit.export');
+    expect(byName.get('合规支持')).toContain('user.view');
+    expect(byName.get('合规支持')).not.toContain('feedback.view');
+    expect(byName.get('合规支持')).not.toContain('feedback.handle');
+    // 超级管理员不做医学审定（B10），其余管理权限齐全
+    expect(byName.get('超级管理员')).toContain('content.publish');
+    expect(byName.get('超级管理员')).not.toContain('content.review');
     expect(data.catalog.length).toBeGreaterThanOrEqual(15);
     expect(data.catalog.every((c) => c.code && c.label)).toBe(true);
   });

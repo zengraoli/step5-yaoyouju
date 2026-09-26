@@ -15,6 +15,7 @@
  * - GET  /episodes/{id}/structured 报告日期（上下文说明）
  */
 import { computed, onMounted, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import AppIcon from '../../components/AppIcon.vue'
 import AppNotice from '../../components/AppNotice.vue'
 import StatusTag from '../../components/StatusTag.vue'
@@ -58,16 +59,26 @@ const anchor = ref('')
 
 const answeredCount = computed(() => messages.value.filter((m) => m.role === 'assistant').length)
 
-onMounted(async () => {
-  statusBarHeight.value = getStatusBarHeight()
-  addedQuestions.value = readStoredQuestions()
-  if (!auth.isLoggedIn) return
+/** 初始化会话（幂等：已有会话不重复创建）；登录后 / 切回本页时也会走到这里 */
+async function initOnce() {
+  if (!auth.isLoggedIn || sessionId.value) return
   try {
     await ensureSession()
     await loadContext()
   } catch (e) {
     errorText.value = e instanceof Error ? e.message : '初始化失败，请稍后重试'
   }
+}
+
+onMounted(async () => {
+  statusBarHeight.value = getStatusBarHeight()
+  addedQuestions.value = readStoredQuestions()
+  await initOnce()
+})
+
+// Tab 切换 / 从登录页返回时兜底：确保会话已初始化（修复“切 Tab 回来仍是坏的”）
+onShow(() => {
+  void initOnce()
 })
 
 function toast(title: string) {
@@ -92,7 +103,8 @@ async function ensureSession(): Promise<void> {
   const active = episodes.find((e) => e.status === '进行中') ?? episodes[0] ?? null
   const created = await createQaSession(active?.id)
   sessionId.value = created.id
-  messages.value = created.messages
+  // 服务端返回完整会话（含 messages）；缺省时按空数组兜底，避免把 undefined 当数组
+  messages.value = created?.messages ?? []
 }
 
 /** 上下文说明：基于最新当前情况与报告日期（数据来自接口） */
@@ -185,7 +197,20 @@ function onAddFollowup(question: string) {
 
 /** 引用标签（来源说明） */
 function citeLabel(cite: QaCitation): string {
-  return cite.label ?? (cite.kind === 'evidence_doc' ? '审核科普' : cite.kind === 'care_event' ? '你的记录' : '一页分析')
+  return cite.source_label ?? (cite.kind === 'evidence_doc' ? '审核科普' : cite.kind === 'care_event' ? '你的记录' : '一页分析')
+}
+
+/**
+ * 引用卡片的状态标签：按引用类型映射（不再一律标「报告原文」）。
+ * - 一页分析 → 系统生成；证据文档 → 审核科普；病程事件按来源类型（报告原文 / 自述 / 医生记录）
+ */
+function citeTag(cite: QaCitation): { key: 'quote' | 'self' | 'generated' | 'reviewed'; text: string } {
+  if (cite.kind === 'analysis') return { key: 'generated', text: '系统生成' }
+  if (cite.kind === 'evidence_doc') return { key: 'reviewed', text: '审核科普' }
+  const label = cite.source_label ?? ''
+  if (label.includes('报告原文')) return { key: 'quote', text: '报告原文' }
+  if (label.includes('医生记录')) return { key: 'self', text: '医生记录' }
+  return { key: 'self', text: '自述' }
 }
 
 /** 引用中的报告原文（kind = care_event 时展示原文片段） */
@@ -239,7 +264,7 @@ function onOpenHistory() {
             <!-- 引用 -->
             <view v-for="(cite, j) in m.citations" :key="j" class="cite">
               <view class="cite__tags">
-                <StatusTag status="quote" text="报告原文" />
+                <StatusTag :status="citeTag(cite).key" :text="citeTag(cite).text" />
                 <text class="cite__source">来源：{{ citeLabel(cite) }}</text>
               </view>
               <text v-if="citeQuote(cite)" class="cite__quote">“{{ citeQuote(cite) }}”</text>

@@ -101,9 +101,9 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     auth = app.get(AuthService);
     db = app.get(DbService);
 
-    // T14：/admin/* 由 AdminGuard 保护，使用合规角色后台账号（feedback.view / consent.view / feedback.handle）
+    // T14：/admin/* 由 AdminGuard 保护，使用临床审核后台账号（feedback.view / consent.view / feedback.handle）
     db.app.prepare('UPDATE admin_user SET password_hash = ?').run(hashAdminPassword(adminPassword));
-    const admin = app.get(AdminAuthService).login('compliance01', adminPassword, adminTotp);
+    const admin = app.get(AdminAuthService).login('clinician01', adminPassword, adminTotp);
     adminToken = admin.token;
     adminId = admin.admin.id;
 

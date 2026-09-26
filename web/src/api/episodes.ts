@@ -47,6 +47,8 @@ export interface EpisodeDetail {
   onset_certainty: string
   status: string
   created_at: string
+  /** 该病程已生成的一页分析数量（服务端统计） */
+  analysis_count: number
   events: CareEventView[]
 }
 

@@ -91,14 +91,14 @@ export class AdminEvidenceController {
   }
 
   @ApiOperation({ summary: '新建证据文档' })
-  @RequirePermission('evidence.manage')
+  @RequirePermission('evidence.ingest')
   @Post()
   create(@CurrentUser() admin: AdminContext, @Body() body: AdminEvidenceDocBody) {
     return this.evidence.create(admin.id, body);
   }
 
   @ApiOperation({ summary: '编辑证据文档（改动写审计）' })
-  @RequirePermission('evidence.manage')
+  @RequirePermission('evidence.ingest')
   @Patch(':id')
   update(
     @CurrentUser() admin: AdminContext,
@@ -109,7 +109,7 @@ export class AdminEvidenceController {
   }
 
   @ApiOperation({ summary: '停用 / 启用证据文档（停用时返回影响预览，供确认）' })
-  @RequirePermission('evidence.manage')
+  @RequirePermission('evidence.deactivate')
   @Post(':id/active')
   setActive(
     @CurrentUser() admin: AdminContext,
@@ -120,7 +120,7 @@ export class AdminEvidenceController {
   }
 
   @ApiOperation({ summary: '切分入库（切分片段并计算本地向量，幂等）' })
-  @RequirePermission('evidence.manage')
+  @RequirePermission('evidence.ingest')
   @Post(':id/ingest')
   ingest(@CurrentUser() admin: AdminContext, @Param('id') id: string) {
     return this.evidence.ingest(admin.id, id);
