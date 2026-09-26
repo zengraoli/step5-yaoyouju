@@ -1,6 +1,7 @@
 package com.yaoyouju.android.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -72,6 +73,8 @@ fun AppNotice(
 @Composable
 fun AppCard(
     modifier: Modifier = Modifier,
+    background: Color = Surface,
+    borderColor: Color = Border,
     padded: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -79,8 +82,8 @@ fun AppCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
-            .border(1.dp, Border, RoundedCornerShape(12.dp))
+            .background(background)
+            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
             .then(if (padded) Modifier.padding(16.dp) else Modifier),
         content = content,
     )

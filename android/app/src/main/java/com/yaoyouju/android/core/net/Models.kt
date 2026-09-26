@@ -52,21 +52,19 @@ data class EmergencyNotice(
     val headline: String,
     val body: String,
     @SerialName("offline_note") val offlineNote: String,
-    val actions: List<NoticeAction> = emptyList(),
+    val actions: List<EmergencyAction> = emptyList(),
     @SerialName("bring_list") val bringList: List<String> = emptyList(),
-    @SerialName("summary_action") val summaryAction: NoticeAction? = null,
+    @SerialName("summary_action") val summaryAction: SummaryAction? = null,
     @SerialName("footer_note") val footerNote: String,
     val matched: List<MatchedRule> = emptyList(),
-    @SerialName("rule_set_version") val ruleSetVersion: String = "",
 )
 
 @Serializable
-data class NoticeAction(
+data class EmergencyAction(
     val type: String,
     val label: String,
 )
 
-/** 命中的安全规则（RF-xx） */
 @Serializable
 data class MatchedRule(
     @SerialName("rule_code") val ruleCode: String,
@@ -74,7 +72,11 @@ data class MatchedRule(
     val severity: String,
     val action: String,
     val advice: String,
-    val excerpt: String = "",
+)
+
+@Serializable
+data class SummaryAction(
+    val label: String,
 )
 
 /** 功能开关状态 */

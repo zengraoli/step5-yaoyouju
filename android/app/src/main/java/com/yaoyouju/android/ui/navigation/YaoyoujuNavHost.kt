@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.yaoyouju.android.ui.components.BottomNav
@@ -55,7 +56,19 @@ fun YaoyoujuApp(deepLinkRoute: String? = null) {
                 composable(Routes.HOME) { HomeScreen(navController) }
                 composable(Routes.LOGIN) { LoginScreen(navController) }
                 composable(Routes.CHANGE) { ChangeScreen(navController) }
-                composable(Routes.EMERGENCY) { EmergencyScreen(navController) }
+                composable(
+    route = Routes.EMERGENCY + "?signals={signals}&stop={stop}",
+    arguments = listOf(
+        navArgument("signals") { defaultValue = "" },
+        navArgument("stop") { defaultValue = false },
+    ),
+) { entry ->
+    EmergencyScreen(
+        navController = navController,
+        signals = entry.arguments?.getString("signals") ?: "",
+        stop = entry.arguments?.getBoolean("stop") ?: false,
+    )
+}
                 composable(Routes.CONFUSION) { PlaceholderScreen(title = "A04 选择主要困惑", code = "A04") }
                 composable(Routes.REPORT_INPUT) { PlaceholderScreen(title = "A05 录入报告与医嘱", code = "A05") }
                 composable(Routes.REPORT_VERIFY) { PlaceholderScreen(title = "A06 核对结构化信息", code = "A06") }

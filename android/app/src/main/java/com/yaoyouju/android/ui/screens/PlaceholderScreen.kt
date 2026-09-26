@@ -23,18 +23,6 @@ import com.yaoyouju.android.ui.theme.Text1
 import com.yaoyouju.android.ui.theme.Text2
 import com.yaoyouju.android.ui.theme.Text3
 
-/** 当前关键变化确认（A02） */
-@Composable
-fun ChangeScreen(navController: NavHostController) {
-    ScreenPlaceholder(title = "当前关键变化确认", code = "A02")
-}
-
-/** 就医提示（A03，公开访问） */
-@Composable
-fun EmergencyScreen(navController: NavHostController) {
-    ScreenPlaceholder(title = "就医提示", code = "A03")
-}
-
 /** 通用占位页：显示设计编号，便于走查 */
 @Composable
 fun PlaceholderScreen(title: String, code: String) {
