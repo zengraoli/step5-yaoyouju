@@ -3,6 +3,7 @@ import { DbModule } from '../../db/db.module';
 import { AuditService } from '../../common/audit.service';
 import { EvidenceService } from './evidence.service';
 import { EvidenceController } from './evidence.controller';
+import { AdminEvidenceController } from './admin-evidence.controller';
 
 /**
  * 医学证据库（B05 / EVIDENCE_DOC、EVIDENCE_CHUNK，docs/system-design.md 第 3 节）。
@@ -18,7 +19,7 @@ import { EvidenceController } from './evidence.controller';
  */
 @Module({
   imports: [DbModule],
-  controllers: [EvidenceController],
+  controllers: [EvidenceController, AdminEvidenceController],
   providers: [EvidenceService, AuditService],
   exports: [EvidenceService],
 })
