@@ -1,7 +1,7 @@
 # T49 复诊摘要、内容库与视频详情
 
 阶段：S5 android
-状态：待完成
+状态：已完成（v0.54，2026-09-27）
 设计稿：`docs/design/app/A12.png`、`docs/design/app/A13.png`、`docs/design/app/A15.png`
 
 ## 要做什么

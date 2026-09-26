@@ -1,7 +1,7 @@
 # T44 登录授权与首页
 
 阶段：S5 android
-状态：待完成
+状态：已完成（v0.49，2026-09-27）
 设计稿：`docs/design/app/A01.png`、`docs/design/app/A14.png`
 
 ## 要做什么

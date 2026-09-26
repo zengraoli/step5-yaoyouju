@@ -1,7 +1,7 @@
 # T50 反馈举报、我的与服务回退
 
 阶段：S5 android
-状态：待完成
+状态：已完成（v0.55，2026-09-27）
 设计稿：`docs/design/app/A16.png`、`docs/design/app/A17.png`、`docs/design/app/A18.png`
 
 ## 要做什么

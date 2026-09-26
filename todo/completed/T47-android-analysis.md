@@ -1,7 +1,7 @@
 # T47 一页分析与原文对照
 
 阶段：S5 android
-状态：待完成
+状态：已完成（v0.52，2026-09-27）
 设计稿：`docs/design/app/A07.png`、`docs/design/app/A08.png`
 
 ## 要做什么

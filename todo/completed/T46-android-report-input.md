@@ -1,7 +1,7 @@
 # T46 选择困惑、录入报告与核对
 
 阶段：S5 android
-状态：待完成
+状态：已完成（v0.51，2026-09-27）
 设计稿：`docs/design/app/A04.png`、`docs/design/app/A05.png`、`docs/design/app/A06.png`
 
 ## 要做什么

@@ -1,7 +1,7 @@
 # T48 问与解释、病程时间线与记录今天
 
 阶段：S5 android
-状态：待完成
+状态：已完成（v0.53，2026-09-27）
 设计稿：`docs/design/app/A09.png`、`docs/design/app/A10.png`、`docs/design/app/A11.png`
 
 ## 要做什么
