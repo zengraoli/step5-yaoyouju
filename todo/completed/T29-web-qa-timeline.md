@@ -1,7 +1,7 @@
 # T29 问与解释、病程与记录
 
 阶段：S2 web
-状态：待完成
+状态：已完成（v0.30，2026-09-26）
 设计稿：`docs/design/web/W04.png`、`docs/design/web/W05.png`
 
 ## 要做什么

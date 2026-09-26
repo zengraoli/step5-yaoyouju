@@ -93,3 +93,32 @@ export function addCareEvent(episodeId: string, input: CreateEventInput): Promis
     data: { ...input },
   })
 }
+
+/** 病程时间线（服务端按北京日期分组） */
+export function getEpisodeTimeline(
+  episodeId: string,
+): Promise<{ date: string; events: CareEventView[] }[]> {
+  return request<{ date: string; events: CareEventView[] }[]>({
+    url: `/episodes/${encodeURIComponent(episodeId)}/timeline`,
+  })
+}
+
+/** 记录今天（允许跳过；缺失字段记为「尚未确认」，不复用昨日答案） */
+export function logToday(
+  episodeId: string,
+  input: {
+    date?: string
+    sit_minutes?: number | null
+    planned_activity_done?: string | null
+    sleep_impact?: number | null
+    top_worry?: string | null
+    leg_change?: string | null
+    skipped?: boolean
+  },
+): Promise<unknown> {
+  return request({
+    url: `/episodes/${encodeURIComponent(episodeId)}/today-logs`,
+    method: 'POST',
+    data: { ...input },
+  })
+}
