@@ -166,6 +166,22 @@ export class AnalysesService {
     return this.loadAnalysis(analysisId)!;
   }
 
+  /** 某病程最新一页分析（version 最大）；没有则返回 null */
+  latestForEpisode(userId: string, episodeId: string) {
+    const owned = this.db.app
+      .prepare('SELECT id FROM episode WHERE id = ? AND user_id = ?')
+      .get(episodeId, userId) as { id: string } | undefined;
+    if (!owned) {
+      throw new ApiException(ErrorCode.NOT_FOUND, '病程不存在');
+    }
+    const row = this.db.app
+      .prepare(
+        `SELECT id FROM analysis WHERE episode_id = ? ORDER BY version DESC, created_at DESC LIMIT 1`,
+      )
+      .get(episodeId) as { id: string } | undefined;
+    return row ? this.loadAnalysis(row.id) : null;
+  }
+
   // ---------- 内部 ----------
 
   private loadAnalysis(analysisId: string) {

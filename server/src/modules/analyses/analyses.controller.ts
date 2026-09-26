@@ -73,4 +73,11 @@ export class AnalysesController {
   detail(@CurrentUser() user: { id: string }, @Param('id') id: string) {
     return this.analyses.get(user.id, id);
   }
+
+  /** 某病程最新一页分析（没有则返回 null；供工作台「最新一页分析」卡片使用） */
+  @ApiOperation({ summary: '某病程最新一页分析（没有则返回 null）' })
+  @Get('by-episode/:episodeId')
+  byEpisode(@CurrentUser() user: { id: string }, @Param('episodeId') episodeId: string) {
+    return this.analyses.latestForEpisode(user.id, episodeId);
+  }
 }

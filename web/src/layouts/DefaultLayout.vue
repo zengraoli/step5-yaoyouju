@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { key: 'timeline', label: '病程', path: '/timeline' },
   { key: 'followup', label: '复诊准备', path: '/followup' },
   { key: 'account', label: '我的', path: '/account' },
+  { key: 'contents', label: '审核内容库', path: '/contents' },
 ]
 
 const activeKey = computed(() => (route.meta.nav as string) ?? '')
