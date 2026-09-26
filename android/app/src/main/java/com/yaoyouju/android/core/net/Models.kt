@@ -41,7 +41,7 @@ data class ConsentItem(
     val id: String,
     val scope: String,
     val granted: Boolean,
-    @SerialName("granted_at") val grantedAt: String,
+    @SerialName("granted_at") val grantedAt: String? = null,
     @SerialName("revoked_at") val revokedAt: String? = null,
 )
 

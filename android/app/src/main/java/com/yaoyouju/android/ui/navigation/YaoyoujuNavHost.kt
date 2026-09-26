@@ -56,20 +56,20 @@ fun YaoyoujuApp(deepLinkRoute: String? = null) {
                 composable(Routes.LOGIN) { LoginScreen(navController) }
                 composable(Routes.CHANGE) { ChangeScreen(navController) }
                 composable(Routes.EMERGENCY) { EmergencyScreen(navController) }
-                composable(Routes.CONFUSION) { PlaceholderScreen(navController, "A04 选择主要困惑") }
-                composable(Routes.REPORT_INPUT) { PlaceholderScreen(navController, "A05 录入报告与医嘱") }
-                composable(Routes.REPORT_VERIFY) { PlaceholderScreen(navController, "A06 核对结构化信息") }
-                composable(Routes.ANALYSIS) { PlaceholderScreen(navController, "A07 一页理性分析") }
-                composable(Routes.REPORT_DIFF) { PlaceholderScreen(navController, "A08 原文对照") }
-                composable(Routes.QA) { PlaceholderScreen(navController, "A09 问与解释") }
-                composable(Routes.TIMELINE) { PlaceholderScreen(navController, "A10 病程时间线") }
-                composable(Routes.TODAY) { PlaceholderScreen(navController, "A11 记录今天") }
-                composable(Routes.FOLLOWUP) { PlaceholderScreen(navController, "A12 复诊摘要") }
-                composable(Routes.CONTENTS) { PlaceholderScreen(navController, "A13 审核内容库") }
-                composable(Routes.CONTENT_DETAIL) { PlaceholderScreen(navController, "A15 视频详情") }
-                composable(Routes.FEEDBACK) { PlaceholderScreen(navController, "A16 反馈与举报") }
-                composable(Routes.MINE) { PlaceholderScreen(navController, "A17 我的") }
-                composable(Routes.FALLBACK) { PlaceholderScreen(navController, "A18 服务不可用回退") }
+                composable(Routes.CONFUSION) { PlaceholderScreen(title = "A04 选择主要困惑", code = "A04") }
+                composable(Routes.REPORT_INPUT) { PlaceholderScreen(title = "A05 录入报告与医嘱", code = "A05") }
+                composable(Routes.REPORT_VERIFY) { PlaceholderScreen(title = "A06 核对结构化信息", code = "A06") }
+                composable(Routes.ANALYSIS) { PlaceholderScreen(title = "A07 一页理性分析", code = "A07") }
+                composable(Routes.REPORT_DIFF) { PlaceholderScreen(title = "A08 原文对照", code = "A08") }
+                composable(Routes.QA) { PlaceholderScreen(title = "A09 问与解释", code = "A09") }
+                composable(Routes.TIMELINE) { PlaceholderScreen(title = "A10 病程时间线", code = "A10") }
+                composable(Routes.TODAY) { PlaceholderScreen(title = "A11 记录今天", code = "A11") }
+                composable(Routes.FOLLOWUP) { PlaceholderScreen(title = "A12 复诊摘要", code = "A12") }
+                composable(Routes.CONTENTS) { PlaceholderScreen(title = "A13 审核内容库", code = "A13") }
+                composable(Routes.CONTENT_DETAIL) { PlaceholderScreen(title = "A15 视频详情", code = "A15") }
+                composable(Routes.FEEDBACK) { PlaceholderScreen(title = "A16 反馈与举报", code = "A16") }
+                composable(Routes.MINE) { PlaceholderScreen(title = "A17 我的", code = "A17") }
+                composable(Routes.FALLBACK) { PlaceholderScreen(title = "A18 服务不可用回退", code = "A18") }
             }
         }
     }
