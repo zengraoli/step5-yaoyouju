@@ -144,3 +144,82 @@ data class FollowupSummaryView(
     val content: String? = null,
     @kotlinx.serialization.SerialName("created_at") val createdAt: String? = null,
 )
+
+/** 报告录入与结构化核对（对应 server reports.controller.ts） */
+interface ReportsApi {
+    @POST("reports")
+    suspend fun create(@Body body: Map<String, @JvmSuppressWildcards Any?>): Response<ApiResponse<ReportView>>
+
+    @POST("reports/ocr")
+    suspend fun ocr(): Response<ApiResponse<OcrResult>>
+
+    @GET("reports/{id}")
+    suspend fun detail(@Path("id") id: String): Response<ApiResponse<ReportView>>
+
+    @GET("episodes/{id}/reports")
+    suspend fun listByEpisode(@Path("id") id: String): Response<ApiResponse<List<ReportView>>>
+
+    @GET("episodes/{id}/structured")
+    suspend fun structured(@Path("id") id: String): Response<ApiResponse<StructuredResponse>>
+}
+
+@kotlinx.serialization.Serializable
+data class ReportView(
+    val id: String,
+    @kotlinx.serialization.SerialName("care_event_id") val careEventId: String,
+    @kotlinx.serialization.SerialName("episode_id") val episodeId: String,
+    @kotlinx.serialization.SerialName("report_date") val reportDate: String? = null,
+    @kotlinx.serialization.SerialName("raw_text") val rawText: String,
+    @kotlinx.serialization.SerialName("extracted_terms") val extractedTerms: List<ExtractedTerm> = emptyList(),
+    @kotlinx.serialization.SerialName("source_type") val sourceType: String = "报告",
+    @kotlinx.serialization.SerialName("verify_status") val verifyStatus: String = "尚未确认",
+    @kotlinx.serialization.SerialName("occurred_at") val occurredAt: String,
+)
+
+@kotlinx.serialization.Serializable
+data class ExtractedTerm(
+    val term: String,
+    val meaning: String? = null,
+    val position: Int? = null,
+)
+
+@kotlinx.serialization.Serializable
+data class OcrResult(
+    val text: String,
+    val simulated: Boolean = true,
+    val message: String? = null,
+)
+
+@kotlinx.serialization.Serializable
+data class StructuredResponse(
+    val items: List<StructuredItem> = emptyList(),
+    val summary: StructuredSummary = StructuredSummary(),
+)
+
+@kotlinx.serialization.Serializable
+data class StructuredItem(
+    @kotlinx.serialization.SerialName("care_event_id") val careEventId: String,
+    @kotlinx.serialization.SerialName("event_type") val eventType: String,
+    @kotlinx.serialization.SerialName("source_type") val sourceType: String,
+    @kotlinx.serialization.SerialName("occurred_at") val occurredAt: String? = null,
+    @kotlinx.serialization.SerialName("reported_at") val reportedAt: String? = null,
+    @kotlinx.serialization.SerialName("verify_status") val verifyStatus: String = "尚未确认",
+    @kotlinx.serialization.SerialName("needs_confirm") val needsConfirm: Boolean = false,
+    @kotlinx.serialization.SerialName("raw_text") val rawText: String? = null,
+    val report: StructuredReport? = null,
+)
+
+@kotlinx.serialization.Serializable
+data class StructuredReport(
+    val id: String,
+    @kotlinx.serialization.SerialName("report_date") val reportDate: String? = null,
+    @kotlinx.serialization.SerialName("extracted_terms") val extractedTerms: List<ExtractedTerm> = emptyList(),
+)
+
+@kotlinx.serialization.Serializable
+data class StructuredSummary(
+    val total: Int = 0,
+    val confirmed: Int = 0,
+    val unconfirmed: Int = 0,
+    val conflict: Int = 0,
+)

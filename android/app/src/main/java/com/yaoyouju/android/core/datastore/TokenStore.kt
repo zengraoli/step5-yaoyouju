@@ -34,4 +34,15 @@ class TokenStore(private val context: Context) {
     suspend fun clear() {
         context.dataStore.edit { it.clear() }
     }
+
+    /** 通用偏好（A04 困惑选择等本地会话偏好，不涉及健康数据上传） */
+    suspend fun savePreference(key: String, value: String) {
+        context.dataStore.edit { prefs ->
+            if (value.isBlank()) prefs.remove(stringPreferencesKey(key)) else prefs[stringPreferencesKey(key)] = value
+        }
+    }
+
+    /** 读取通用偏好 */
+    fun preference(key: String): Flow<String> =
+        context.dataStore.data.map { it[stringPreferencesKey(key)] ?: "" }
 }

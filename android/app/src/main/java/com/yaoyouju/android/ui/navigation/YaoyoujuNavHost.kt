@@ -19,7 +19,10 @@ import com.yaoyouju.android.ui.screens.LoginScreen
 import com.yaoyouju.android.ui.screens.HomeScreen
 import com.yaoyouju.android.ui.screens.ChangeScreen
 import com.yaoyouju.android.ui.screens.EmergencyScreen
+import com.yaoyouju.android.ui.screens.ConfusionScreen
 import com.yaoyouju.android.ui.screens.PlaceholderScreen
+import com.yaoyouju.android.ui.screens.ReportInputScreen
+import com.yaoyouju.android.ui.screens.ReportVerifyScreen
 
 /** 底部导航五个入口（其余页面不入底部导航） */
 private val BOTTOM_ROUTES = setOf(
@@ -69,9 +72,9 @@ fun YaoyoujuApp(deepLinkRoute: String? = null) {
         stop = entry.arguments?.getBoolean("stop") ?: false,
     )
 }
-                composable(Routes.CONFUSION) { PlaceholderScreen(title = "A04 选择主要困惑", code = "A04") }
-                composable(Routes.REPORT_INPUT) { PlaceholderScreen(title = "A05 录入报告与医嘱", code = "A05") }
-                composable(Routes.REPORT_VERIFY) { PlaceholderScreen(title = "A06 核对结构化信息", code = "A06") }
+                composable(Routes.CONFUSION) { ConfusionScreen(navController) }
+                composable(Routes.REPORT_INPUT) { ReportInputScreen(navController) }
+                composable(Routes.REPORT_VERIFY) { ReportVerifyScreen(navController) }
                 composable(Routes.ANALYSIS) { PlaceholderScreen(title = "A07 一页理性分析", code = "A07") }
                 composable(Routes.REPORT_DIFF) { PlaceholderScreen(title = "A08 原文对照", code = "A08") }
                 composable(Routes.QA) { PlaceholderScreen(title = "A09 问与解释", code = "A09") }
