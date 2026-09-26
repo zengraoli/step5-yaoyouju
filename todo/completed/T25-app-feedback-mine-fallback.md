@@ -1,7 +1,7 @@
 # T25 反馈举报、我的与服务回退
 
 阶段：S1 app
-状态：待完成
+状态：已完成（v0.26，2026-09-26）
 设计稿：`docs/design/app/A16.png`、`docs/design/app/A17.png`、`docs/design/app/A18.png`
 
 ## 要做什么

@@ -81,6 +81,14 @@
       }
     },
     {
+      "path": "pages/analysis/fallback",
+      "style": {
+        "navigationBarTitleText": "一页分析",
+        "navigationStyle": "custom",
+        "enablePullDownRefresh": false
+      }
+    },
+    {
       "path": "pages/feedback/index",
       "style": {
         "navigationBarTitleText": "反馈与错误举报",

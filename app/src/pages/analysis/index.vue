@@ -101,6 +101,13 @@ function stopPolling() {
   timer = undefined
 }
 
+/** 跳转 A18 服务不可用回退页（任务 id 一并传入） */
+function onOpenFallback() {
+  const id = task.value?.task_id ?? taskId.value
+  const target = '/pages/analysis/fallback?task_id=' + encodeURIComponent(id)
+  uni.navigateTo({ url: target })
+}
+
 /** 重试：重新提交一次分析（当前 episode） */
 async function onRetry() {
   if (!analysis.value && task.value?.status === 'failed') {
@@ -287,6 +294,14 @@ function onBack() {
       </AppCard>
       <AppButton type="secondary" block @click="onRetry">重新生成</AppButton>
       <AppButton type="primary" block @click="onGenerateFollowup">仍去准备复诊摘要</AppButton>
+      <view
+        class="fallback-link"
+        hover-class="fallback-link--hover"
+        :hover-stay-time="80"
+        @click="onOpenFallback"
+      >
+        <text class="fallback-link__text">查看服务说明与仍然可用的功能</text>
+      </view>
     </view>
 
     <!-- 网络 / 查询错误 -->
@@ -913,4 +928,19 @@ function onBack() {
   font-size: $font-size-aux;
   color: $color-text-2;
 }
+
+/* 失败态：跳转服务说明页 */
+.fallback-link {
+  min-height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fallback-link__text {
+  font-size: $font-size-body;
+  color: $color-primary;
+  text-decoration: underline;
+}
 </style>
+
