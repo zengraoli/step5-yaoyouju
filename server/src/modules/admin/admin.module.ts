@@ -6,6 +6,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminDashboardController } from './admin-dashboard.controller';
 import { AdminSafetyController } from './admin-safety.controller';
 import { AdminUsersController } from './admin-users.controller';
+import { AdminCasesController } from './admin-cases.controller';
 import { DashboardService } from './dashboard.service';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminRolesController } from './admin-roles.controller';
@@ -27,6 +28,7 @@ import { AdminDualControlController } from './dual-control.controller';
   imports: [
     SwitchesModule,DbModule],
   controllers: [
+    AdminCasesController,
     AdminUsersController,
     AdminSafetyController,
     AdminDashboardController,
