@@ -102,6 +102,46 @@ function notify(title: string) {
   globalThis.alert?.(title)
 }
 
+/** 新建候选发布弹层 */
+const showCreate = ref(false)
+const createForm = ref({
+  model_name: '本地模拟模型',
+  prompt_version: 'prompt-new',
+  retrieval_strategy: '关键词 + 本地向量混合检索（证据库内）',
+  content_lib_version: 'content-lib-current',
+})
+const creating = ref(false)
+
+/** 创建候选发布（状态=候选；需跑齐四类必需评测集才能过门禁） */
+async function submitCreate() {
+  const promptVersion = createForm.value.prompt_version.trim()
+  if (!promptVersion) {
+    notify('请填写提示词版本')
+    return
+  }
+  creating.value = true
+  try {
+    await request({
+      url: '/admin/models',
+      method: 'POST',
+      data: { ...createForm.value, prompt_version: promptVersion },
+    })
+    notify('已创建候选发布；请先跑齐必需评测集再推进')
+    showCreate.value = false
+    createForm.value = {
+      model_name: '本地模拟模型',
+      prompt_version: 'prompt-new',
+      retrieval_strategy: '关键词 + 本地向量混合检索（证据库内）',
+      content_lib_version: 'content-lib-current',
+    }
+    await load()
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '创建失败')
+  } finally {
+    creating.value = false
+  }
+}
+
 /** 选中候选（查看门禁详情） */
 const selectedRelease = computed<ReleaseItem | undefined>(() =>
   releases.value.find((r) => r.id === selectedReleaseId.value) ??
@@ -231,7 +271,7 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
             任一要素变更都必须生成新的候选发布并跑过全部评测门禁；激活需关联通过的评测运行。
           </p>
         </div>
-        <AppButton type="primary" @click="notify('新建候选发布表单将在后续版本提供')">＋ 新建候选发布</AppButton>
+        <AppButton type="primary" @click="showCreate = true">＋ 新建候选发布</AppButton>
       </div>
 
       <div v-if="loading" class="panel__loading">正在加载…</div>
@@ -384,10 +424,82 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
       button-text="占位"
       @done="load()"
     />
+
+    <!-- 新建候选发布弹层 -->
+    <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
+      <AppCard class="modal">
+        <h3 class="modal__title">新建候选发布</h3>
+        <p class="modal__desc">任一要素变更都要生成新的候选发布，并跑过全部必需评测集才能推进到生效。</p>
+        <label class="modal__field">
+          <span>模型名称</span>
+          <input v-model="createForm.model_name" class="modal__input" type="text" maxlength="50" />
+        </label>
+        <label class="modal__field">
+          <span>提示词版本</span>
+          <input v-model="createForm.prompt_version" class="modal__input" type="text" maxlength="50" />
+        </label>
+        <label class="modal__field">
+          <span>检索策略</span>
+          <input v-model="createForm.retrieval_strategy" class="modal__input" type="text" maxlength="100" />
+        </label>
+        <label class="modal__field">
+          <span>内容库版本</span>
+          <input v-model="createForm.content_lib_version" class="modal__input" type="text" maxlength="50" />
+        </label>
+        <div class="modal__actions">
+          <AppButton type="primary" :disabled="creating" @click="submitCreate">
+            {{ creating ? '提交中…' : '创建候选' }}
+          </AppButton>
+          <AppButton type="soft" @click="showCreate = false">取消</AppButton>
+        </div>
+      </AppCard>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgb(27 34 48 / 45%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  z-index: 40;
+}
+.modal {
+  width: 100%;
+  max-width: 480px;
+}
+.modal__title {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-card-title);
+}
+.modal__desc {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-size-aux);
+  color: var(--color-text-2);
+}
+.modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-aux);
+  color: var(--color-text-2);
+}
+.modal__input {
+  height: 36px;
+  padding: 0 var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  font-size: var(--font-size-body);
+}
+.modal__actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
 .models-page {
   display: flex;
   flex-direction: column;

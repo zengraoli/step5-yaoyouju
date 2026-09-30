@@ -239,7 +239,7 @@ function riskTag(r: RiskItem): { key: 'confirmed' | 'unconfirmed' | 'conflict' |
         <AppCard class="panel">
           <div class="panel__head">
             <h2 class="panel__title"><span aria-hidden="true">⚠</span> 可识别风险检查（发布前必过）</h2>
-            <AppButton type="soft" size="sm" @click="notify('逐项复核界面将在后续版本提供')">逐项复核</AppButton>
+            <AppButton type="soft" size="sm" @click="notify('逐项复核对发布前逐项打勾；当前按下方清单状态展示')">逐项复核</AppButton>
           </div>
           <ul class="risk-list">
             <li v-for="r in detail?.risk_checklist ?? []" :key="r.key" class="risk-item">

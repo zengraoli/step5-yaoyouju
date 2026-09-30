@@ -184,14 +184,14 @@ export class AdminAuditService {
     return this.loadRequest(id);
   }
 
-  /** 审批导出申请（合规或超级管理；不能审批本人提交的申请） */
+  /** 审批导出申请（仅超级管理员；不能审批本人提交的申请） */
   approveExport(approverId: string, requestId: string): AuditExportRequest {
     const request = this.loadRequest(requestId);
     if (request.status !== '待审批') {
       throw new ApiException(ErrorCode.CONFLICT, '该导出申请已审批，不能重复审批');
     }
     if (request.applicant_id === approverId) {
-      throw new ApiException(ErrorCode.CONFLICT, '导出申请不能由本人审批，请换一位合规或超级管理账号');
+      throw new ApiException(ErrorCode.CONFLICT, '导出申请不能由本人审批，请换一位超级管理员审批');
     }
     const now = new Date().toISOString();
     this.db.app
@@ -202,6 +202,21 @@ export class AdminAuditService {
       reason: request.reason,
     });
     return this.loadRequest(requestId);
+  }
+
+  /** 导出申请列表（按时间倒序） */
+  listExportRequests(): AuditExportRequest[] {
+    const rows = this.db.app
+      .prepare(
+        `SELECT q.id, q.applicant_id, a1.name AS applicant_name, q.reason, q.status,
+                q.approver_id, a2.name AS approver_name, q.approved_at, q.created_at
+         FROM audit_export_request q
+         LEFT JOIN admin_user a1 ON a1.id = q.applicant_id
+         LEFT JOIN admin_user a2 ON a2.id = q.approver_id
+         ORDER BY q.created_at DESC LIMIT 50`,
+      )
+      .all() as unknown as AuditExportRequest[];
+    return rows;
   }
 
   private loadRequest(id: string): AuditExportRequest {

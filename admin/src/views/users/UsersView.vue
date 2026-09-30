@@ -18,6 +18,30 @@ import AppCard from '@/components/AppCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
 import { request } from '@/api/request'
+import DualConfirm from '@/components/DualConfirm.vue'
+
+/** 邀请成员弹层 */
+const showInvite = ref(false)
+const inviteForm = ref({ name: '', role: '运营编辑', password: '' })
+const inviting = ref(false)
+
+/** 停用超级管理员的双人确认 */
+const dualUser = ref<AdminUser | null>(null)
+const dualRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
+
+/** 双人确认后停用成员 */
+async function submitUserDual(confirmationId: string): Promise<unknown> {
+  const u = dualUser.value
+  if (!u) throw new Error('未选择成员')
+  const result = await request({
+    url: `/admin/users/${u.id}/status`,
+    method: 'POST',
+    data: { active: false, reason: '双人确认后停用', confirmation_id: confirmationId },
+  })
+  notify('已按双人确认结果停用（写入审计）')
+  await load()
+  return result
+}
 
 interface AdminUser {
   id: string
@@ -156,6 +180,12 @@ async function onToggleStatus(user: AdminUser) {
     return
   }
   const next = user.status !== '正常'
+  // 停用超级管理员必须双人确认：不能一个人停用另一名超级管理员（也不能停用自己）
+  if (!next && (user.role === '超级管理员' || user.name === auth.admin?.name)) {
+    dualUser.value = user
+    dualRef.value?.start(false, `停用 ${user.name}`)
+    return
+  }
   if (!confirmAction(`确认${next ? '启用' : '停用'} ${user.name}？`)) return
   operating.value = user.id
   try {
@@ -192,7 +222,37 @@ async function onResetMfa(user: AdminUser) {
 }
 
 function onInvite() {
-  notify('邀请成员表单将在后续版本提供（无自助注册）')
+  showInvite.value = true
+}
+
+/** 邀请成员（无自助注册；首次登录需绑定 MFA） */
+async function submitInvite() {
+  const name = inviteForm.value.name.trim()
+  const password = inviteForm.value.password
+  if (!name || !password) {
+    notify('请填写账号与初始口令')
+    return
+  }
+  if (password.length < 8) {
+    notify('初始口令至少 8 位')
+    return
+  }
+  inviting.value = true
+  try {
+    await request({
+      url: '/admin/users',
+      method: 'POST',
+      data: { name, role: inviteForm.value.role, password },
+    })
+    notify('已邀请成员；首次登录需绑定 MFA 后才能操作')
+    showInvite.value = false
+    inviteForm.value = { name: '', role: '运营编辑', password: '' }
+    await load()
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '邀请失败')
+  } finally {
+    inviting.value = false
+  }
 }
 </script>
 
@@ -236,7 +296,7 @@ function onInvite() {
               <StatusTag v-else status="offline" text="已停用" />
             </td>
             <td class="table__ops">
-              <button type="button" class="op-link" @click="notify('改变角色将在后续版本提供')">改变角色</button>
+              <button type="button" class="op-link" @click="notify(`角色变更需由超级管理员操作（当前角色：${u.role}）`)">改变角色</button>
               <button type="button" class="op-link" @click="onResetMfa(u)">重置 MFA</button>
               <button type="button" class="op-link" :disabled="operating === u.id" @click="onToggleStatus(u)">
                 {{ u.status === '正常' ? '停用' : '启用' }}
@@ -325,10 +385,95 @@ function onInvite() {
         </AppCard>
       </aside>
     </div>
+
+    <!-- 邀请成员弹层 -->
+    <div v-if="showInvite" class="modal-mask" @click.self="showInvite = false">
+      <AppCard class="modal">
+        <h3 class="modal__title">邀请成员</h3>
+        <p class="modal__desc">无自助注册。新成员首次登录需绑定 MFA（演示码 123456）后才能操作。</p>
+        <label class="modal__field">
+          <span>账号（工作邮箱）</span>
+          <input v-model="inviteForm.name" class="modal__input" type="text" maxlength="100" placeholder="例如：editor02" />
+        </label>
+        <label class="modal__field">
+          <span>角色</span>
+          <select v-model="inviteForm.role" class="modal__input">
+            <option value="运营编辑">运营编辑</option>
+            <option value="临床审核">临床审核</option>
+            <option value="技术负责人">技术负责人</option>
+            <option value="合规支持">合规支持</option>
+            <option value="超级管理员">超级管理员</option>
+          </select>
+        </label>
+        <label class="modal__field">
+          <span>初始口令（至少 8 位，仅传输与哈希）</span>
+          <input v-model="inviteForm.password" class="modal__input" type="password" maxlength="100" />
+        </label>
+        <div class="modal__actions">
+          <AppButton type="primary" :disabled="inviting" @click="submitInvite">
+            {{ inviting ? '提交中…' : '邀请' }}
+          </AppButton>
+          <AppButton type="soft" @click="showInvite = false">取消</AppButton>
+        </div>
+      </AppCard>
+    </div>
+
+    <!-- 停用成员双人确认弹层 -->
+    <DualConfirm
+      :ref="(el) => (dualRef = el as never)"
+      action="user.status"
+      :target-id="dualUser?.id ?? ''"
+      :target-label="`停用 ${dualUser?.name ?? ''}（需另一名超级管理员确认）`"
+      :submit="submitUserDual"
+      button-text="占位"
+      @done="load()"
+    />
   </div>
 </template>
 
 <style scoped>
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgb(27 34 48 / 45%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  z-index: 40;
+}
+.modal {
+  width: 100%;
+  max-width: 480px;
+}
+.modal__title {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-card-title);
+}
+.modal__desc {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-size-aux);
+  color: var(--color-text-2);
+}
+.modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-aux);
+  color: var(--color-text-2);
+}
+.modal__input {
+  height: 36px;
+  padding: 0 var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  font-size: var(--font-size-body);
+}
+.modal__actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
 .users-page {
   display: flex;
   flex-direction: column;

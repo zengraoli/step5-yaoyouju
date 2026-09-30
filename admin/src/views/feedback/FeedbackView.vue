@@ -299,7 +299,7 @@ const affectedText = computed<string>(() => {
           >
             帮助类型反馈
           </button>
-          <button type="button" class="tabs__item" @click="notify('复述任务抽查将在后续版本提供')">复述任务抽查</button>
+          <button type="button" class="tabs__item" @click="notify('复述任务为二期功能，当前未开放')">复述任务抽查</button>
         </div>
 
         <div v-if="loading" class="queue-card__loading">正在加载…</div>

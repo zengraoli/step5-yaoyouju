@@ -102,4 +102,11 @@ export class AdminAuditController {
   approveExport(@CurrentAdmin() admin: AdminContext, @Body() dto: ExportApproveDto): AuditExportRequest {
     return this.adminAudit.approveExport(admin.id, dto.request_id);
   }
+
+  /** 导出申请列表（申请与审批记录，含申请人 / 审批人） */
+  @ApiOperation({ summary: '审计导出申请与审批列表' })
+  @Get('export-requests')
+  listExportRequests(): { items: AuditExportRequest[] } {
+    return { items: this.adminAudit.listExportRequests() };
+  }
 }

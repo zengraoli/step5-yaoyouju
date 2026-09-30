@@ -64,7 +64,7 @@ const TIME_OPTIONS = [
 ]
 
 onMounted(async () => {
-  await Promise.all([load(), verifyChain(), loadActors()])
+  await Promise.all([load(), verifyChain(), loadActors(), loadApprovals()])
 })
 
 async function loadActors() {
@@ -114,8 +114,61 @@ function notify(title: string) {
   globalThis.alert?.(title)
 }
 
-function onRequestExport() {
-  notify('导出申请已提交（需超管审批；审批后再次写入审计）')
+/** 提交导出申请（合规支持可申请；只有超级管理员能审批） */
+async function onRequestExport() {
+  const reason = globalThis.prompt?.('导出原因（写入审计）') ?? ''
+  if (!reason.trim()) {
+    notify('请填写导出原因')
+    return
+  }
+  exporting.value = true
+  try {
+    await request({
+      url: '/admin/audit/export-request',
+      method: 'POST',
+      data: { reason: reason.trim() },
+    })
+    notify('导出申请已提交，需超级管理员审批')
+    await loadApprovals()
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '提交失败')
+  } finally {
+    exporting.value = false
+  }
+}
+
+/** 审批导出申请（仅超级管理员） */
+async function onApproveExport(id: string) {
+  approving.value = id
+  try {
+    await request({
+      url: '/admin/audit/export-approve',
+      method: 'POST',
+      data: { request_id: id },
+    })
+    notify('已审批，导出申请生效')
+    await loadApprovals()
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '审批失败')
+  } finally {
+    approving.value = ''
+  }
+}
+
+/** 导出申请列表 */
+const approvals = ref<{ id: string; status: string; applicant_name: string | null; approver_name: string | null; reason: string; created_at: string }[]>([])
+const exporting = ref(false)
+const approving = ref('')
+
+async function loadApprovals() {
+  try {
+    const res = await request<{ items: { id: string; status: string; applicant_name: string | null; approver_name: string | null; reason: string; created_at: string }[] }>({
+      url: '/admin/audit/export-requests',
+    })
+    approvals.value = res.items
+  } catch {
+    approvals.value = []
+  }
 }
 
 /** 动作徽标色 */
@@ -194,8 +247,58 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
         <StatusTag v-if="verify?.ok" status="confirmed" :text="`哈希链完整 · 最近校验 ${lastVerifiedAt}`" />
         <StatusTag v-else-if="verify && !verify.ok" status="conflict" text="哈希链校验失败" />
         <AppButton type="soft" size="sm" @click="verifyChain">重新校验</AppButton>
-        <AppButton type="primary" size="sm" @click="onRequestExport">申请导出（需超管审批）</AppButton>
+        <AppButton type="primary" size="sm" :disabled="exporting" @click="onRequestExport">申请导出（需超管审批）</AppButton>
       </div>
+    </AppCard>
+
+    <!-- 导出申请与审批 -->
+    <AppCard class="panel">
+      <div class="panel__head">
+        <h2 class="panel__title">审计导出申请与审批</h2>
+        <span class="panel__legend">合规支持可申请 · 仅超级管理员可审批 · 本人不能审批本人</span>
+      </div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>申请人</th>
+            <th>原因</th>
+            <th>提交时间</th>
+            <th>状态</th>
+            <th>审批人</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="a in approvals" :key="a.id">
+            <td>{{ a.applicant_name ?? '—' }}</td>
+            <td class="table__mail">{{ a.reason }}</td>
+            <td>{{ a.created_at.slice(0, 16).replace('T', ' ') }}</td>
+            <td>
+              <StatusTag v-if="a.status === '已批准'" status="confirmed" text="已批准" />
+              <StatusTag v-else status="unconfirmed" text="待审批" />
+            </td>
+            <td>{{ a.approver_name ?? '—' }}</td>
+            <td class="table__ops">
+              <button
+                v-if="a.status === '待审批'"
+                type="button"
+                class="op-link"
+                :disabled="approving === a.id"
+                @click="onApproveExport(a.id)"
+              >
+                审批
+              </button>
+              <span v-else class="op-link op-link--muted">—</span>
+            </td>
+          </tr>
+          <tr v-if="approvals.length === 0">
+            <td colspan="6" class="table__empty">还没有导出申请</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="panel__note">
+        审批通过后导出内容写入审计（approver / 请求 ID / 原因）；审计日志只追加，不可修改或删除。
+      </p>
     </AppCard>
 
     <!-- 日志表 -->
