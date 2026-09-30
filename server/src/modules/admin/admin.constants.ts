@@ -80,6 +80,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'audit.view',
     'audit.export_request',
     'audit.export_approve',
+    'case.manage',
     'dual_control.manage',
   ],
 };
