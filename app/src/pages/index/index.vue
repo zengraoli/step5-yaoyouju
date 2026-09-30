@@ -39,7 +39,7 @@ import {
   type EpisodeDetail,
   type TodayStatus,
 } from '../../api/episodes'
-import { createAnalysis } from '../../api/analyses'
+import { createAnalysis, getLatestAnalysis } from '../../api/analyses'
 import { getLatestFollowup, QUESTIONS_SECTION_KEY } from '../../api/followup'
 import { listContents, type ContentListItem } from '../../api/contents'
 import {
@@ -109,7 +109,7 @@ async function load() {
       return
     }
     episode.value = await getEpisode(active.id)
-    await Promise.all([loadToday(active.id), loadFollowup(active.id), loadRecommends()])
+    await Promise.all([loadToday(active.id), loadFollowup(active.id), loadRecommends(), loadAnalysisSummary(active.id)])
   } catch (e) {
     errorText.value = e instanceof Error ? e.message : '数据加载失败，请稍后重试'
   } finally {
@@ -200,41 +200,81 @@ const headerSubtitle = computed(() => {
   return parts.join(' · ')
 })
 
-/** 最新一页分析摘要：由该病程的事件组合（server 暂无「取最新分析」接口） */
-const analysisRows = computed(() => {
-  const list = events.value
-  const latestReport = list.find((e) => e.event_type === '报告')
-  const latestAdvice = list.find((e) => e.event_type === '医嘱')
-  const unconfirmed = unconfirmedEvents.value
+/**
+ * 最新一页分析摘要（服务端 GET /analyses/by-episode/{id}）。
+ * 产品红线：系统生成内容带版本号、不标为事实来源；缺失显示「尚未确认」，
+ * 不把已知的报告原文堆到「未知」栏。
+ */
+const analysisSummary = ref<AnalysisSummaryItem | null>(null)
 
-  const known = latestReport
-    ? `${excerpt(latestReport.raw_text, 42)}（${latestReport.source_type}）`
-    : '报告尚未录入，可在「录入报告」中粘贴原文'
+interface AnalysisSummaryItem {
+  version: number
+  safety_flag: string
+  rows: { key: string; label: string; text: string }[]
+  source_label: string
+}
 
-  const unknown =
-    unconfirmed.length > 0
-      ? unconfirmed
-          .slice(0, 2)
-          .map((e) => `${excerpt(e.raw_text, 24)}（${e.source_type}）`)
-          .join('；')
-      : '暂无尚未确认项'
+async function loadAnalysisSummary(episodeId: string) {
+  try {
+    const latest = await getLatestAnalysis(episodeId)
+    if (!latest) {
+      analysisSummary.value = null
+      return
+    }
+    const sections = latest.sections ?? {}
+    const rows = [
+      {
+        key: 'known',
+        label: '已知',
+        text:
+          (sections.known ?? []).length > 0
+            ? (sections.known ?? [])
+                .slice(0, 2)
+                .map((k: any) => `${excerpt(k.text, 40)}（${k.source}）`)
+                .join('；')
+            : '报告尚未录入，可在「录入报告」中粘贴原文',
+      },
+      {
+        key: 'unknown',
+        label: '未知',
+        text:
+          (sections.unknown ?? []).length > 0
+            ? (sections.unknown ?? []).slice(0, 2).join('；')
+            : '暂无尚未确认项',
+      },
+      {
+        key: 'next',
+        label: '下一步',
+        text:
+          (sections.next ?? []).length > 0
+            ? (sections.next ?? [])
+                .slice(0, 2)
+                .map((n: any) => excerpt(n.text, 30))
+                .join('；')
+            : '复诊问题可在问与解释中加入',
+      },
+    ]
+    analysisSummary.value = {
+      version: latest.version,
+      safety_flag: latest.safety_flag,
+      rows,
+      source_label: `系统生成 v${latest.version}`,
+    }
+  } catch {
+    analysisSummary.value = null
+  }
+}
 
-  const next = latestAdvice
-    ? `${excerpt(latestAdvice.raw_text, 30)}（${latestAdvice.source_type}）`
-    : '复诊问题可在问与解释中加入'
-
-  return [
-    { key: 'known', label: '已知', text: known },
-    { key: 'unknown', label: '未知', text: unknown },
-    { key: 'next', label: '下一步', text: next },
-  ]
-})
+const analysisRows = computed(() => analysisSummary.value?.rows ?? [])
 
 const analysisNote = computed(() => {
+  if (analysisSummary.value) {
+    return `一页分析 v${analysisSummary.value.version}（系统生成，仅供参考，不作诊断）；完整五段结构与来源见「一页分析」。`
+  }
   const count = events.value.length
   const latest = events.value[0]
   const when = latest ? relativeDayLabel(beijingDate(latest.occurred_at)) : '尚无'
-  return `由你的病程记录整理（${count} 条，最近记录：${when}）；一页分析含完整五段结构与来源。`
+  return `由你的病程记录整理（${count} 条，最近记录：${when}）；生成一页分析后这里会显示版本号。`
 })
 
 /** 快捷入口（复诊摘要的说明来自最近一份摘要的问题数） */
@@ -496,7 +536,8 @@ function eventText(event: CareEventView): string {
         <!-- 最新一页分析 -->
         <AppCard title="最新一页分析">
           <template #extra>
-            <StatusTag status="generated" text="系统生成" />
+            <StatusTag v-if="analysisSummary" status="generated" :text="`系统生成 v${analysisSummary.version}`" />
+            <StatusTag v-else status="generated" text="系统生成" />
           </template>
           <view v-for="row in analysisRows" :key="row.key" class="analysis-row">
             <text class="analysis-row__label" :class="`analysis-row__label--${row.key}`">{{ row.label }}</text>

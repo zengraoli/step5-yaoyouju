@@ -349,6 +349,17 @@ function onOpenHistory() {
   background-color: $color-bg;
   display: flex;
   flex-direction: column;
+  /* 底部输入区改成固定悬浮（位于底部导航之上），消息区让出对应高度 */
+  padding-bottom: calc($tabbar-height + env(safe-area-inset-bottom) + 104px);
+  box-sizing: border-box;
+}
+
+.qa-input {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc($tabbar-height + env(safe-area-inset-bottom));
+  z-index: 20;
 }
 
 .qa-scroll {
@@ -522,7 +533,8 @@ function onOpenHistory() {
   display: flex;
   align-items: center;
   gap: $spacing-sm;
-  padding: $spacing-md $spacing-page calc(env(safe-area-inset-bottom) + #{$spacing-md});
+  /* 底部导航固定悬浮，输入区要抬到底部导航之上（反馈第 7 条） */
+  padding: $spacing-md $spacing-page;
   background-color: $color-surface;
   border-top: 2rpx solid $color-border;
 }

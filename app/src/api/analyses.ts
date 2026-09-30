@@ -151,6 +151,12 @@ export function getAnalysisTask(taskId: string): Promise<AnalysisTaskView> {
 }
 
 /** 一页分析详情（五段结构 + 每条解释的来源） */
+/** 某病程最新一页分析（没有则返回 null） */
+export function getLatestAnalysis(episodeId: string): Promise<AnalysisView | null> {
+  return request<AnalysisView | null>({
+    url: `/analyses/by-episode/${encodeURIComponent(episodeId)}`,
+  })
+}
 export function getAnalysis(analysisId: string): Promise<AnalysisView> {
   return request<AnalysisView>({
     url: `/analyses/${encodeURIComponent(analysisId)}`,
