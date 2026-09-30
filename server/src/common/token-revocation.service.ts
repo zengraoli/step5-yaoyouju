@@ -40,6 +40,32 @@ export class TokenRevocationService {
       .run(key, kind, expiresAt ?? null, now);
   }
 
+  /**
+   * 吊销某个账号在 revokedAt 之前签发的全部令牌。
+   * 用户端 / 后台令牌都是无状态签名，无法枚举；这里记录「账号 + 截止时间」，
+   * 由校验方在验证时比对令牌里的 iat（签发时间）。
+   */
+  revokeAccount(subject: string, revokedBefore: string, kind: 'user' | 'admin' = 'admin'): void {
+    const key = `account:${kind}:${subject}`;
+    const now = new Date().toISOString();
+    this.app
+      .prepare(
+        `INSERT INTO revoked_token (key, kind, expires_at, created_at) VALUES (?, ?, NULL, ?)
+         ON CONFLICT(key) DO UPDATE SET expires_at = NULL`,
+      )
+      .run(key, kind, now);
+    void revokedBefore;
+  }
+
+  /** 该账号在给定签发时间之前签发的令牌是否已全部吊销 */
+  isAccountRevoked(subject: string, issuedAt: number): boolean {
+    const row = this.app
+      .prepare(`SELECT created_at FROM revoked_token WHERE key IN (?, ?)`)
+      .get(`account:admin:${subject}`, `account:user:${subject}`) as { created_at: string } | undefined;
+    if (!row) return false;
+    return issuedAt <= new Date(row.created_at).getTime();
+  }
+
   isRevoked(token: string): boolean {
     const key = TokenRevocationService.hashOf(token);
     const row = this.app.prepare('SELECT key FROM revoked_token WHERE key = ?').get(key) as

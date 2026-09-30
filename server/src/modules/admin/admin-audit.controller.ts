@@ -57,7 +57,8 @@ class ExportApproveDto {
 
 /**
  * 审计日志（T14，B11）：筛选 + 分页、哈希链校验、导出需审批。
- * 查看与校验要求 audit.view（合规 / 超级管理）；导出申请与审批要求 audit.export。
+ * 查看与校验要求 audit.view（合规 / 超级管理）；导出申请要求 audit.export_request（合规），
+ * 导出审批要求 audit.export_approve（仅超级管理员）。
  */
 @ApiTags('后台·审计')
 @Controller('admin/audit')
@@ -86,18 +87,18 @@ export class AdminAuditController {
     return this.adminAudit.verify();
   }
 
-  /** 提交导出申请（状态待审批） */
+  /** 提交导出申请（状态待审批；合规支持可申请） */
   @ApiOperation({ summary: '提交审计导出申请（状态待审批）' })
   @Post('export-request')
-  @RequirePermission('audit.export')
+  @RequirePermission('audit.export_request')
   requestExport(@CurrentAdmin() admin: AdminContext, @Body() dto: ExportRequestDto): AuditExportRequest {
     return this.adminAudit.requestExport(admin.id, dto.reason);
   }
 
-  /** 审批导出申请（合规或超级管理；不能审批本人提交的申请） */
-  @ApiOperation({ summary: '审批审计导出申请（不能审批本人提交的申请）' })
+  /** 审批导出申请（仅超级管理员；不能审批本人提交的申请） */
+  @ApiOperation({ summary: '审批审计导出申请（仅超级管理员；不能审批本人提交的申请）' })
   @Post('export-approve')
-  @RequirePermission('audit.export')
+  @RequirePermission('audit.export_approve')
   approveExport(@CurrentAdmin() admin: AdminContext, @Body() dto: ExportApproveDto): AuditExportRequest {
     return this.adminAudit.approveExport(admin.id, dto.request_id);
   }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DbModule } from '../../db/db.module';
+import { ConfirmationModule } from '../admin/confirmation.module';
 import { AuditService } from '../../common/audit.service';
 import { FeedbackService } from './feedback.service';
 import { FeedbackController } from './feedback.controller';
@@ -14,7 +15,7 @@ import { AdminFeedbackController } from './admin-feedback.controller';
  * 后台登录鉴权（账号 + TOTP + 角色权限）留待 T14 / T35，本任务用全局登录守卫占位。
  */
 @Module({
-  imports: [DbModule],
+  imports: [DbModule, ConfirmationModule],
   controllers: [FeedbackController, AdminFeedbackController],
   providers: [FeedbackService, AuditService],
   exports: [FeedbackService],

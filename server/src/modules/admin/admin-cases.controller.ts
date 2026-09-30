@@ -37,7 +37,8 @@ export class AdminCasesController {
     private readonly switches: SwitchesService,
   ) {}
 
-  @ApiOperation({ summary: '投稿队列（授权范围 / 第三方信息 / 状态）' })
+  @ApiOperation({ summary: '投稿队列（授权范围 / 第三方信息 / 状态；仅超级管理员）' })
+  @RequirePermission('case.manage')
   @Get()
   list(@Query('status') status?: string) {
     const where = status && status !== '全部' ? 'WHERE status = ?' : '';
@@ -66,7 +67,8 @@ export class AdminCasesController {
     };
   }
 
-  @ApiOperation({ summary: '投稿详情（用户提交 / 编辑建议 / 授权范围 / 第三方信息去除对照）' })
+  @ApiOperation({ summary: '投稿详情（用户提交 / 编辑建议 / 授权范围 / 第三方信息去除对照；仅超级管理员）' })
+  @RequirePermission('case.manage')
   @Get(':id')
   detail(@Param('id') id: string) {
     const row = this.db.app.prepare('SELECT * FROM case_submission WHERE id = ?').get(id) as
@@ -99,6 +101,7 @@ export class AdminCasesController {
   @RequirePermission('case.manage')
   @Post(':id/send-suggestion')
   sendSuggestion(@CurrentAdmin() admin: AdminContext, @Param('id') id: string, @Body() dto: SuggestionDto) {
+    this.require(id);
     this.db.app
       .prepare('UPDATE case_submission SET status = ? WHERE id = ?')
       .run('待用户确认', id);
@@ -112,6 +115,7 @@ export class AdminCasesController {
   @RequirePermission('case.manage')
   @Post(':id/return')
   returnToUser(@CurrentAdmin() admin: AdminContext, @Param('id') id: string, @Body() dto: CaseReasonDto) {
+    this.require(id);
     this.db.app.prepare('UPDATE case_submission SET status = ? WHERE id = ?').run('待修改', id);
     this.audit.append(admin.id, 'case.return', `case_submission:${id}`, { reason: dto.reason });
     return { id, status: '待修改' };
@@ -121,6 +125,7 @@ export class AdminCasesController {
   @RequirePermission('case.manage')
   @Post(':id/publish')
   publish(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
+    this.require(id);
     if (!this.switches.isEnabled('案例卡片')) {
       throw new ApiException(
         ErrorCode.CONFLICT,
@@ -130,5 +135,13 @@ export class AdminCasesController {
     this.db.app.prepare('UPDATE case_submission SET status = ? WHERE id = ?').run('已发布', id);
     this.audit.append(admin.id, 'case.publish', `case_submission:${id}`, {});
     return { id, status: '已发布' };
+  }
+
+  /** 投稿不存在时返回 404，而不是照常返回 200（验收反馈第 35 条） */
+  private require(id: string): void {
+    const row = this.db.app.prepare('SELECT id FROM case_submission WHERE id = ?').get(id) as
+      | { id: string }
+      | undefined;
+    if (!row) throw new ApiException(ErrorCode.NOT_FOUND, '投稿不存在');
   }
 }

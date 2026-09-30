@@ -225,8 +225,11 @@ export class EvidenceService implements EvidenceRetriever {
   }
 
   /** 证据文档详情（含原文） */
-  detail(docId: string): EvidenceDocDetail {
+  detail(docId: string, actorId?: string): EvidenceDocDetail {
     const row = this.loadDoc(docId);
+    if (actorId) {
+      this.audit.append(actorId, 'evidence.read', `evidence_doc:${docId}`, { title: row.title });
+    }
     return this.toDetail(row);
   }
 
@@ -488,8 +491,13 @@ export class EvidenceService implements EvidenceRetriever {
    * content_version 与 evidence_doc 没有直接外键，分析列表由 analysis_citation
    * 与 analysis.sections.explain[].citations 两处合并得到。
    */
-  impactPreview(docId: string): EvidenceImpactReport {
+  impactPreview(docId: string, actorId?: string): EvidenceImpactReport {
     const row = this.loadDoc(docId);
+    if (actorId) {
+      this.audit.append(actorId, 'evidence.impact_read', `evidence_doc:${docId}`, {
+        title: row.title,
+      });
+    }
     const byAnalysis = new Map<string, EvidenceAnalysisReference>();
 
     // 1. analysis_citation（引用计数与 statement 的权威来源）

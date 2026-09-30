@@ -137,11 +137,14 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     expect(data.token.startsWith('av1.')).toBe(true);
     expect(data.admin.name).toBe('editor01');
     expect(data.admin.role.name).toBe('运营编辑');
+    // B10：运营编辑可建草稿 / 提交 / 发起发布 / 举报初筛
     expect(data.admin.permissions).toEqual([
       'content.draft',
       'content.submit',
+      'content.publish',
       'evidence.ingest',
       'feedback.view',
+      'feedback.triage',
       'consent.view',
     ]);
     expect(data.admin.mfa_enabled).toBe(true);
@@ -216,7 +219,7 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     expect(denials.length).toBeGreaterThanOrEqual(4);
     const latest = denials[denials.length - 1];
     expect(latest.actor_id).toBe(adminIds.editor01);
-    expect((JSON.parse(latest.diff) as { permission: string }).permission).toBe('audit.export');
+    expect((JSON.parse(latest.diff) as { permission: string }).permission).toBe('audit.export_request');
     expect(JSON.stringify(denials)).not.toContain(demoPassword);
   });
 
@@ -235,11 +238,14 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
       '超级管理员',
     ]);
     const byName = new Map(data.roles.map((r) => [r.name, r.permissions]));
+    // B10：运营编辑可建草稿 / 提交 / 发起发布 / 举报初筛
     expect(byName.get('运营编辑')).toEqual([
       'content.draft',
       'content.submit',
+      'content.publish',
       'evidence.ingest',
       'feedback.view',
+      'feedback.triage',
       'consent.view',
     ]);
     expect(byName.get('临床审核')).toEqual([
@@ -253,10 +259,22 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
       'feedback.handle',
       'consent.view',
       'switch.manage_low',
+      'model.view',
+      'eval.view',
     ]);
-    expect(byName.get('技术负责人')).toEqual(['switch.manage', 'model.manage', 'eval.manage', 'consent.view']);
+    // 技术负责人可读模型与评测集，读不到举报与案例（B10）
+    expect(byName.get('技术负责人')).toEqual([
+      'switch.manage',
+      'model.manage',
+      'model.view',
+      'eval.manage',
+      'eval.view',
+      'consent.view',
+    ]);
+    // 合规支持可申请审计导出，但不能审批
     expect(byName.get('合规支持')).toContain('audit.view');
-    expect(byName.get('合规支持')).toContain('audit.export');
+    expect(byName.get('合规支持')).toContain('audit.export_request');
+    expect(byName.get('合规支持')).not.toContain('audit.export_approve');
     expect(byName.get('合规支持')).toContain('user.view');
     expect(byName.get('合规支持')).not.toContain('feedback.view');
     expect(byName.get('合规支持')).not.toContain('feedback.handle');
@@ -451,6 +469,9 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
   });
 
   it('审计导出需审批：申请 → 本人不能审批 → 换人审批 → 不能重复审批', async () => {
+    // 重新登录拿新令牌（前面的用例做过退出 / 停用相关操作）
+    tokens.compliance01 = (await login('compliance01')).body.data.token as string;
+    tokens.super01 = (await login('super01')).body.data.token as string;
     const requestRes = await api()
       .post('/admin/audit/export-request')
       .set(H(tokens.compliance01))
@@ -464,12 +485,13 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     const empty = await api().post('/admin/audit/export-request').set(H(tokens.compliance01)).send({ reason: '  ' });
     expect(empty.body.code).toBe(40000);
 
-    // 本人审批 → 40900
+    // 合规支持不能审批 → 40300
     const self = await api()
       .post('/admin/audit/export-approve')
       .set(H(tokens.compliance01))
       .send({ request_id: created.id });
-    expect(self.body.code).toBe(40900);
+    expect(self.body.code).toBe(40300);
+    expect(self.body.message).toBe('没有权限执行该操作');
 
     // 超级管理审批 → 已批准
     const approved = await api()

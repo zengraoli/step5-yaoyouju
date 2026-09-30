@@ -3,6 +3,7 @@ import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { RequirePermission } from '../admin/permission.decorator';
 import { AdminContext } from '../admin/admin-auth.service';
+import { CurrentAdmin } from '../../common/current-admin.decorator';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { FeedbackService, HANDLING_ACTIONS } from './feedback.service';
 
@@ -12,6 +13,11 @@ class AuthorizeViewDto {
   @IsString()
   @MaxLength(200)
   scope?: string;
+
+  @ApiProperty({ description: '双人确认单 ID（超级管理员审批后带上才生效）', required: false })
+  @IsOptional()
+  @IsString()
+  confirmation_id?: string;
 }
 
 class HandleDto {
@@ -32,6 +38,7 @@ export class AdminFeedbackController {
   constructor(private readonly feedback: FeedbackService) {}
 
   @ApiOperation({ summary: '举报与反馈队列（按严重度分级；自动附带四类版本与受影响范围）' })
+  @RequirePermission('feedback.view')
   @Get()
   queue(
     @CurrentUser() admin: AdminContext,
@@ -41,13 +48,14 @@ export class AdminFeedbackController {
     return this.feedback.queue({ type, status });
   }
 
-  @ApiOperation({ summary: '反馈 / 举报详情（未授权时用户原始内容不可见）' })
+  @ApiOperation({ summary: '反馈 / 举报详情（未授权时用户原始内容不可见；读取写审计）' })
+  @RequirePermission('feedback.view')
   @Get(':id')
   detail(@CurrentUser() admin: AdminContext, @Param('id') id: string) {
-    return this.feedback.detail(id);
+    return this.feedback.detail(id, admin.id);
   }
 
-  @ApiOperation({ summary: '单条授权查看用户原始内容（授权人 / 时间 / 范围写入审计）' })
+  @ApiOperation({ summary: '单条授权查看用户原始内容（授权人 / 时间 / 范围写入审计；需超级管理员审批）' })
   @RequirePermission('feedback.handle')
   @Post(':id/authorize-view')
   authorizeView(
@@ -56,6 +64,13 @@ export class AdminFeedbackController {
     @Body() dto: AuthorizeViewDto,
   ) {
     return this.feedback.authorizeView(id, admin.id, dto);
+  }
+
+  @ApiOperation({ summary: '撤回单条授权（立即生效，写审计）' })
+  @RequirePermission('feedback.handle')
+  @Post(':id/revoke-view')
+  revokeView(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
+    return this.feedback.revokeAuthorization(id, admin.id);
   }
 
   @ApiOperation({ summary: '处置动作与处理记录（写审计；不自动改写内容库或模型）' })

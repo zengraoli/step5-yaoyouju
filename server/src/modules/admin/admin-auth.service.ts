@@ -119,6 +119,17 @@ export class AdminAuthService {
     return { token: this.issueToken(row.id), admin: this.profileOf(row) };
   }
 
+  /** 停用 / 重置 MFA 时吊销该账号名下的全部后台令牌（旧令牌立即失效） */
+  revokeTokensOf(adminId: string): void {
+    const rows = this.app
+      .prepare('SELECT name FROM admin_user WHERE id = ?')
+      .get(adminId) as { name: string } | undefined;
+    if (!rows) return;
+    // 令牌为无状态签名，这里把「账号 + 签发时间戳」记为吊销前缀：
+    // verifyToken 对应该账号且签发时间早于 now 的令牌全部视为无效
+    this.revocation.revokeAccount(adminId, new Date().toISOString());
+  }
+
   /** 登出：吊销当前令牌（旧令牌立即失效）并写审计 */
   logout(admin: AdminContext, token: string): { ok: true } {
     this.revocation.revoke(token, 'admin', new Date(Date.now() + TOKEN_TTL_MS).toISOString());
@@ -154,9 +165,11 @@ export class AdminAuthService {
     const expected = createHmac('sha256', this.secret).update(payload).digest('base64url');
     if (!safeEqual(expected, parts[2])) return null;
     if (this.revocation.isRevoked(token)) return null;
-    const [adminId, expRaw] = payload.split('.');
+    const [adminId, expRaw, iatRaw] = payload.split('.');
     const exp = Number(expRaw);
+    const iat = Number(iatRaw);
     if (!adminId || !Number.isFinite(exp) || exp < Date.now()) return null;
+    if (Number.isFinite(iat) && this.revocation.isAccountRevoked(adminId, iat)) return null;
     const row = this.findById(adminId);
     if (!row || row.status !== 'active') return null;
     return {
@@ -170,8 +183,9 @@ export class AdminAuthService {
   // ---------- 内部 ----------
 
   private issueToken(adminId: string): string {
-    const exp = Date.now() + TOKEN_TTL_MS;
-    const payload = `${adminId}.${exp}`;
+    const iat = Date.now();
+    const exp = iat + TOKEN_TTL_MS;
+    const payload = `${adminId}.${exp}.${iat}`;
     const sig = createHmac('sha256', this.secret).update(payload).digest('base64url');
     return `${TOKEN_PREFIX}.${Buffer.from(payload).toString('base64url')}.${sig}`;
   }

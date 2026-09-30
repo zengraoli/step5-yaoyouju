@@ -16,12 +16,14 @@ import { AdminGuard } from '../../common/admin.guard';
 import { ConsentGuard } from '../../common/consent.guard';
 import { hashAdminPassword } from '../../common/password';
 import { AdminAuthService } from '../admin/admin-auth.service';
+import { ConfirmationService } from '../admin/confirmation.service';
 import { PermissionGuard } from '../admin/permission.guard';
 import { ResponseInterceptor } from '../../common/response.interceptor';
 import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { FeedbackController } from './feedback.controller';
 import { AdminFeedbackController } from './admin-feedback.controller';
 import { FeedbackService, SEVERITY_ORDER } from './feedback.service';
+import { ConfirmationModule } from '../admin/confirmation.module';
 import { RULE_SET_VERSION } from '../safety/safety.rules';
 
 interface Versions {
@@ -73,6 +75,8 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
   const adminTotp = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
   /** 后台令牌（T14 起 /admin/* 走后台账号体系：合规角色） */
   let adminToken: string;
+  let superToken: string;
+  let confirmations: ConfirmationService;
   let adminId: string;
 
   beforeAll(async () => {
@@ -80,7 +84,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     process.env.DB_DIR = dir;
     process.env.ADMIN_TOTP_DEMO_CODE = adminTotp;
     const moduleRef = await Test.createTestingModule({
-      imports: [DbModule],
+      imports: [DbModule, ConfirmationModule],
       controllers: [FeedbackController, AdminFeedbackController],
       providers: [FeedbackService, AuthService, AuditService, SchemaService, AdminAuthService,
         { provide: APP_GUARD, useClass: AuthGuard },
@@ -106,6 +110,8 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     const admin = app.get(AdminAuthService).login('clinician01', adminPassword, adminTotp);
     adminToken = admin.token;
     adminId = admin.admin.id;
+    superToken = app.get(AdminAuthService).login('super01', adminPassword, adminTotp).token;
+    confirmations = app.get(ConfirmationService);
 
     // 演示用户 u1（13800001234）已同意「健康信息处理」，种子数据含一页分析与已发布内容
     const me = auth.login('13800001234', '123456');
@@ -135,7 +141,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
   const api = () => request(app.getHttpServer());
   const H = (t = token) => ({ Authorization: `Bearer ${t}` });
   /** 后台接口请求头（T14：/admin/* 使用后台账号令牌） */
-  const HA = () => ({ Authorization: `Bearer ${adminToken}` });
+  const HA = (t = adminToken) => ({ Authorization: `Bearer ${t}` });
 
   const submitFeedback = (body: Record<string, unknown>, t = token) =>
     api().post('/feedback').set(H(t)).send(body);
@@ -333,11 +339,18 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     expect(beforeDetail.authorization.authorized).toBe(false);
     expect(beforeDetail.authorization.by).toBeNull();
 
-    // 单条授权
-    const granted = await api()
+    // 单条授权需要双人确认：临床审核发起 → 超级管理员审批
+    const pendingGrant = await api()
       .post(`/admin/feedback/${id}/authorize-view`)
       .set(HA())
       .send({ scope: '核对报告原文表述' });
+    expect(pendingGrant.body.code).toBe(40900);
+    expect(pendingGrant.body.message).toContain('单条授权');
+    const confirmation = confirmations.list('待确认').find((c) => c.action === 'feedback.authorize')!;
+    const granted = await api()
+      .post(`/admin/feedback/${id}/authorize-view`)
+      .set(HA(superToken))
+      .send({ scope: '核对报告原文表述', confirmation_id: confirmation.id });
     expect(granted.body.code).toBe(0);
     const afterDetail = granted.body.data as Detail;
     expect(afterDetail.authorization.authorized).toBe(true);
@@ -364,8 +377,13 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
          WHERE action='feedback.authorize_view' AND target=? ORDER BY created_at ASC`,
       )
       .all(`feedback:${id}`) as { actor_id: string; action: string; target: string; diff: string }[];
-    expect(logs.length).toBe(1);
-    expect(logs[0].actor_id).toBe(adminId);
+    // 授权申请与审批都写审计（申请：临床审核；审批：超级管理员）
+    const authorizeLogs = db.app.prepare("SELECT * FROM audit_log WHERE action='feedback.authorize_view'").all();
+    expect(authorizeLogs.length).toBe(1);
+    const superId = (db.app.prepare('SELECT id FROM admin_user WHERE name=?').get('super01') as { id: string }).id;
+    expect(String(authorizeLogs[0].actor_id)).toBe(superId);
+    const authDiff = JSON.parse(String(authorizeLogs[0].diff)) as { requested_by: string };
+    expect(authDiff.requested_by).toBe(adminId);
     const diff = JSON.parse(logs[0].diff) as { scope: string };
     expect(diff.scope).toBe('核对报告原文表述');
 
@@ -503,7 +521,13 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
       severity: 'high',
     });
     const id = (report.body.data as FeedbackItem).id;
-    await api().post(`/admin/feedback/${id}/authorize-view`).set(HA()).send({});
+    const askGrant = await api().post(`/admin/feedback/${id}/authorize-view`).set(HA()).send({});
+    expect(askGrant.body.code).toBe(40900);
+    const confirmation2 = confirmations.list('待确认').find((c) => c.action === 'feedback.authorize')!;
+    await api()
+      .post(`/admin/feedback/${id}/authorize-view`)
+      .set(HA(superToken))
+      .send({ confirmation_id: confirmation2.id });
     await api()
       .post(`/admin/feedback/${id}/handle`)
       .set(HA())

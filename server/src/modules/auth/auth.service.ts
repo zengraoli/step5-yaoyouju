@@ -126,8 +126,9 @@ export class AuthService {
   }
 
   issueToken(userId: string): string {
-    const exp = Date.now() + TOKEN_TTL_MS;
-    const payload = `${userId}.${exp}`;
+    const iat = Date.now();
+    const exp = iat + TOKEN_TTL_MS;
+    const payload = `${userId}.${exp}.${iat}`;
     const sig = createHmac('sha256', this.secret).update(payload).digest('base64url');
     return `v1.${Buffer.from(payload).toString('base64url')}.${sig}`;
   }
@@ -142,10 +143,12 @@ export class AuthService {
     const given = Buffer.from(parts[2] ?? '');
     if (given.length !== expected.length) return null;
     if (!timingSafeEqual(Buffer.from(expected), given)) return null;
-    const [userId, expRaw] = payload.split('.');
+    const [userId, expRaw, iatRaw] = payload.split('.');
     const exp = Number(expRaw);
+    const iat = Number(iatRaw);
     if (!userId || !Number.isFinite(exp) || exp < Date.now()) return null;
     if (this.revocation.isRevoked(token)) return null;
+    if (Number.isFinite(iat) && this.revocation.isAccountRevoked(userId, iat)) return null;
     const user = this.app.prepare('SELECT id, status FROM users WHERE id = ?').get(userId) as
       | { id: string; status: string }
       | undefined;

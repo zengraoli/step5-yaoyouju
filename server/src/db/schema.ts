@@ -269,7 +269,8 @@ CREATE TABLE IF NOT EXISTS admin_user (
   role_id     TEXT NOT NULL REFERENCES role(id),
   mfa_enabled INTEGER NOT NULL DEFAULT 1,
   password_hash TEXT NOT NULL,
-  status      TEXT NOT NULL DEFAULT 'active'
+  status      TEXT NOT NULL DEFAULT 'active',
+  mfa_bonded_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -419,6 +420,9 @@ export function ensureFeedbackColumns(db: {
     ['authorized_by', 'authorized_by TEXT'],
     ['authorized_at', 'authorized_at TEXT'],
     ['authorize_scope', 'authorize_scope TEXT'],
+    ['authorize_expires_at', 'authorize_expires_at TEXT'],
+    ['authorize_revoked_at', 'authorize_revoked_at TEXT'],
+    ['approve_by', 'approve_by TEXT'],
   ];
   for (const [name, ddl] of additions) {
     if (!names.has(name)) db.exec(`ALTER TABLE feedback ADD COLUMN ${ddl}`);
@@ -436,6 +440,10 @@ export function ensureEvalColumns(db: {
     run(...args: unknown[]): unknown;
   };
 }): void {
+  const adminCols = db.prepare('PRAGMA table_info(admin_user)').all() as { name: string }[];
+  if (adminCols.length > 0 && !adminCols.some((c) => c.name === 'mfa_bonded_at')) {
+    db.exec('ALTER TABLE admin_user ADD COLUMN mfa_bonded_at TEXT');
+  }
   const setCols = db.prepare('PRAGMA table_info(eval_set)').all() as { name: string }[];
   if (setCols.length > 0 && !setCols.some((c) => c.name === 'cases')) {
     db.exec('ALTER TABLE eval_set ADD COLUMN cases TEXT');

@@ -5,7 +5,7 @@ import { RequirePermission } from '../admin/permission.decorator';
 import { AdminContext } from '../admin/admin-auth.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { EvidenceService } from './evidence.service';
-
+import { CurrentAdmin } from '../../common/current-admin.decorator';
 class AdminEvidenceDocBody {
   @ApiProperty()
   @IsString()
@@ -64,6 +64,7 @@ export class AdminEvidenceController {
   constructor(private readonly evidence: EvidenceService) {}
 
   @ApiOperation({ summary: '证据文档列表（来源类型 / 启用状态筛选，带片段数与被引用数）' })
+  @RequirePermission('evidence.ingest')
   @Get()
   list(@Query('source_type') sourceType?: string, @Query('active') active?: string) {
     return this.evidence.list({
@@ -72,22 +73,25 @@ export class AdminEvidenceController {
     });
   }
 
-  @ApiOperation({ summary: '证据文档详情（含原文）' })
+  @ApiOperation({ summary: '证据文档详情（含原文；读取写审计）' })
+  @RequirePermission('evidence.ingest')
   @Get(':id')
-  detail(@Param('id') id: string) {
-    return this.evidence.detail(id);
+  detail(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
+    return this.evidence.detail(id, admin.id);
   }
 
   @ApiOperation({ summary: '入库管线状态（待切分 / 已切分 / 失败、片段数、最近入库时间）' })
+  @RequirePermission('evidence.ingest')
   @Get(':id/pipeline')
   pipeline(@Param('id') id: string) {
     return this.evidence.pipeline(id);
   }
 
-  @ApiOperation({ summary: '停用影响预览：引用该证据的内容与分析列表' })
+  @ApiOperation({ summary: '停用影响预览：引用该证据的内容与分析列表；读取写审计' })
+  @RequirePermission('evidence.deactivate')
   @Get(':id/impact')
-  impact(@Param('id') id: string) {
-    return this.evidence.impactPreview(id);
+  impact(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
+    return this.evidence.impactPreview(id, admin.id);
   }
 
   @ApiOperation({ summary: '新建证据文档' })

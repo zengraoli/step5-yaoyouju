@@ -5,6 +5,9 @@ import { FieldCrypto } from '../../db/crypto.service';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { AuditService } from '../../common/audit.service';
 import { RULE_SET_VERSION } from '../safety/safety.rules';
+import { AdminContext } from '../admin/admin-auth.service';
+import { permissionsOf } from '../admin/admin.constants';
+import { ConfirmationService } from '../admin/confirmation.service';
 
 /**
  * 反馈与质量服务（/feedback + /admin/feedback，App A16 / Web W08 / 后台 B06）。
@@ -185,6 +188,9 @@ type FeedbackRow = {
   authorized_by: string | null;
   authorized_at: string | null;
   authorize_scope: string | null;
+  authorize_expires_at: string | null;
+  authorize_revoked_at: string | null;
+  approve_by: string | null;
   created_at: string;
 };
 
@@ -201,6 +207,17 @@ type ContentItemRow = {
   current_status: string;
 };
 
+/** 单条授权有效期：7 天（到期自动失效，可提前撤回） */
+export const AUTHORIZE_TTL_DAYS = 7;
+const AUTHORIZE_TTL_MS = AUTHORIZE_TTL_DAYS * 24 * 3600 * 1000;
+
+/** 用户原始内容里的手机号脱敏（后台拿到授权也不应看到完整手机号） */
+function maskSensitive<T>(value: T): T {
+  const json = JSON.stringify(value) ?? '""';
+  const masked = json.replace(/(1[3-9]\d)\d{4}(\d{4})/g, '$1****$2');
+  return JSON.parse(masked) as T;
+}
+
 @Injectable()
 export class FeedbackService {
   private readonly logger = new Logger('Feedback');
@@ -208,6 +225,7 @@ export class FeedbackService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly confirmations: ConfirmationService,
   ) {}
 
   // ---------- 用户端（App A16 / Web W08） ----------
@@ -364,8 +382,12 @@ export class FeedbackService {
    * 后台详情：四类版本、受影响范围、处理记录。
    * 用户原始内容默认隐藏（「未授权，不可查看」），单条授权后可见。
    */
-  detail(id: string): FeedbackDetail {
+  detail(id: string, actorId?: string): FeedbackDetail {
     const row = this.load(id);
+    // 每次读取原文详情都写审计（B10「每次读取写审计」）
+    if (actorId) {
+      this.audit.append(actorId, 'feedback.read', `feedback:${id}`, { severity: row.severity });
+    }
     return {
       ...this.queueItem(row),
       raw_content: this.rawContentOf(row),
@@ -376,23 +398,84 @@ export class FeedbackService {
   }
 
   /**
-   * 单条授权查看用户原始内容：记录授权人、时间、范围到 feedback 与审计日志（只追加）。
-   * 授权仅对本条举报生效，不是全局授权；重复授权以最后一次为准并分别写审计。
+   * 单条授权查看用户原始内容：临床审核发起 → 超级管理员审批后生效。
+   * - 授权仅对本条举报生效，不是全局授权；
+   * - 有效期 7 天，到期自动失效；
+   * - 可随时撤回；每次授权 / 撤回 / 读取都写审计（只追加）。
    */
-  authorizeView(id: string, actorId: string, input: AuthorizeViewInput = {}): FeedbackDetail {
+  authorizeView(
+    id: string,
+    actorId: string,
+    input: AuthorizeViewInput & { confirmation_id?: string } = {},
+  ): FeedbackDetail {
     const row = this.load(id);
-    const now = new Date().toISOString();
+    const nowDate = new Date();
+    const now = nowDate.toISOString();
     const scope = input.scope?.trim() || '本条举报的用户原始内容';
+    const gate = this.confirmations.prepare(
+      'feedback.authorize',
+      id,
+      '举报原文单条授权',
+      input.confirmation_id ? '另一人已确认的单条授权：' + scope : '单条授权：' + scope,
+      this.adminById(actorId),
+      input.confirmation_id,
+    );
+    if (!gate.proceed) {
+      throw new ApiException(
+        ErrorCode.CONFLICT,
+        '已提交「举报原文单条授权」申请（需' +
+          (gate.confirmation?.requirement ?? '超级管理员') +
+          '审批后生效，' +
+          AUTHORIZE_TTL_DAYS +
+          ' 天后自动失效）',
+      );
+    }
+    const expiresAt = new Date(nowDate.getTime() + AUTHORIZE_TTL_MS).toISOString();
     this.db.app
-      .prepare(`UPDATE feedback SET authorized_by=?, authorized_at=?, authorize_scope=? WHERE id=?`)
-      .run(actorId, now, scope, id);
+      .prepare(
+        `UPDATE feedback SET authorized_by=?, authorized_at=?, authorize_scope=?, authorize_expires_at=?, authorize_revoked_at=NULL WHERE id=?`,
+      )
+      .run(gate.confirmation!.requested_by, now, scope, expiresAt, id);
+    this.db.app.prepare('UPDATE feedback SET approve_by = ? WHERE id = ?').run(actorId, id);
     this.audit.append(actorId, 'feedback.authorize_view', `feedback:${id}`, {
+      requested_by: gate.confirmation!.requested_by,
+      approved_by: actorId,
       scope,
       severity: row.severity,
       authorized_at: now,
+      expires_at: expiresAt,
+      confirmation_id: gate.confirmation?.id ?? null,
     });
     this.logger.log(`[feedback] ${actorId} 单条授权查看举报 ${id} 的用户原始内容（范围：${scope}）`);
-    return this.detail(id);
+    return this.detail(id, actorId);
+  }
+
+  /** 撤回单条授权（立即生效，写审计） */
+  revokeAuthorization(id: string, actorId: string): FeedbackDetail {
+    const row = this.load(id);
+    if (!row.authorized_at) {
+      throw new ApiException(ErrorCode.CONFLICT, '该举报还没有单条授权记录');
+    }
+    this.db.app
+      .prepare(`UPDATE feedback SET authorize_scope = ?, authorize_revoked_at = ? WHERE id = ?`)
+      .run('已撤回', new Date().toISOString(), id);
+    this.audit.append(actorId, 'feedback.authorize_revoke', `feedback:${id}`, {});
+    return this.detail(id, actorId);
+  }
+
+  /** 后台账号上下文（双人确认需要角色与权限） */
+  private adminById(id: string): AdminContext {
+    const row = this.db.app
+      .prepare(
+        `SELECT u.id, u.name, r.name AS role_name FROM admin_user u JOIN role r ON r.id = u.role_id WHERE u.id = ?`,
+      )
+      .get(id) as { id: string; name: string; role_name: string } | undefined;
+    return {
+      id,
+      name: row?.name ?? '未知账号',
+      role: { id: '', name: row?.role_name ?? '未知角色' },
+      permissions: row ? permissionsOf(row.role_name) : [],
+    };
   }
 
   /**
@@ -455,21 +538,32 @@ export class FeedbackService {
   }
 
   private rawContentOf(row: FeedbackRow): RawContentSnapshot | typeof UNAUTHORIZED_RAW_CONTENT {
-    // 产品红线：未授权时用户原始内容不可见
-    if (!row.authorized_at || !row.raw_content) return UNAUTHORIZED_RAW_CONTENT;
+    // 产品红线：未授权 / 已过期 / 已撤回时用户原始内容不可见；授权后手机号也脱敏
+    const expired = Boolean(row.authorize_expires_at && row.authorize_expires_at < new Date().toISOString());
+    const revoked = Boolean(row.authorize_revoked_at);
+    if (!row.authorized_at || expired || revoked || !row.raw_content) return UNAUTHORIZED_RAW_CONTENT;
     try {
-      return JSON.parse(row.raw_content) as RawContentSnapshot;
+      return maskSensitive(JSON.parse(row.raw_content) as RawContentSnapshot);
     } catch {
       return UNAUTHORIZED_RAW_CONTENT;
     }
   }
 
   private authorizationOf(row: FeedbackRow) {
+    const expired = Boolean(row.authorize_expires_at && row.authorize_expires_at < new Date().toISOString());
+    const revoked = Boolean(row.authorize_revoked_at);
     return {
-      authorized: Boolean(row.authorized_at),
+      authorized: Boolean(row.authorized_at) && !expired && !revoked,
       by: row.authorized_by,
+      approved_by: row.approve_by,
       at: row.authorized_at,
       scope: row.authorize_scope,
+      expires_at: row.authorize_expires_at,
+      expired,
+      revoked,
+      revoked_at: row.authorize_revoked_at,
+      can_revoke: Boolean(row.authorized_at) && !expired && !revoked,
+      ttl_days: AUTHORIZE_TTL_DAYS,
     };
   }
 
