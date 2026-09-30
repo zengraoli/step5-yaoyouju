@@ -168,9 +168,17 @@ export class AdminSafetyController {
     if (!SWITCH_KEYS.includes(key as (typeof SWITCH_KEYS)[number])) {
       throw new ApiException(ErrorCode.BAD_REQUEST, `开关名称必须是：${SWITCH_KEYS.join(' / ')}`);
     }
-    // 高危开关（个性化分析）只允许技术负责人 / 超级管理变更（B10：临床审核仅非高危）
-    if (HIGH_RISK_SWITCHES.includes(key) && !hasPermission(admin.permissions, 'switch.manage')) {
+    // 高危开关（个性化分析）只允许技术负责人 / 超级管理发起（B10：临床审核仅非高危）
+    const isConfirmer = Boolean(dto.confirmation_id);
+    const canInitiate =
+      admin.permissions.includes('*') ||
+      admin.permissions.includes('switch.manage') ||
+      admin.permissions.includes('switch.manage_low');
+    if (!isConfirmer && HIGH_RISK_SWITCHES.includes(key) && !admin.permissions.includes('switch.manage') && !admin.permissions.includes('*')) {
       throw new ApiException(ErrorCode.FORBIDDEN, '高危开关变更需要技术负责人或超级管理员');
+    }
+    if (!canInitiate) {
+      throw new ApiException(ErrorCode.FORBIDDEN, '没有权限执行该操作');
     }
     // 高危开关必须双人确认（B10：技术负责人 + 临床审核 / 超级管理）
     if (HIGH_RISK_SWITCHES.includes(key)) {

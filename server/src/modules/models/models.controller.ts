@@ -66,7 +66,8 @@ export class ModelsController {
   ) {}
 
   /** 发布组合表：模型名、提示词版本、检索策略、内容库版本、状态、创建时间、最近评测结果 */
-  @ApiOperation({ summary: '模型发布组合表（含最近评测结果）' })
+  @ApiOperation({ summary: '模型发布组合表（含最近评测结果；临床审核可读）' })
+  @RequirePermission('model.view')
   @Get()
   list() {
     return this.releases.list();

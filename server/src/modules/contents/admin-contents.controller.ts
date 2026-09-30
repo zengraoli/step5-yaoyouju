@@ -4,7 +4,7 @@ import { IsArray, IsOptional, IsString, MaxLength } from 'class-validator';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { RequirePermission } from '../admin/permission.decorator';
 import { AdminContext } from '../admin/admin-auth.service';
-import { CurrentUser } from '../../common/current-user.decorator';
+import { CurrentAdmin } from '../../common/current-admin.decorator';
 import { ContentsService, ContentDetail } from './contents.service';
 
 class DraftDto {
@@ -114,7 +114,7 @@ export class AdminContentsController {
   @ApiOperation({ summary: '内容列表（筛选 + 状态统计 + 分页）' })
   @Get()
   list(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Query('type') type?: string,
     @Query('status') status?: string,
     @Query('scope') scope?: string,
@@ -134,14 +134,14 @@ export class AdminContentsController {
 
   @ApiOperation({ summary: '内容详情（版本链、审核记录、引用定位）' })
   @Get(':id')
-  detail(@CurrentUser() admin: AdminContext, @Param('id') id: string): ContentDetail {
+  detail(@CurrentAdmin() admin: AdminContext, @Param('id') id: string): ContentDetail {
     return this.contents.adminDetail(id);
   }
 
   @ApiOperation({ summary: '创建草稿（运营编辑）' })
   @RequirePermission('content.draft')
   @Post()
-  create(@CurrentUser() admin: AdminContext, @Body() dto: DraftDto): ContentDetail {
+  create(@CurrentAdmin() admin: AdminContext, @Body() dto: DraftDto): ContentDetail {
     return this.contents.createDraft(admin.id, dto);
   }
 
@@ -149,7 +149,7 @@ export class AdminContentsController {
   @RequirePermission('content.draft')
   @Patch(':id')
   update(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() dto: DraftDto,
   ): ContentDetail {
@@ -160,7 +160,7 @@ export class AdminContentsController {
   @RequirePermission('content.draft')
   @Post(':id/submit')
   submit(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() dto: SubmitDto,
   ): ContentDetail {
@@ -171,7 +171,7 @@ export class AdminContentsController {
   @RequirePermission('content.review')
   @Post(':id/approve')
   approve(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() dto: ApproveDto,
   ): ContentDetail {
@@ -182,7 +182,7 @@ export class AdminContentsController {
   @RequirePermission('content.review')
   @Post(':id/reject')
   reject(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() dto: RejectDto,
   ): ContentDetail {
@@ -192,13 +192,13 @@ export class AdminContentsController {
   @ApiOperation({ summary: '发布（已审定 → 已发布；需双人确认）' })
   @RequirePermission('content.publish')
   @Post(':id/publish')
-  publish(@CurrentUser() admin: AdminContext, @Param('id') id: string): ContentDetail {
+  publish(@CurrentAdmin() admin: AdminContext, @Param('id') id: string): ContentDetail {
     return this.contents.publish(admin.id, id);
   }
 
   @ApiOperation({ summary: '引用定位预览（下线前查看受影响的页面）' })
   @Get(':id/impact')
-  impact(@CurrentUser() admin: AdminContext, @Param('id') id: string) {
+  impact(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
     return this.contents.impactPreview(id);
   }
 
@@ -206,7 +206,7 @@ export class AdminContentsController {
   @RequirePermission('content.offline')
   @Post(':id/take-offline')
   takeOffline(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() dto: ReasonDto,
   ) {
@@ -217,7 +217,7 @@ export class AdminContentsController {
   @RequirePermission('content.offline')
   @Post(':id/withdraw')
   withdraw(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() dto: ReasonDto,
   ): ContentDetail {
@@ -228,7 +228,7 @@ export class AdminContentsController {
   @RequirePermission('content.draft')
   @Post(':id/mark-correcting')
   markCorrecting(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() dto: ReasonDto,
   ): ContentDetail {
@@ -239,7 +239,7 @@ export class AdminContentsController {
   @RequirePermission('content.draft')
   @Post(':id/resubmit')
   resubmit(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() dto: SubmitDto,
   ): ContentDetail {
@@ -249,7 +249,7 @@ export class AdminContentsController {
   @ApiOperation({ summary: '批量下线（需双人确认）' })
   @RequirePermission('content.offline')
   @Post('batch-take-offline')
-  batchTakeOffline(@CurrentUser() admin: AdminContext, @Body() dto: BatchOfflineDto) {
+  batchTakeOffline(@CurrentAdmin() admin: AdminContext, @Body() dto: BatchOfflineDto) {
     const ids = (dto.ids ?? []).filter((id) => typeof id === 'string' && id.trim());
     if (ids.length === 0) {
       throw new ApiException(ErrorCode.BAD_REQUEST, '请选择要下线的内容');

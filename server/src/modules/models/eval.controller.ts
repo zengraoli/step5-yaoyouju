@@ -50,6 +50,7 @@ export class EvalController {
 
   /** 评测集列表：名称、用例数、是否去标识化、最近一次运行结果 */
   @ApiOperation({ summary: '评测集列表（名称 / 用例数 / 是否去标识化 / 最近运行结果）' })
+  @RequirePermission('eval.view')
   @Get('sets')
   listSets() {
     return this.evalService.listSets();
@@ -64,6 +65,7 @@ export class EvalController {
 
   /** 运行记录：触发原因、时间、指标、结果（可按评测集筛选） */
   @ApiOperation({ summary: '评测运行记录（触发原因 / 时间 / 指标 / 结果）' })
+  @RequirePermission('eval.view')
   @Get('runs')
   listRuns(@Query('eval_set_id') evalSetId?: string) {
     return this.evalService.listRuns(evalSetId);
@@ -83,6 +85,7 @@ export class EvalController {
 
   /** 运行详情（含失败用例） */
   @ApiOperation({ summary: '评测运行详情（含失败用例）' })
+  @RequirePermission('eval.view')
   @Get('runs/:id')
   getRun(@Param('id') id: string) {
     return this.evalService.getRun(id);
