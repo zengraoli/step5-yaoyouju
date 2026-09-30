@@ -9,6 +9,7 @@ import {
   EvalMetrics,
   FailedCase,
   REQUIRED_EVAL_SETS,
+  REQUIRED_EVAL_SET_CODES,
   evalResult,
   scoreCases,
 } from './eval-scorer';
@@ -97,12 +98,25 @@ export class EvalService {
     const name = (input.name ?? '').trim();
     if (!name) throw new ApiException(ErrorCode.BAD_REQUEST, '评测集名称不能为空');
     if (name.length > 50) throw new ApiException(ErrorCode.BAD_REQUEST, '评测集名称不能超过 50 个字符');
+    // 不能与必需评测集同名（否则门禁语义会被绕过）
+    if (REQUIRED_EVAL_SETS.includes(name)) {
+      throw new ApiException(
+        ErrorCode.BAD_REQUEST,
+        `${name} 是发布门禁的必需评测集，不能新建同名评测集`,
+      );
+    }
     const cases = this.validateCases(input.cases);
+    const dup = this.db.app.prepare('SELECT id FROM eval_set WHERE name = ?').get(name) as
+      | { id: string }
+      | undefined;
+    if (dup) {
+      throw new ApiException(ErrorCode.CONFLICT, '已存在同名评测集，请换一个名称');
+    }
 
     const id = randomUUID();
     this.db.app
-      .prepare('INSERT INTO eval_set (id, name, case_count, deidentified, cases) VALUES (?, ?, ?, 1, ?)')
-      .run(id, name, cases.length, JSON.stringify(cases));
+      .prepare('INSERT INTO eval_set (id, name, case_count, deidentified, cases, code) VALUES (?, ?, ?, 1, ?, ?)')
+      .run(id, name, cases.length, JSON.stringify(cases), null);
     this.audit.append(actorId, 'eval_set.create', `eval_set:${id}`, { name, case_count: cases.length });
     this.logger.log(`[eval] 新建评测集 ${name}（${cases.length} 个用例）`);
     return { id, name, case_count: cases.length, deidentified: true, latest_run: null };
@@ -221,18 +235,22 @@ export class EvalService {
    * 门禁状态：该发布对每个必需评测集的「最新一次」运行是否通过。
    * 任一必需评测集缺少运行或最近一次未通过 → 门禁未通过（阻断生效）。
    */
+  /**
+   * 发布门禁：按「必需评测集编码」识别，后台新建的同名评测集不参与门禁
+   * （验收反馈第 32 条：新建同名评测集不能蒙过门禁）。
+   */
   gateStatus(modelReleaseId: string): GateStatus {
     const missing: string[] = [];
     const blocked: string[] = [];
-    for (const name of REQUIRED_EVAL_SETS) {
+    for (const [name, code] of Object.entries(REQUIRED_EVAL_SET_CODES)) {
       const row = this.db.app
         .prepare(
           `SELECT r.result AS result FROM eval_run r
            JOIN eval_set s ON s.id = r.eval_set_id
-           WHERE r.model_release_id = ? AND s.name = ?
+           WHERE r.model_release_id = ? AND s.code = ?
            ORDER BY r.created_at DESC, r.rowid DESC LIMIT 1`,
         )
-        .get(modelReleaseId, name) as { result: string } | undefined;
+        .get(modelReleaseId, code) as { result: string } | undefined;
       if (!row) missing.push(name);
       else if (row.result !== '通过') blocked.push(name);
     }

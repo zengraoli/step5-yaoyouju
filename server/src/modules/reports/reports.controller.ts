@@ -5,6 +5,13 @@ import { ReportsService } from './reports.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { RequireConsent } from '../../common/require-consent.decorator';
 
+class OcrDto {
+  @ApiProperty({ description: '所属病程 ID（必须属于当前用户）', required: false })
+  @IsOptional()
+  @IsString()
+  episode_id?: string;
+}
+
 class CreateReportDto {
   @ApiProperty({ description: '所属病程 ID' })
   @IsString()
@@ -51,8 +58,8 @@ export class ReportsController {
   /** 拍照提取（模拟 OCR） */
   @ApiOperation({ summary: '拍照提取（模拟 OCR，返回示例文本）' })
   @Post('ocr')
-  ocr(@CurrentUser() user: { id: string }) {
-    return this.reports.ocr(user.id);
+  ocr(@CurrentUser() user: { id: string }, @Body() dto?: OcrDto) {
+    return this.reports.ocr(user.id, dto?.episode_id);
   }
 
   @ApiOperation({ summary: '报告详情（含术语与原文位置）' })

@@ -81,12 +81,22 @@ class ReasonDto {
   @IsString()
   @MaxLength(500)
   reason?: string;
+
+  @ApiProperty({ description: '双人确认单 ID（另一方确认后带上即可生效）', required: false })
+  @IsOptional()
+  @IsString()
+  confirmation_id?: string;
 }
 
 class BatchOfflineDto {
   @ApiProperty({ description: '内容 ID 列表' })
   @IsArray()
   ids!: string[];
+
+  @ApiProperty({ description: '双人确认单 ID（另一方确认后带上即可生效）', required: false })
+  @IsOptional()
+  @IsString()
+  confirmation_id?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -200,7 +210,7 @@ export class AdminContentsController {
     @Param('id') id: string,
     @Body() dto: ReasonDto,
   ) {
-    return this.contents.takeOffline(admin.id, id, dto);
+    return this.contents.takeOffline(admin.id, admin, id, dto);
   }
 
   @ApiOperation({ summary: '撤回（发布 → 已撤回）' })
@@ -211,7 +221,7 @@ export class AdminContentsController {
     @Param('id') id: string,
     @Body() dto: ReasonDto,
   ): ContentDetail {
-    return this.contents.withdraw(admin.id, id, dto);
+    return this.contents.withdraw(admin.id, admin, id, dto);
   }
 
   @ApiOperation({ summary: '标记更正（发布 → 更正中）' })
@@ -244,7 +254,7 @@ export class AdminContentsController {
     if (ids.length === 0) {
       throw new ApiException(ErrorCode.BAD_REQUEST, '请选择要下线的内容');
     }
-    return this.contents.batchTakeOffline(admin.id, ids, dto.reason ?? '');
+    return this.contents.batchTakeOffline(admin.id, admin, ids, dto.reason ?? '', dto.confirmation_id);
   }
 }
 

@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as express from 'express';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/response.interceptor';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
@@ -29,6 +30,9 @@ async function bootstrap() {
       runWithRequestId(requestId, () => next());
     },
   );
+  // 请求体上限：超大请求体 / JSON 格式错误一律返回中文 400，而不是 500（验收反馈第 31 条）
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '2mb' }));
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

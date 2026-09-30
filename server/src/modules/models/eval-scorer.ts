@@ -16,6 +16,20 @@ export type EvalCategory = (typeof EVAL_CATEGORIES)[number];
 /** 发布门禁要求覆盖的全部必需评测集 */
 export const REQUIRED_EVAL_SETS: readonly string[] = EVAL_CATEGORIES;
 
+/** 必需评测集的稳定编码（按类别给出）——门禁按编码识别，后台新建的同名评测集不算 */
+export const REQUIRED_EVAL_SET_CODES: Record<EvalCategory, string> = {
+  错误安慰: 'eval.required.false_comfort',
+  关键遗漏: 'eval.required.key_miss',
+  左右侧混淆: 'eval.required.side_confusion',
+  隐私: 'eval.required.privacy',
+};
+
+/** 由编码取必需评测集中文名 */
+export function requiredEvalSetName(code: string): string | null {
+  const found = Object.entries(REQUIRED_EVAL_SET_CODES).find(([, c]) => c === code);
+  return found ? found[0] : null;
+}
+
 /** 演示数据中的虚构姓名（去标识化时替换为「用户」） */
 export const DEMO_NAMES = ['张岚', '李成', '王芳', '陈静', '刘洋'];
 

@@ -19,6 +19,9 @@ export interface ReportView {
   occurred_at: string;
 }
 
+/** 报告原文长度上限（避免超长文本拖垮术语抽取与检索） */
+const MAX_REPORT_LEN = 20000;
+
 @Injectable()
 export class ReportsService {
   private readonly logger = new Logger('Reports');
@@ -47,6 +50,9 @@ export class ReportsService {
     const text = (input.raw_text ?? '').trim();
     if (!text) {
       throw new ApiException(ErrorCode.BAD_REQUEST, '请粘贴报告文字，或使用拍照提取（模拟 OCR）');
+    }
+    if (text.length > MAX_REPORT_LEN) {
+      throw new ApiException(ErrorCode.BAD_REQUEST, `报告原文过长（不超过 ${MAX_REPORT_LEN} 字），请分段录入`);
     }
     const sourceType = input.source_type ?? '报告原文';
     if (!SOURCE_TYPES.includes(sourceType as never)) {
@@ -94,8 +100,9 @@ export class ReportsService {
   }
 
   /** 拍照提取（模拟 OCR）：返回示例文本；受「拍照提取」开关控制 */
-  ocr(userId: string): { text: string; simulated: boolean; message: string } {
-    void userId;
+  ocr(userId: string, episodeId?: string): { text: string; simulated: boolean; message: string } {
+    // episode_id 必须属于当前用户（验收反馈第 50 条：不能替别人的病程生成报告）
+    if (episodeId) this.ownedEpisode(userId, episodeId);
     if (!this.switches.isEnabled('拍照提取')) {
       throw new ApiException(
         ErrorCode.SERVICE_UNAVAILABLE,

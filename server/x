@@ -1,5 +1,3 @@
-import { REQUIRED_EVAL_SET_CODES } from '../modules/models/eval-scorer';
-
 /**
  * 数据库结构（按 docs/system-design.md 第 3 节 ER 建表）
  * - APP_DDL：业务库 server/data/app.db
@@ -431,10 +429,7 @@ export function ensureFeedbackColumns(db: {
  */
 export function ensureEvalColumns(db: {
   exec(sql: string): unknown;
-  prepare(sql: string): {
-    all(...args: unknown[]): unknown;
-    run(...args: unknown[]): unknown;
-  };
+  prepare(sql: string): { all(...args: unknown[]): unknown };
 }): void {
   const setCols = db.prepare('PRAGMA table_info(eval_set)').all() as { name: string }[];
   if (setCols.length > 0 && !setCols.some((c) => c.name === 'cases')) {
@@ -444,11 +439,12 @@ export function ensureEvalColumns(db: {
   if (runCols.length > 0 && !runCols.some((c) => c.name === 'failed_cases')) {
     db.exec('ALTER TABLE eval_run ADD COLUMN failed_cases TEXT');
   }
+  const setCols = db.prepare('PRAGMA table_info(eval_set)').all() as { name: string }[];
   if (setCols.length > 0 && !setCols.some((c) => c.name === 'code')) {
     db.exec('ALTER TABLE eval_set ADD COLUMN code TEXT');
     // 既有库把四个类别评测集补上必需编码（按名称匹配，仅一次）
     for (const [name, code] of Object.entries(REQUIRED_EVAL_SET_CODES)) {
-      db.prepare('UPDATE eval_set SET code = ? WHERE name = ? AND (code IS NULL OR code = "")').run(code, name);
+      db.prepare('UPDATE eval_set SET code = ? WHERE name = ? AND (code IS NULL OR code = '')').run(code, name);
     }
   }
 }

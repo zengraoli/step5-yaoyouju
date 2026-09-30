@@ -175,6 +175,18 @@ export class ModelReleasesService {
     if (row.status === '已回滚') {
       throw new ApiException(ErrorCode.CONFLICT, '该发布已回滚，无需重复回滚');
     }
+    // 不能把唯一生效的发布回滚掉：否则新分析会全部失败（验收反馈第 33 条）
+    if (row.status === '生效') {
+      const others = this.db.app
+        .prepare(`SELECT id FROM model_release WHERE status='生效' AND id<>?`)
+        .all(id) as { id: string }[];
+      if (others.length === 0) {
+        throw new ApiException(
+          ErrorCode.CONFLICT,
+          '这是唯一生效的发布，回滚后新分析会全部失败；请先把另一个通过门禁的发布提升为生效',
+        );
+      }
+    }
 
     this.db.app.prepare(`UPDATE model_release SET status='已回滚' WHERE id=?`).run(id);
     this.audit.append(actorId, 'model_release.rollback', `model_release:${id}`, {

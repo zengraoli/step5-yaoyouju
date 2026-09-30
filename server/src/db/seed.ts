@@ -4,7 +4,7 @@ import { FieldCrypto } from './crypto.service';
 import { APP_DDL, IDENTITY_DDL, ensureEvidenceColumns, ensureFeedbackColumns } from './schema';
 import { localVector } from '../modules/evidence/evidence-retrieval';
 import { RULE_SET_VERSION } from '../modules/safety/safety.rules';
-import { EvalCase, evalResult, scoreCases } from '../modules/models/eval-scorer';
+import { EvalCase, evalResult, scoreCases, REQUIRED_EVAL_SET_CODES } from '../modules/models/eval-scorer';
 import { hashAdminPassword } from '../common/password';
 import { permissionsOf } from '../modules/admin/admin.constants';
 
@@ -318,8 +318,8 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   for (const s of evalSets) {
     const id = uid();
     setIds.set(s.name, id);
-    app.prepare('INSERT INTO eval_set (id,name,case_count,deidentified,cases) VALUES (?,?,?,?,?)')
-      .run(id, s.name, s.cases.length, 1, JSON.stringify(s.cases));
+    app.prepare('INSERT INTO eval_set (id,name,case_count,deidentified,cases,code) VALUES (?,?,?,?,?,?)')
+      .run(id, s.name, s.cases.length, 1, JSON.stringify(s.cases), REQUIRED_EVAL_SET_CODES[s.name as never] ?? null);
   }
   const insertEvalRun = (releaseId: string, setName: string, reason: string) => {
     const s = evalSets.find((x) => x.name === setName)!;

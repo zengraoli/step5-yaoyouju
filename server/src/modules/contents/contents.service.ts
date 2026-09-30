@@ -4,6 +4,8 @@ import { DbService } from '../../db/db.service';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { AuditService } from '../../common/audit.service';
 import { SwitchesService } from '../switches/switches.service';
+import { ConfirmationService } from '../admin/confirmation.service';
+import { AdminContext } from '../admin/admin-auth.service';
 
 /**
  * 内容库服务（用户端 /contents + 审核状态机，docs/system-design.md 第 4 节）。
@@ -201,6 +203,8 @@ export interface ReferenceReport {
 export interface TakeOfflineResult {
   content: ContentDetail;
   references: ReferenceReport;
+  /** 双人确认单 ID（首次发起时返回，等待另一人确认） */
+  confirmation_id: string | null;
 }
 
 export interface ContentDraftInput {
@@ -244,6 +248,7 @@ export class ContentsService {
     private readonly db: DbService,
     private readonly switches: SwitchesService,
     private readonly audit: AuditService,
+    private readonly confirmations: ConfirmationService,
   ) {}
 
   // ---------- 用户端 ----------
@@ -482,11 +487,32 @@ export class ContentsService {
    * 一键下线（已发布 → 已下线）：offline_switch=1 且状态立即变为已下线，
    * 用户端接口立即 404；返回引用定位信息（哪些分析引用了该内容）。
    */
-  takeOffline(operatorId: string, itemId: string, input: ReasonInput = {}): TakeOfflineResult {
+  takeOffline(
+    operatorId: string,
+    operator: AdminContext,
+    itemId: string,
+    input: ReasonInput & { confirmation_id?: string } = {},
+  ): TakeOfflineResult {
     const item = this.loadItem(itemId);
     const to = this.transition(item, 'takeOffline');
     const references = this.locateReferences(itemId);
     const reason = input.reason?.trim() || '一键下线';
+    // 双人确认：先发起确认单，另一名具备对应角色的账号确认后才真正下线
+    const gate = this.confirmations.prepare(
+      'content.offline',
+      itemId,
+      item.title,
+      input.confirmation_id ? reason : '批量下线：' + reason,
+      operator,
+      input.confirmation_id,
+    );
+    if (!gate.proceed) {
+      throw new ApiException(
+        ErrorCode.CONFLICT,
+        '已提交「一键下线」双人确认申请（需' + (gate.confirmation?.requirement ?? '另一人') + '确认后生效）',
+      );
+    }
+
     this.withTx(() => {
       this.setStatus(itemId, to, true);
       this.writeReview(itemId, operatorId, DECISION.offline, '一键下线', JSON.stringify({ reason, references }));
@@ -501,7 +527,8 @@ export class ContentsService {
     this.logger.log(
       `[contents] ${itemId} 一键下线（${item.current_status} → ${to}），引用分析 ${references.count} 条`,
     );
-    return { content: this.detailOf(this.loadItem(itemId)), references };
+    if (gate.confirmation) this.confirmations.markApplied(gate.confirmation.id);
+    return { content: this.detailOf(this.loadItem(itemId)), references, confirmation_id: gate.confirmation?.id ?? null };
   }
 
   /** 引用定位预览（下线前查看哪些分析引用了该内容；B04） */
@@ -574,20 +601,51 @@ export class ContentsService {
   }
 
   /** 批量下线（需双人确认；B03） */
-  batchTakeOffline(operatorId: string, ids: string[], reason: string) {
+  batchTakeOffline(
+    operatorId: string,
+    operator: AdminContext,
+    ids: string[],
+    reason: string,
+    confirmationId?: string,
+  ) {
     const results: { id: string; status: string; references: number }[] = [];
+    let claimed: string | null = confirmationId ?? null;
     for (const id of ids) {
-      const result = this.takeOffline(operatorId, id, { reason: reason || '批量下线' });
+      const result = this.takeOffline(operatorId, operator, id, {
+        reason: reason || '批量下线',
+        confirmation_id: claimed ?? undefined,
+      });
+      if (result.confirmation_id) claimed = result.confirmation_id;
       results.push({ id, status: result.content.current_status, references: result.references.count });
     }
     return { offline: results.length, items: results };
   }
 
   /** 发现严重问题：已发布 → 已撤回（同样立即对用户端不可见） */
-  withdraw(operatorId: string, itemId: string, input: ReasonInput = {}): ContentDetail {
+  withdraw(
+    operatorId: string,
+    operator: AdminContext,
+    itemId: string,
+    input: ReasonInput & { confirmation_id?: string } = {},
+  ): ContentDetail {
     const item = this.loadItem(itemId);
     const to = this.transition(item, 'withdraw');
     const reason = input.reason?.trim() || '发现严重问题';
+    const gate = this.confirmations.prepare(
+      'content.withdraw',
+      itemId,
+      item.title,
+      input.confirmation_id ? reason : '撤回内容：' + reason,
+      operator,
+      input.confirmation_id,
+    );
+    if (!gate.proceed) {
+      throw new ApiException(
+        ErrorCode.CONFLICT,
+        '已提交「内容撤回」双人确认申请（需' + (gate.confirmation?.requirement ?? '另一人') + '确认后生效）',
+      );
+    }
+
     this.withTx(() => {
       this.setStatus(itemId, to, true);
       this.writeReview(itemId, operatorId, DECISION.withdraw, '严重问题', reason);

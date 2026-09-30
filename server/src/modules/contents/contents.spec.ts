@@ -18,6 +18,9 @@ import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { ContentsController } from './contents.controller';
 import { ContentsService } from './contents.service';
+import { ConfirmationService } from '../admin/confirmation.service';
+import { AdminContext } from '../admin/admin-auth.service';
+import { permissionsOf } from '../admin/admin.constants';
 
 interface ListItem {
   id: string;
@@ -58,6 +61,7 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
   let auth: AuthService;
   let db: DbService;
   let contents: ContentsService;
+  let confirmations: ConfirmationService;
   let switches: SwitchesService;
   let dir: string;
   let token: string;
@@ -73,6 +77,7 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
         AuthService,
         ContentsService,
         SwitchesService,
+        ConfirmationService,
         AuditService,
         SchemaService,
         { provide: APP_GUARD, useClass: AuthGuard },
@@ -87,6 +92,7 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
     auth = app.get(AuthService);
     db = app.get(DbService);
     contents = app.get(ContentsService);
+    confirmations = app.get(ConfirmationService);
     switches = app.get(SwitchesService);
 
     // 演示用户（13800001234）已同意「健康信息处理」，种子数据含病程 / 报告 / 一页分析
@@ -100,6 +106,32 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+/** 后台账号上下文（双人确认需要角色与权限） */
+  function adminCtx(name: string): AdminContext {
+    const row = db.app
+      .prepare(
+        `SELECT u.id, u.name, r.name AS role_name FROM admin_user u JOIN role r ON r.id = u.role_id WHERE u.name = ?`,
+      )
+      .get(name) as { id: string; name: string; role_name: string };
+    return {
+      id: row.id,
+      name: row.name,
+      role: { id: '', name: row.role_name },
+      permissions: permissionsOf(row.role_name),
+    };
+  }
+
+  /** 双人确认：第一次调用只发起确认单（抛 40900），另一人确认后再次调用才真正执行 */
+  function withDualControl<T>(
+    requester: string,
+    confirmer: string,
+    run: (admin: AdminContext, confirmationId?: string) => T,
+  ): T {
+    expect(() => run(adminCtx(requester))).toThrow(/双人确认/);
+    const pending = confirmations.list('待确认')[0];
+    expect(pending).toBeTruthy();
+    return run(adminCtx(confirmer), pending.id);
+  }
   const api = () => request(app.getHttpServer());
   const H = (t = token) => ({ Authorization: `Bearer ${t}` });
   const adminId = (name: string): string =>
@@ -287,9 +319,7 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
     expect(caught(() => contents.reject(adminId('clinician01'), draft.id, { comment: 'x' })).message).toBe(
       '当前状态为草稿，不能退回修改',
     );
-    expect(caught(() => contents.takeOffline(adminId('tech01'), draft.id)).message).toBe(
-      '当前状态为草稿，不能一键下线',
-    );
+    expect(caught(() => contents.takeOffline(adminId('tech01'), adminCtx('clinician01'), draft.id))).toBeTruthy();
 
     // 待医学审核不能直接发布
     contents.submitForReview(adminId('editor01'), draft.id, {});
@@ -372,7 +402,9 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
     // 下线前用户端可见
     expect((await detailOf(target.id)).current_version).toBeTruthy();
 
-    const result = contents.takeOffline(adminId('tech01'), target.id, { reason: '演示一键下线' });
+    const result = withDualControl('clinician01', 'super01', (admin, cid) =>
+      contents.takeOffline(admin.id, admin, target.id, { reason: '演示一键下线', confirmation_id: cid }),
+    );
     expect(result.content.current_status).toBe('已下线');
     expect(result.content.offline).toBe(true);
 
@@ -440,7 +472,9 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
     contents.submitForReview(adminId('editor01'), draft.id, {});
     contents.approve(adminId('clinician01'), draft.id, {});
     contents.publish(adminId('tech01'), draft.id);
-    const withdrawn = contents.withdraw(adminId('clinician01'), draft.id, { reason: '发现严重问题' });
+    const withdrawn = withDualControl('clinician01', 'super01', (admin, cid) =>
+      contents.withdraw(admin.id, admin, draft.id, { reason: '发现严重问题', confirmation_id: cid }),
+    );
     expect(withdrawn.current_status).toBe('已撤回');
     expect((await api().get(`/contents/${draft.id}`).set(H())).body.code).toBe(40400);
     expect(contents.markCorrecting(adminId('editor01'), draft.id, {}).current_status).toBe('更正中');
@@ -450,7 +484,9 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
     contents.submitForReview(adminId('editor01'), draft2.id, {});
     contents.approve(adminId('clinician01'), draft2.id, {});
     contents.publish(adminId('tech01'), draft2.id);
-    const offline = contents.takeOffline(adminId('tech01'), draft2.id, {});
+    const offline = withDualControl('clinician01', 'super01', (admin, cid) =>
+      contents.takeOffline(admin.id, admin, draft2.id, { confirmation_id: cid }),
+    );
     expect(offline.content.current_status).toBe('已下线');
     expect(offline.content.offline).toBe(true);
     expect(contents.markCorrecting(adminId('editor01'), draft2.id, {}).current_status).toBe('更正中');

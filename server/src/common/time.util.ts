@@ -1,3 +1,4 @@
+import { ApiException, ErrorCode } from './api-error';
 /** 时间工具：存储与传输用 UTC ISO8601，界面按北京时间（UTC+8）显示 */
 export function beijingNow(): Date {
   return new Date();
@@ -19,13 +20,19 @@ export function todayBeijing(): string {
 export function normalizeInstant(input: string | Date): string {
   if (input instanceof Date) return input.toISOString();
   const s = String(input).trim();
+  if (!s) {
+    throw new ApiException(ErrorCode.BAD_REQUEST, '时间不能为空');
+  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    // 按北京时间当天 00:00 存储
-    return new Date(`${s}T00:00:00.000+08:00`).toISOString();
+    const d = new Date(`${s}T00:00:00.000+08:00`);
+    if (Number.isNaN(d.getTime())) {
+      throw new ApiException(ErrorCode.BAD_REQUEST, '日期格式应为 YYYY-MM-DD');
+    }
+    return d.toISOString();
   }
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) {
-    throw new Error(`时间格式不正确: ${s}`);
+    throw new ApiException(ErrorCode.BAD_REQUEST, '时间格式应为 UTC ISO8601（如 2026-09-01T08:00:00.000Z）');
   }
   return d.toISOString();
 }

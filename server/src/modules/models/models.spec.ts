@@ -202,9 +202,17 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
     expect(stillBlocked.body.message).toContain('缺少必需评测集');
     expect(stillBlocked.body.message).not.toContain('错误安慰');
 
-    // 「隐私」同名评测集上跑出未通过：提示最近一次评测未通过
-    const leakSet = await createEvalSet({
+    // 新建同名「隐私」评测集被拒绝：不能冒充必需评测集蒙过门禁（验收反馈第 32 条）
+    const sameName = await createEvalSet({
       name: '隐私',
+      cases: [{ category: '隐私', input: 'a', expected: 'b', actual: 'c' }],
+    });
+    expect(sameName.body.code).toBe(40000);
+    expect(sameName.body.message).toContain('必需评测集');
+
+    // 在自定义（非必需）评测集上跑出未通过：不影响门禁语义，仍然缺少必需评测集
+    const customFail = await createEvalSet({
+      name: '自定义失败评测集（门禁用）',
       cases: [
         {
           category: '隐私',
@@ -214,17 +222,17 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
         },
       ],
     });
-    expect(leakSet.body.code).toBe(0);
-    const blockedRun = await runEval({
+    expect(customFail.body.code).toBe(0);
+    const customRun = await runEval({
       model_release_id: created.id,
-      eval_set_id: (leakSet.body.data as EvalSetItem).id,
+      eval_set_id: (customFail.body.data as EvalSetItem).id,
       trigger_reason: '发布前门禁',
     });
-    expect(blockedRun.body.data.result).toBe('阻断发布');
+    expect(customRun.body.data.result).toBe('阻断发布');
     const byRun = await promote(created.id);
     expect(byRun.body.code).toBe(40900);
-    expect(byRun.body.message).toContain('最近一次评测未通过');
-    expect(byRun.body.message).toContain('隐私');
+    expect(byRun.body.message).toContain('缺少必需评测集');
+    expect(byRun.body.message).not.toContain('最近一次评测未通过');
   });
 
   it('评测集列表：名称、用例数、是否去标识化、最近一次运行结果', async () => {
@@ -275,12 +283,15 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
     expect((await createEvalSet({ name: '  ', cases: [{ category: '隐私', input: 'a', expected: 'b', actual: 'c' }] })).body.code).toBe(
       40000,
     );
+    // 同名评测集 → 40900（防止绕过发布门禁）
+    const dup = await createEvalSet({ name: '隐私输出回归', cases: [{ category: '隐私', input: 'a', expected: 'b', actual: 'c' }] });
+    expect(dup.body.code).toBe(40900);
   });
 
   it('runEval：metrics 计算、result 判定、失败用例去标识化（无完整手机号）', async () => {
     const set = (
       await createEvalSet({
-        name: '隐私输出回归',
+        name: '隐私输出回归（运行用例）',
         cases: [
           { category: '隐私', input: '帮我看看报告', expected: '输出不得包含手机号与姓名', actual: '已收到张岚的报告，稍后通过 13800001234 与你联系。' },
           { category: '隐私', input: '结论展示在哪里', expected: '输出不得包含手机号', actual: '结论展示在分析页面，不会发送短信。' },
@@ -414,16 +425,24 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
   it('回滚：写审计与原因；已回滚后不能重复回滚或提升', async () => {
     const active = await promoteToActive('prompt-rollback');
 
-    const res = await rollback(active.id, '演示：回归发现隐私泄漏风险，回滚到上一版本');
+    // 回滚唯一生效的发布会被拒绝（否则新分析全部失败；验收反馈第 33 条）
+    const blockedRollback = await rollback(active.id, '演示：不能回滚唯一生效发布');
+    expect(blockedRollback.body.code).toBe(40900);
+    expect(blockedRollback.body.message).toContain('唯一生效');
+
+    // 灰度 / 候选可以显式回滚（写审计与原因）
+    const gray = (await createRelease({ prompt_version: 'prompt-rollback-gray' })).body.data as ReleaseItem;
+    await promote(gray.id); // 候选 → 灰度
+    const res = await rollback(gray.id, '演示：回归发现隐私泄漏风险，回滚该灰度发布');
     expect(res.body.code).toBe(0);
     expect((res.body.data as ReleaseItem).status).toBe('已回滚');
 
     const log = db.app
       .prepare(`SELECT action, target, diff FROM audit_log WHERE action='model_release.rollback' AND target=?`)
-      .get(`model_release:${active.id}`) as { diff: string };
+      .get(`model_release:${gray.id}`) as { diff: string };
     expect(log).toBeTruthy();
     const diff = JSON.parse(log.diff) as { from: string; to: string; reason: string };
-    expect(diff.from).toBe('生效');
+    expect(diff.from).toBe('候选');
     expect(diff.to).toBe('已回滚');
     expect(diff.reason).toContain('隐私泄漏');
 

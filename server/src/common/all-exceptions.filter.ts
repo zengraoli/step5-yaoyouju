@@ -122,7 +122,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let data: unknown = null;
 
     if (exception instanceof HttpException) {
-      status = exception.getStatus();
+      // body-parser 的 JSON 解析错误（SyntaxError with status 400）统一转成中文
+      const raw = exception as unknown as { status?: number; type?: string; message?: string };
+      if (raw && raw.type === 'entity.parse.failed') {
+        status = HttpStatus.BAD_REQUEST;
+        code = ErrorCode.BAD_REQUEST;
+        message = '请求内容不是合法的 JSON，请检查后重试';
+        res.status(status).json({ code, data: null, message });
+        return;
+      }
+      if (raw && raw.type === 'entity.too.large') {
+        status = HttpStatus.PAYLOAD_TOO_LARGE;
+        code = ErrorCode.BAD_REQUEST;
+        message = '内容过长，请分段提交';
+        res.status(status).json({ code, data: null, message });
+        return;
+      }      status = exception.getStatus();
       const def = DEFAULTS[status];
       if (def) {
         code = def.code;

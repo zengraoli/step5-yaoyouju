@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DbModule } from '../../db/db.module';
+import { ConfirmationModule } from '../admin/confirmation.module';
 import { SwitchesModule } from '../switches/switches.module';
 import { ContentsService } from './contents.service';
 import { ContentsController } from './contents.controller';
@@ -12,7 +13,7 @@ import { AdminContentsController } from './admin-contents.controller';
  * 状态流转方法设计为可被后台（B03 / B04，T31-T39）复用。
  */
 @Module({
-  imports: [DbModule, SwitchesModule],
+  imports: [DbModule, SwitchesModule, ConfirmationModule],
   controllers: [ContentsController, AdminContentsController],
   providers: [ContentsService],
 })
