@@ -17,6 +17,8 @@ import { ConsentGuard } from '../../common/consent.guard';
 import { hashAdminPassword } from '../../common/password';
 import { AdminAuthService } from '../admin/admin-auth.service';
 import { PermissionGuard } from '../admin/permission.guard';
+import { ConfirmationModule } from '../admin/confirmation.module';
+import { ConfirmationService } from '../admin/confirmation.service';
 import { ResponseInterceptor } from '../../common/response.interceptor';
 import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { ModelsController } from './models.controller';
@@ -33,6 +35,8 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
   let db: DbService;
   let dir: string;
   let token: string;
+  let superToken: string;
+  let confirmations: ConfirmationService;
   /** 运行时生成的后台演示口令（覆盖种子哈希，避免在代码中出现明文） */
   const adminPassword = randomUUID();
   const adminTotp = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
@@ -42,7 +46,7 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
     process.env.DB_DIR = dir;
     process.env.ADMIN_TOTP_DEMO_CODE = adminTotp;
     const moduleRef = await Test.createTestingModule({
-      imports: [DbModule],
+      imports: [DbModule, ConfirmationModule],
       controllers: [ModelsController, EvalController],
       providers: [
         AuditService,
@@ -69,6 +73,8 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
     // T14 起 /admin 走后台账号体系：技术角色（model.manage / eval.manage）作为后台操作者
     db.app.prepare('UPDATE admin_user SET password_hash = ?').run(hashAdminPassword(adminPassword));
     token = app.get(AdminAuthService).login('tech01', adminPassword, adminTotp).token;
+    superToken = app.get(AdminAuthService).login('super01', adminPassword, adminTotp).token;
+    confirmations = app.get(ConfirmationService);
   });
 
   afterAll(async () => {
@@ -77,7 +83,7 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
   });
 
   const api = () => request(app.getHttpServer());
-  const H = () => ({ Authorization: `Bearer ${token}` });
+  const H = (t = token) => ({ Authorization: `Bearer ${t}` });
 
   const listReleases = async () =>
     (await api().get('/admin/models').set(H())).body.data as ReleaseItem[];
@@ -100,10 +106,32 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
   const runEval = (body: Record<string, unknown>) =>
     api().post('/admin/eval/runs').set(H()).send(body);
 
-  const promote = (id: string) => api().post(`/admin/models/${id}/promote`).set(H()).send();
+  const promote = (id: string, confirmationId?: string, t?: string) =>
+    api()
+      .post(`/admin/models/${id}/promote`)
+      .set(H(t))
+      .send(confirmationId ? { confirmation_id: confirmationId } : {});
 
-  const rollback = (id: string, reason: string) =>
-    api().post(`/admin/models/${id}/rollback`).set(H()).send({ reason });
+  const rollback = (id: string, reason: string, confirmationId?: string, t?: string) =>
+    api()
+      .post(`/admin/models/${id}/rollback`)
+      .set(H(t))
+      .send({ reason, ...(confirmationId ? { confirmation_id: confirmationId } : {}) });
+
+  /** 双人确认：tech01 发起，super01 确认后生效 */
+  const dualConfirmed = async (
+    action: string,
+    run: (confirmationId?: string, token?: string) => Promise<request.Response>,
+  ): Promise<Record<string, unknown>> => {
+    const first = await run();
+    expect(first.body.code).toBe(40900);
+    expect(first.body.message).toContain('双人确认');
+
+    const pending = confirmations.list('待确认').find((c) => c.action.includes(action));
+    const second = await run(pending!.id, superToken); // 另一名超级管理员确认
+    expect(second.body.code).toBe(0);
+    return second.body.data as Record<string, unknown>;
+  };
 
   /** 种子数据中的必需评测集 id（按名称） */
   const requiredSetId = (name: string) =>
@@ -122,13 +150,11 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
       expect(res.body.code).toBe(0);
       expect(res.body.data.result).toBe('通过');
     }
-    const canary = await promote(created.id);
-    expect(canary.body.code).toBe(0);
-    expect((canary.body.data as ReleaseItem).status).toBe('灰度');
-    const active = await promote(created.id);
-    expect(active.body.code).toBe(0);
-    expect((active.body.data as ReleaseItem).status).toBe('生效');
-    return active.body.data as ReleaseItem;
+    const canary = (await dualConfirmed('model.promote', (cid, t) => promote(created.id, cid, t))) as unknown as ReleaseItem;
+    expect(canary.status).toBe('灰度');
+    const active = (await dualConfirmed('model.promote', (cid, t) => promote(created.id, cid, t))) as unknown as ReleaseItem;
+    expect(active.status).toBe('生效');
+    return active;
   };
 
   it('发布组合表：模型名 / 提示词版本 / 检索策略 / 内容库版本 / 状态 / 创建时间 / 最近评测结果', async () => {
@@ -433,9 +459,10 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
     // 灰度 / 候选可以显式回滚（写审计与原因）
     const gray = (await createRelease({ prompt_version: 'prompt-rollback-gray' })).body.data as ReleaseItem;
     await promote(gray.id); // 候选 → 灰度
-    const res = await rollback(gray.id, '演示：回归发现隐私泄漏风险，回滚该灰度发布');
-    expect(res.body.code).toBe(0);
-    expect((res.body.data as ReleaseItem).status).toBe('已回滚');
+    const rolled = await dualConfirmed('model.rollback', (cid, t) =>
+      rollback(gray.id, '演示：回归发现隐私泄漏风险，回滚该灰度发布', cid, t),
+    );
+    expect(rolled.status).toBe('已回滚');
 
     const log = db.app
       .prepare(`SELECT action, target, diff FROM audit_log WHERE action='model_release.rollback' AND target=?`)

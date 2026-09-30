@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DbModule } from '../../db/db.module';
+import { ConfirmationModule } from './confirmation.module';
 import { SwitchesModule } from '../switches/switches.module';
 import { AuditService } from '../../common/audit.service';
 import { AdminAuthService } from './admin-auth.service';
@@ -15,6 +16,7 @@ import { AdminAuditController } from './admin-audit.controller';
 import { AdminAuthorizationsController } from './admin-authorizations.controller';
 import { DualControlService } from './dual-control.service';
 import { AdminDualControlController } from './dual-control.controller';
+import { ConfirmationService } from './confirmation.service';
 
 /**
  * 后台管理与审计（/admin，T14）。
@@ -26,7 +28,7 @@ import { AdminDualControlController } from './dual-control.controller';
  */
 @Module({
   imports: [
-    SwitchesModule,DbModule],
+    SwitchesModule,DbModule,ConfirmationModule],
   controllers: [
     AdminCasesController,
     AdminUsersController,
@@ -39,7 +41,7 @@ import { AdminDualControlController } from './dual-control.controller';
     AdminDualControlController,
   ],
   providers: [
-    DashboardService,AdminAuthService, AdminAuditService, DualControlService, AuditService],
-  exports: [AdminAuthService],
+    DashboardService,AdminAuthService, AdminAuditService, DualControlService, AuditService, ConfirmationService],
+  exports: [AdminAuthService, ConfirmationService],
 })
 export class AdminModule {}

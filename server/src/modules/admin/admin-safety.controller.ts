@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put, Query } from '@nestjs/common';
+import { Body, ConflictException, Controller, Get, Param, Put, Query } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { RequirePermission } from '../admin/permission.decorator';
@@ -9,6 +9,7 @@ import { SwitchesService, SWITCH_KEYS } from '../switches/switches.service';
 import { HIGH_RISK_SWITCHES, hasPermission } from './admin.constants';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { RED_FLAG_RULES, OUT_OF_SCOPE_RULES, RULE_SET_VERSION } from '../safety/safety.rules';
+import { ConfirmationService } from './confirmation.service';
 
 class UpdateSwitchDto {
   @ApiProperty({ description: '是否开启' })
@@ -20,6 +21,11 @@ class UpdateSwitchDto {
   @IsString()
   @MaxLength(500)
   reason?: string;
+
+  @ApiProperty({ description: '双人确认单 ID（高危开关需另一人确认后带上才生效）', required: false })
+  @IsOptional()
+  @IsString()
+  confirmation_id?: string;
 }
 
 void IsIn;
@@ -31,6 +37,7 @@ export class AdminSafetyController {
   constructor(
     private readonly db: DbService,
     private readonly switches: SwitchesService,
+    private readonly confirmations: ConfirmationService,
   ) {}
 
   @ApiOperation({ summary: '安全事件列表（规则 / 严重度 / 时间筛选）' })
@@ -159,11 +166,24 @@ export class AdminSafetyController {
     @Body() dto: UpdateSwitchDto,
   ) {
     if (!SWITCH_KEYS.includes(key as (typeof SWITCH_KEYS)[number])) {
-      throw new (class extends Error {})(`开关名称必须是：${SWITCH_KEYS.join(' / ')}`);
+      throw new ApiException(ErrorCode.BAD_REQUEST, `开关名称必须是：${SWITCH_KEYS.join(' / ')}`);
     }
     // 高危开关（个性化分析）只允许技术负责人 / 超级管理变更（B10：临床审核仅非高危）
     if (HIGH_RISK_SWITCHES.includes(key) && !hasPermission(admin.permissions, 'switch.manage')) {
       throw new ApiException(ErrorCode.FORBIDDEN, '高危开关变更需要技术负责人或超级管理员');
+    }
+    // 高危开关必须双人确认（B10：技术负责人 + 临床审核 / 超级管理）
+    if (HIGH_RISK_SWITCHES.includes(key)) {
+      const note = `开关 ${key} → ${dto.enabled ? '开启' : '关闭'}：${dto.reason?.trim() || '后台变更'}`;
+      const gate = this.confirmations.prepare('switch.update', key, key, note, admin, dto.confirmation_id);
+      if (!gate.proceed) {
+        throw new ConflictException(
+          '已提交「高危开关变更」双人确认申请（需' + (gate.confirmation?.requirement ?? '另一人') + '确认后生效）',
+        );
+      }
+      const result = this.switches.setEnabled(key, dto.enabled, dto.reason?.trim() || '后台变更', admin.id);
+      if (gate.confirmation) this.confirmations.markApplied(gate.confirmation.id);
+      return result;
     }
     return this.switches.setEnabled(key, dto.enabled, dto.reason?.trim() || '后台变更', admin.id);
   }

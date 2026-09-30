@@ -30,6 +30,7 @@ import { AdminDualControlController } from './dual-control.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminAuditService, AuditLogItem, AuditExportRequest } from './admin-audit.service';
 import { DualControlService } from './dual-control.service';
+import { ConfirmationService } from './confirmation.service';
 import { PermissionGuard } from './permission.guard';
 
 /**
@@ -70,6 +71,7 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
         AdminAuthService,
         AdminAuditService,
         DualControlService,
+        ConfirmationService,
         AuthService,
         ModelReleasesService,
         EvalService,
@@ -386,17 +388,35 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     expect(before.body.code).toBe(0);
     expect((before.body.data as { enabled: boolean }).enabled).toBe(true); // 默认开启
 
-    const off = await api()
+    // 关闭双人确认设置本身也需要双人确认：一个人不能关掉双人确认（验收反馈第 10 条）
+    const alone = await api()
       .put('/admin/dual-control/settings')
       .set(H(tokens.compliance01))
-      .send({ enabled: false, reason: '测试：临时关闭双人确认' });
+      .send({ enabled: false, reason: '测试：一个人关闭双人确认' });
+    expect(alone.body.code).toBe(40900);
+    expect(alone.body.message).toContain('双人确认');
+
+    const confirmations = app.get(ConfirmationService);
+    const pending = confirmations.list('待确认')[0];
+    expect(pending.requested_by).toBe(adminIds.compliance01);
+    const off = await api()
+      .put('/admin/dual-control/settings')
+      .set(H(tokens.super01))
+      .send({ enabled: false, reason: '测试：临时关闭双人确认', confirmation_id: pending.id });
     expect(off.body.code).toBe(0);
     expect((off.body.data as { enabled: boolean }).enabled).toBe(false);
 
+    // 重新开启同样要走确认单：合规支持发起、超级管理员确认
+    const askAgain = await api()
+      .put('/admin/dual-control/settings')
+      .set(H(tokens.compliance01))
+      .send({ enabled: true, reason: '测试：恢复双人确认' });
+    expect(askAgain.body.code).toBe(40900);
+    const pending2 = confirmations.list('待确认')[0];
     const back = await api()
       .put('/admin/dual-control/settings')
       .set(H(tokens.super01))
-      .send({ enabled: true, reason: '测试：恢复双人确认' });
+      .send({ enabled: true, reason: '测试：恢复双人确认', confirmation_id: pending2.id });
     expect(back.body.code).toBe(0);
     expect((back.body.data as { enabled: boolean }).enabled).toBe(true);
 

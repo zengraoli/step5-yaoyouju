@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ConfirmationModule } from '../admin/confirmation.module';
 import { DbModule } from '../../db/db.module';
 import { AuditService } from '../../common/audit.service';
 import { ModelReleasesService } from './models.service';
@@ -13,7 +14,7 @@ import { EvalController } from './eval.controller';
  * - eval.service：评测集与运行记录、本地模拟评分器（eval-scorer）与发布门禁。
  */
 @Module({
-  imports: [DbModule],
+  imports: [DbModule, ConfirmationModule],
   controllers: [ModelsController, EvalController],
   providers: [AuditService, EvalService, ModelReleasesService],
   exports: [EvalService, ModelReleasesService],

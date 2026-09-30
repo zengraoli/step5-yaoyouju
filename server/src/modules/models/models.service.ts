@@ -165,6 +165,22 @@ export class ModelReleasesService {
     return this.toItem({ ...row, status: to });
   }
 
+  /** 是否是唯一生效的发布（回滚它会让新分析全部失败；控制器据此先拦下来） */
+  isLastActive(id: string): boolean {
+    const row = this.require(id);
+    if (row.status !== '生效') return false;
+    const others = this.db.app
+      .prepare(`SELECT id FROM model_release WHERE status='生效' AND id<>?`)
+      .all(id) as { id: string }[];
+    return others.length === 0;
+  }
+
+  /** 发布门禁状态（控制器在校验双人确认前先看门禁，避免无意义的确认单） */
+  gateStatusOf(id: string): GateStatus {
+    this.require(id);
+    return this.evalService.gateStatus(id);
+  }
+
   /** 回滚：灰度 / 生效 / 候选 → 已回滚（必须填写原因） */
   rollback(id: string, reason: string, actorId: string | null): ReleaseItem {
     const trimmed = (reason ?? '').trim();
