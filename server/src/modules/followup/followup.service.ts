@@ -253,6 +253,25 @@ export class FollowupService {
     };
   }
 
+  /**
+   * 用户主动加入复诊问题（问与解释 / 一页分析里一键加入）。
+   * 写入 followup_question 表，生成摘要时排在问题清单最前面。
+   */
+  addUserQuestion(userId: string, episodeId: string, question: string): { id: string } {
+    this.ownedEpisode(userId, episodeId);
+    const text = (question ?? '').trim();
+    if (!text) throw new ApiException(ErrorCode.BAD_REQUEST, '问题内容不能为空');
+    if (text.length > 500) throw new ApiException(ErrorCode.BAD_REQUEST, '问题过长（不超过 500 字）');
+    const id = randomUUID();
+    this.db.app
+      .prepare(
+        `INSERT INTO followup_question (id, episode_id, question, created_at) VALUES (?, ?, ?, ?)`,
+      )
+      .run(id, episodeId, text, new Date().toISOString());
+    this.logger.log(`[followup] 用户加入复诊问题 ${id.slice(0, 8)}…`);
+    return { id };
+  }
+
   /** 起病与时间：优先病程起病信息；缺失显示「尚未确认」，不默认阴性 */
   private buildOnset(ep: EpisodeRow, events: EventRow[]): FollowupItem[] {
     if (ep.onset_date) {
@@ -338,6 +357,21 @@ export class FollowupService {
   private buildQuestions(episodeId: string): FollowupItem[] {
     const items: FollowupItem[] = [];
     const seen = new Set<string>();
+    // 用户主动加入的问题（最优先）
+    const userQuestions = this.db.app
+      .prepare(
+        `SELECT question FROM followup_question WHERE episode_id = ? ORDER BY created_at ASC, rowid ASC`,
+      )
+      .all(episodeId) as { question: string }[];
+    for (const r of userQuestions) {
+      const q = r.question.trim();
+      if (q && !seen.has(q)) {
+        seen.add(q);
+        items.push({ text: q, source: '自述', from: '用户加入' });
+      }
+    }
+
+
 
     const qaRows = this.db.app
       .prepare(

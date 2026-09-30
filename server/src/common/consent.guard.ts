@@ -26,9 +26,16 @@ export class ConsentGuard implements CanActivate {
       throw new ApiException(ErrorCode.UNAUTHORIZED, '请先登录');
     }
     if (!this.auth.hasConsent(user.id, scope as ConsentScope)) {
+      // 撤回同意后：只读接口仍可查看（「已导出文件与病程只读仍可使用」），写接口一律拒绝；
+      // 从未同意过的用户连只读也不放行（健康信息处理的默认状态是不处理）。
+      const method = String(req.method ?? 'GET').toUpperCase();
+      if ((method === 'GET' || method === 'HEAD') && this.auth.everConsented(user.id, scope as ConsentScope)) {
+        req.user = { ...user, consent_revoked: true };
+        return true;
+      }
       throw new ApiException(
         ErrorCode.CONSENT_REQUIRED,
-        `需要先同意「${scope}」才能使用该功能，可在“我的-数据与授权”中单独同意`,
+        `已撤回「${scope}」，不能再继续写入；可在“我的-数据与授权”中重新同意`,
       );
     }
     return true;

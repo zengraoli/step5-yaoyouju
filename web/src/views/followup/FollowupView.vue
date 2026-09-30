@@ -18,6 +18,7 @@ import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
 import {
   correctFollowup,
   exportFollowup,
@@ -28,7 +29,7 @@ import {
   type FollowupSummaryView,
 } from '@/api/followup'
 import { listEpisodes } from '@/api/episodes'
-import { beijingDate } from '@/utils/date'
+import { beijingDateTime } from '@/utils/date'
 
 /** 本地存储键：问与解释加入的复诊问题 */
 const QUESTIONS_KEY = 'yyj_web_followup_questions'
@@ -78,9 +79,7 @@ async function init() {
   }
 }
 
-function toast(title: string) {
-  alert(title)
-}
+const toast = useToast()
 
 const sections = computed<FollowupSection[]>(() => summary.value?.content.sections ?? [])
 
@@ -108,7 +107,7 @@ function syncQuestions() {
 
 const generatedLabel = computed<string>(() => {
   const at = summary.value?.content.generated_at
-  return at ? beijingDate(at) : ''
+  return at ? beijingDateTime(at) : ''
 })
 
 /* ---------- 生成 / 纠正 ---------- */
@@ -119,7 +118,7 @@ async function onGenerate() {
   try {
     summary.value = await generateFollowup(episodeId.value)
     syncQuestions()
-    toast('已生成复诊交接摘要')
+    toast(summary.value?.content.corrected ? '已重新生成（新增记录已并入）' : '已生成复诊交接摘要')
   } catch (e) {
     toast(e instanceof Error ? e.message : '生成失败，请稍后重试')
   } finally {
@@ -176,8 +175,10 @@ function onRemoveQuestion(index: number) {
 async function onExportPdf() {
   if (!summary.value) return
   try {
-    const result = await exportFollowup(episodeId.value, summary.value.id, 'PDF')
-    toast(result.note || '请在打印对话框中选择“另存为 PDF”')
+    // 先标记导出记录，再调起浏览器打印（目标选择“另存为 PDF”）
+    await exportFollowup(episodeId.value, summary.value.id, 'PDF')
+    toast('已打开打印对话框，目标请选择“另存为 PDF”')
+    window.print()
   } catch (e) {
     toast(e instanceof Error ? e.message : '导出失败，请稍后重试')
   }
@@ -225,6 +226,7 @@ const printSections = computed(() => sections.value.filter((s) => s.key !== QUES
       </div>
       <div class="followup-page__actions">
         <AppButton type="primary" :disabled="!summary" @click="onExportPdf">导出 PDF</AppButton>
+        <AppButton v-if="summary" type="soft" :loading="generating" @click="onGenerate">重新生成</AppButton>
         <AppButton type="soft" @click="onPrint">打印</AppButton>
         <AppButton type="soft" :disabled="!summary" @click="onCopyText">复制文本</AppButton>
       </div>

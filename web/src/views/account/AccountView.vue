@@ -17,8 +17,23 @@ import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
-import { listConsents, me, revokeConsent, type ConsentItem, type MeResult } from '@/api/auth'
+import { useToast } from '@/composables/useToast'
+import {
+  cancelDelete,
+  confirmDelete,
+  exportMyData,
+  grantConsent,
+  listConsents,
+  logout,
+  me,
+  requestDelete,
+  revokeConsent,
+  type ConsentItem,
+  type DeletionStatus,
+  type MeResult,
+} from '@/api/auth'
 import { listMyFeedback, type FeedbackItem } from '@/api/feedback'
+import { beijingDateTime } from '@/utils/date'
 
 /** 左侧导航 */
 const NAV_ITEMS = [
@@ -61,28 +76,44 @@ async function load() {
   }
 }
 
-function toast(title: string) {
-  alert(title)
-}
+const toast = useToast()
 
 /* ---------- 派生数据 ---------- */
 
 const consentRows = computed(() => {
-  const rows: { scope: string; granted: boolean; granted_at: string; version: string; note?: string }[] = [
-    { scope: '用户协议与隐私政策（必需）', granted: true, granted_at: '2026-09-01 10:12', version: 'v1.0' },
-  ]
-  for (const c of consents.value) {
+  const rows: {
+    scope: string
+    granted: boolean
+    granted_at: string
+    version: string
+    note?: string
+    canGrant?: boolean
+  }[] = []
+  const scopes = ['健康信息处理', '分享', '产品改进']
+  for (const scope of scopes) {
+    const c = consents.value.find((x) => x.scope === scope)
+    if (!c) {
+      rows.push({
+        scope,
+        granted: false,
+        granted_at: '—',
+        version: 'v1.0',
+        note: scope === '健康信息处理' ? '单独同意，敏感个人信息' : '未开启',
+        canGrant: true,
+      })
+      continue
+    }
     rows.push({
       scope: c.scope,
       granted: c.granted,
-      granted_at: c.granted ? `${c.granted_at.slice(0, 10)} ${c.granted_at.slice(11, 16)}` : '—',
+      granted_at: c.granted ? beijingDateTime(c.granted_at) : '—',
       version: 'v1.0',
       note: c.scope === '健康信息处理' ? '单独同意，敏感个人信息' : undefined,
+      canGrant: true,
     })
   }
-  rows.push({ scope: '分享与案例投稿（二期）', granted: false, granted_at: '—', version: '—' })
-  rows.push({ scope: '产品改进用途', granted: false, granted_at: '—', version: 'v1.0' })
-  rows.push({ scope: '模型训练用途', granted: false, granted_at: '—', version: '—', note: '首版不提供' })
+  rows.push({ scope: '分享与案例投稿（二期）', granted: false, granted_at: '—', version: '—', note: '二期预留', canGrant: false })
+  rows.push({ scope: '模型训练用途', granted: false, granted_at: '—', version: '—', note: '首版不提供', canGrant: false })
   return rows
 })
 
@@ -103,18 +134,96 @@ async function onRevoke(scope: string) {
   }
 }
 
-function onRequestExport() {
-  toast('导出任务已创建（PDF / JSON），完成后可在站内查收')
+/** 导出我的数据：直接下载 JSON（演示实现，服务端不落文件） */
+const lastExport = ref<string | null>(null)
+const deleteStep = ref<'idle' | 'requested' | 'ready'>('idle')
+const deletePhone = ref('')
+const deleteCode = ref('123456')
+const deletion = ref<DeletionStatus | null>(null)
+
+async function onRequestExport() {
+  try {
+    const data = await exportMyData()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `yaoyouju-export-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    lastExport.value = new Date().toISOString()
+    toast('已生成导出文件（JSON），可粘贴给医生或自行保存')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '导出失败，请稍后重试')
+  }
 }
 
-function onDeleteAccount() {
-  toast('演示实现：删除任务已记录，稍后由合规人员处理')
+/** 重新同意（撤回后可以再次开启） */
+async function onGrant(scope: string) {
+  try {
+    await grantConsent(scope)
+    await load()
+    toast(`已重新同意「${scope}」`)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '同意失败，请稍后重试')
+  }
 }
 
-function onLogout() {
+/** 删除账户：验证码二次确认 → 24 小时冷静期 → 确认后硬删 */
+async function onDeleteAccount() {
+  if (deleteStep.value === 'idle') {
+    deleteStep.value = 'requested'
+    return
+  }
+  if (deleteStep.value === 'requested') {
+    try {
+      deletion.value = await requestDelete(deletePhone.value.trim(), deleteCode.value.trim())
+      deleteStep.value = 'ready'
+      toast('删除申请已提交，24 小时冷静期内可取消')
+      await load()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '提交删除申请失败')
+    }
+    return
+  }
+  try {
+    await confirmDelete(deletePhone.value.trim(), deleteCode.value.trim())
+    toast('账户与数据已删除')
+    auth.logout()
+    router.push('/login')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '删除失败，请确认冷静期是否结束')
+  }
+}
+
+async function onCancelDelete() {
+  try {
+    await cancelDelete()
+    deleteStep.value = 'idle'
+    deletion.value = null
+    toast('已取消删除申请')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '取消失败')
+  }
+}
+
+const exportMeta = computed<string>(() =>
+  lastExport.value ? `上次导出：${beijingDateTime(lastExport.value)}（本次会话）` : '还没有导出记录（导出后文件保存在本地）',
+)
+
+const versionInfo = computed<string>(() => 'Web v0.1.0 · 规则集 safety-rules-v2.0 · 内容库版本见分析页')
+
+/** 退出登录：先吊销服务端令牌，再清理本地登录态 */
+async function onLogout() {
+  try {
+    await logout()
+  } catch {
+    // 网络异常也允许本地退出
+  }
   auth.logout()
   router.push('/login')
 }
+
 </script>
 
 <template>
@@ -182,7 +291,9 @@ function onLogout() {
                     <button v-if="row.granted && row.scope !== '用户协议与隐私政策（必需）'" type="button" class="table__action" @click="onRevoke(row.scope)">
                       撤回
                     </button>
-                    <button v-else-if="!row.granted && row.version !== '—'" type="button" class="table__action" disabled>开启</button>
+                    <button v-else-if="!row.granted && row.canGrant" type="button" class="table__action" @click="onGrant(row.scope)">
+                      开启
+                    </button>
                     <span v-else class="table__na">—</span>
                   </td>
                 </tr>
@@ -202,17 +313,36 @@ function onLogout() {
               <div class="export-box">
                 <p class="export-box__title"><span aria-hidden="true">⬇</span> 导出我的全部数据</p>
                 <p class="export-box__desc">
-                  可读格式（PDF / JSON），包含病程、报告原文、分析版本与同意记录。完成后链接 24 小时有效。
+                  JSON 全文导出，包含病程、报告原文、分析版本、问答与同意记录。文件直接保存在本地，不上传到任何服务器。
                 </p>
-                <p class="export-box__meta">上次导出：2026-09-15 · 已过期</p>
-                <AppButton type="soft" @click="onRequestExport">申请导出</AppButton>
+                <p class="export-box__meta">{{ exportMeta }}</p>
+                <AppButton type="soft" @click="onRequestExport">导出我的数据（JSON）</AppButton>
               </div>
               <div class="delete-box">
                 <p class="delete-box__title"><span aria-hidden="true">🗑</span> 删除账户与数据</p>
                 <p class="delete-box__desc">
-                  验证码二次确认 → 24 小时冷静期（可取消）→ 删除任务覆盖病程、报告、分析、导出文件、缓存与派生摘要 → 30 天内备份轮换清除。
+                  验证码二次确认 → 24 小时冷静期（可取消）→ 删除后覆盖病程、报告、分析、问答与反馈 → 备份轮换清除。
                 </p>
-                <AppButton type="danger" @click="onDeleteAccount">删除账户</AppButton>
+                <template v-if="deleteStep !== 'idle'">
+                  <label class="delete-box__field">
+                    <span>手机号（与登录手机号一致）</span>
+                    <input v-model="deletePhone" type="text" maxlength="11" placeholder="11 位手机号" />
+                  </label>
+                  <label class="delete-box__field">
+                    <span>验证码（演示固定 123456）</span>
+                    <input v-model="deleteCode" type="text" maxlength="6" />
+                  </label>
+                </template>
+                <p v-if="deletion && deleteStep === 'ready'" class="delete-box__meta">
+                  冷静期至 {{ beijingDateTime(deletion.effective_at) }}（北京时间）后可确认删除；期间可以取消。
+                </p>
+                <div class="delete-box__actions">
+                  <AppButton v-if="deleteStep !== 'ready'" type="danger" @click="onDeleteAccount">
+                    {{ deleteStep === 'idle' ? '删除账户' : '提交删除申请' }}
+                  </AppButton>
+                  <AppButton v-else type="danger" @click="onDeleteAccount">确认删除（不可恢复）</AppButton>
+                  <AppButton v-if="deleteStep !== 'idle'" @click="onCancelDelete">取消删除</AppButton>
+                </div>
               </div>
             </div>
           </AppCard>
@@ -235,7 +365,7 @@ function onLogout() {
                     <StatusTag v-else status="self" :text="`帮助类型：${f.help_type ?? '—'}`" />
                   </td>
                   <td><StatusTag status="unconfirmed" :text="f.status" /></td>
-                  <td>{{ f.created_at.slice(0, 10) }}</td>
+                  <td>{{ beijingDateTime(f.created_at) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -251,7 +381,7 @@ function onLogout() {
               <li><strong>服务范围与不做的事</strong><span>不作诊断、不给手术判断、不调整药物、不生成严重程度总评。</span></li>
               <li><strong>紧急就医提示</strong><span>无需登录，网络异常时也可查看。</span></li>
               <li><strong>临床审定与来源说明</strong><span>谁审核了内容、依据是什么、如何举报错误。</span></li>
-              <li><strong>版本信息</strong><span>Web v0.1.0 · 分析模型 M-2609 · 内容库 2026-09</span></li>
+              <li><strong>版本信息</strong><span>{{ versionInfo }}</span></li>
             </ul>
           </AppCard>
         </template>

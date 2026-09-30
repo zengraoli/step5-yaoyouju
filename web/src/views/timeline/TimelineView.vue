@@ -15,6 +15,7 @@ import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
 import {
   addCareEvent,
   getEpisode,
@@ -100,9 +101,7 @@ async function load() {
   }
 }
 
-function toast(title: string) {
-  alert(title)
-}
+const toast = useToast()
 
 /* ---------- 派生数据 ---------- */
 
@@ -176,6 +175,16 @@ function eventTags(ev: CareEventView): { key: 'quote' | 'self' | 'confirmed' | '
   return tags
 }
 
+/** 保存后清空表单（不复用昨日答案） */
+function resetForm() {
+  sitIndex.value = -1
+  activityIndex.value = -1
+  legIndex.value = -1
+  worry.value = ''
+  changeIndex.value = -1
+  activities.value = []
+}
+
 /* ---------- 记录今天 ---------- */
 
 async function onSave(updateCurrent = false) {
@@ -185,7 +194,7 @@ async function onSave(updateCurrent = false) {
     const sit = sitIndex.value >= 0 ? SIT_OPTIONS[sitIndex.value].minutes : null
     const activity = activityIndex.value >= 0 ? ACTIVITY_OPTIONS[activityIndex.value].value : null
     const leg = legIndex.value >= 0 ? LEG_OPTIONS[legIndex.value] : null
-    await logToday(episode.value.id, {
+    const result = await logToday(episode.value.id, {
       sit_minutes: sit,
       planned_activity_done: activity,
       top_worry: worry.value.trim() || null,
@@ -203,6 +212,15 @@ async function onSave(updateCurrent = false) {
         occurred_at: new Date().toISOString(),
       })
     }
+    // 命中红旗时立刻提示就医（服务端在响应里附带 safety_notice）
+    const notice = (result as { safety_notice?: { headline: string; matched: { label: string }[] } } | null)?.safety_notice
+    if (notice) {
+      const labels = notice.matched.map((m) => m.label).join('、')
+      toast(notice.headline + '：' + labels)
+      router.push('/emergency?signals=' + encodeURIComponent(labels))
+      return
+    }
+    resetForm()
     toast('已保存今天的记录')
     if (updateCurrent) {
       router.push('/dashboard')
@@ -250,10 +268,11 @@ const router = useRouter()
             <div v-for="(bar, i) in chart" :key="i" class="chart__col">
               <div class="chart__track">
                 <div
+                  v-if="bar.minutes !== null"
                   class="chart__bar"
-                  :class="{ 'chart__bar--unconfirmed': bar.minutes === null }"
                   :style="{ height: barHeight(bar.minutes) }"
                 />
+                <div v-else class="chart__bar chart__bar--empty" :title="'该日没有记录（尚未确认）'" />
               </div>
               <span class="chart__date">{{ bar.date.slice(5).replace('-', '/') }}</span>
             </div>
@@ -484,10 +503,13 @@ const router = useRouter()
   align-items: flex-end;
   gap: var(--spacing-xs);
   height: 140px;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .chart__col {
-  flex: 1;
+  flex: 1 0 18px;
+  min-width: 18px;
   display: flex;
   flex-direction: column;
   align-items: center;

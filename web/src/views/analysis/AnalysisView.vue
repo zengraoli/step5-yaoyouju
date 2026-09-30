@@ -25,6 +25,7 @@ import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
 import { createAnalysis, getAnalysis, getLatestAnalysis, type AnalysisView } from '@/api/analyses'
 import { getStructured, createReport, type StructuredItem } from '@/api/reports'
 import { listEpisodes } from '@/api/episodes'
@@ -131,9 +132,7 @@ function stopPolling() {
   timer = undefined
 }
 
-function toast(title: string) {
-  alert(title)
-}
+const toast = useToast()
 
 /* ---------- 派生数据 ---------- */
 
@@ -362,7 +361,7 @@ async function onSaveReport() {
         <h1 class="analysis-page__title">一页分析</h1>
         <p class="analysis-page__meta">
           基于 {{ meta?.generated_at ? beijingDate(meta.generated_at) : '尚未确认' }} 的信息 ·
-          分析版本 v{{ analysis?.version ?? '—' }} · 模型 {{ meta?.model_release ?? '—' }} · 内容库 2026-09
+          分析版本 v{{ analysis?.version ?? '—' }} · 模型 {{ meta?.model_release ?? '—' }} · 内容库 {{ meta?.content_lib_version ?? '—' }}
         </p>
       </div>
       <div class="analysis-page__actions">

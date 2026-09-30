@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsArray, IsIn, IsOptional } from 'class-validator';
+import { IsArray, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { FollowupService } from './followup.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { RequireConsent } from '../../common/require-consent.decorator';
@@ -16,6 +16,13 @@ class CorrectFollowupDto {
   @IsOptional()
   @IsArray({ message: '摘要内容格式不正确：sections 应为固定六段的数组' })
   sections?: unknown[];
+}
+
+class AddQuestionDto {
+  @ApiProperty({ description: '要请医生确认的问题' })
+  @IsString()
+  @MaxLength(500)
+  question!: string;
 }
 
 class ExportFollowupDto {
@@ -62,6 +69,13 @@ export class FollowupController {
     return this.followup.correct(user.id, id, summaryId, dto);
   }
 
+/** 用户主动加入复诊问题（问与解释一键加入；写进问题清单） */
+@ApiOperation({ summary: '加入复诊问题（用户主动提出，进入摘要问题清单）' })
+@Post(':id/followup-questions')
+addQuestion(@CurrentUser() user: { id: string }, @Param('id') id: string, @Body() dto: AddQuestionDto) {
+  return this.followup.addUserQuestion(user.id, id, dto.question);
+}
+
   /** 导出：文本返回纯文本（带头部与水印脚注）；PDF / 图片由浏览器打印生成 */
   @ApiOperation({ summary: '导出复诊摘要（文本返回纯文本 + 水印脚注；PDF / 图片浏览器打印生成）' })
   @Post(':id/followup/:summaryId/export')
@@ -74,3 +88,4 @@ export class FollowupController {
     return this.followup.exportSummary(user.id, id, summaryId, dto.format);
   }
 }
+

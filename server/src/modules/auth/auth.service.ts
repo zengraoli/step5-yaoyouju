@@ -203,6 +203,14 @@ export class AuthService {
     return row.n > 0;
   }
 
+  /** 是否曾经同意过该范围（撤回后仍可只读查看历史数据） */
+  everConsented(userId: string, scope: ConsentScope): boolean {
+    const row = this.app
+      .prepare(`SELECT COUNT(*) AS n FROM consent WHERE user_id = ? AND scope = ?`)
+      .get(userId, scope) as { n: number };
+    return row.n > 0;
+  }
+
   /** 同意：可查、可撤回；重复同意不产生多条有效记录 */
   grantConsent(userId: string, scope: string) {
     this.assertScope(scope);

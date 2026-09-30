@@ -16,7 +16,7 @@
  * - GET /contents                   为你推荐
  * - POST /episodes/{id}/events      记录待确认项的回答
  */
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router'
 import { useRouter } from 'vue-router'
 import AppButton from '@/components/AppButton.vue'
@@ -24,6 +24,7 @@ import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
 import {
   addCareEvent,
   getEpisode,
@@ -57,7 +58,38 @@ onMounted(async () => {
     return
   }
   await load()
+  watchPendingTask()
 })
+
+onBeforeUnmount(() => {
+  if (pendingTimer) window.clearInterval(pendingTimer)
+})
+
+/** 有待完成的分析任务时轮询，完成后自动刷新当前情况 */
+function watchPendingTask(): void {
+  const taskId = sessionStorage.getItem(PENDING_TASK_KEY)
+  if (!taskId) return
+  if (pendingTimer) window.clearInterval(pendingTimer)
+  void (async () => {
+    const { getAnalysisTask } = await import('@/api/analyses')
+    pendingTimer = window.setInterval(async () => {
+      try {
+        const task = await getAnalysisTask(taskId)
+        if (task.status === 'completed') {
+          sessionStorage.removeItem(PENDING_TASK_KEY)
+          window.clearInterval(pendingTimer)
+          await load()
+        } else if (task.status === 'failed') {
+          sessionStorage.removeItem(PENDING_TASK_KEY)
+          window.clearInterval(pendingTimer)
+        }
+      } catch {
+        sessionStorage.removeItem(PENDING_TASK_KEY)
+        window.clearInterval(pendingTimer)
+      }
+    }, 2000)
+  })()
+}
 
 async function load() {
   loading.value = true
@@ -87,9 +119,7 @@ async function load() {
   }
 }
 
-function toast(title: string) {
-  alert(title)
-}
+const toast = useToast()
 
 /* ---------- 左栏：当前情况 ---------- */
 
@@ -117,8 +147,10 @@ const pendingQuestions = computed<{ key: string; title: string; options: string[
   if (answerOf('2.') === '尚未确认') {
     list.push({ key: 'leg', title: '今天有腿部麻木或无力吗？', options: ['有', '没有', '尚未确认'] })
   }
-  if (answerOf('3.') === '尚未确认') {
-    list.push({ key: 'side', title: '报告写“右侧”，你的描述是“左侧”，以你的症状为准？', options: ['左侧', '右侧', '都有 / 不确定'] })
+  // 侧别冲突只在真实存在冲突时提示（来源是核对页写回的冲突事件）
+  const sideConflict = latestSymptom.value?.raw_text?.match(/侧别[^左右]{0,4}([左右])/)?.[1]
+  if (answerOf('3.') === '尚未确认' && sideConflict) {
+    list.push({ key: 'side', title: `报告写“${sideConflict}侧”，你的描述是另一侧，以你的症状为准？`, options: ['左侧', '右侧', '都有 / 不确定'] })
   }
   if (answerOf('1.') === '尚未确认') {
     list.push({ key: 'change', title: '与上次相比，症状有变化吗？', options: ['加重', '差不多', '减轻', '尚未确认'] })
@@ -174,6 +206,11 @@ const intro = computed<string>(() => {
   return parts.join('；')
 })
 
+/** 待完成的分析任务 ID（sessionStorage；页面重新挂载后继续轮询） */
+const PENDING_TASK_KEY = 'yyj_web_pending_task'
+
+let pendingTimer = 0
+
 /** 生成一页分析（POST /analyses → 跳转一页分析页） */
 async function onGenerate() {
   if (!episode.value) return
@@ -181,6 +218,7 @@ async function onGenerate() {
     const { createAnalysis } = await import('@/api/analyses')
     const result = await createAnalysis({ episode_id: episode.value.id })
     if (result.status === 'queued') {
+      sessionStorage.setItem(PENDING_TASK_KEY, result.task_id)
       router.push(`/analysis?task_id=${encodeURIComponent(result.task_id)}`)
     } else {
       router.push('/analysis')
@@ -303,7 +341,7 @@ const headerMeta = computed<string>(() => {
                 <span class="recommend-card__title">{{ recommends[0].title }}</span>
                 <span class="recommend-card__meta">
                   <StatusTag status="reviewed" :text="`已审核 v${recommends[0].version ?? 1}`" />
-                  <span class="recommend-card__duration">2:10 · 字幕</span>
+                  <span class="recommend-card__duration">{{ recommends[0].duration ?? '' }}{{ recommends[0].duration ? ' · ' : '' }}字幕</span>
                 </span>
               </span>
             </div>
@@ -419,7 +457,10 @@ const headerMeta = computed<string>(() => {
     <AppCard v-else>
       <p class="dashboard__empty-title">还没有病程记录</p>
       <p class="dashboard__empty-desc">从当前关键变化确认开始，系统会按事件整理你的病程，保留来源与核实状态。</p>
-      <AppButton type="primary" @click="router.push('/dashboard')">刷新</AppButton>
+      <div class="dashboard__empty-actions">
+        <AppButton type="primary" @click="router.push('/onboarding')">开始建立病程</AppButton>
+        <AppButton @click="load()">刷新</AppButton>
+      </div>
     </AppCard>
   </div>
 
@@ -792,6 +833,22 @@ const headerMeta = computed<string>(() => {
 @media (max-width: 1100px) {
   .dashboard__grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* 窄屏（390 宽）：统计与快捷入口单列，表头改为纵向排列，避免横向溢出 */
+@media (max-width: 640px) {
+  .dashboard__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard__head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 </style>

@@ -16,6 +16,7 @@ import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
 import { getContentDetail, listContents, type ContentDetail, type ContentListItem, type ReviewRecordView } from '@/api/contents'
 import { beijingDate } from '@/utils/date'
 
@@ -58,9 +59,7 @@ async function load() {
   }
 }
 
-function toast(title: string) {
-  alert(title)
-}
+const toast = useToast()
 
 /* ---------- 派生数据 ---------- */
 

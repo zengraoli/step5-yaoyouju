@@ -39,6 +39,12 @@ class TestProtectedController {
     return { ok: true };
   }
 
+  @RequireConsent('健康信息处理')
+  @Post('write-like')
+  writeLike(@CurrentUser() user: { id: string }) {
+    return { ok: true, user_id: user.id };
+  }
+
   @Post('login-required')
   loginRequired() {
     return { ok: true };
@@ -149,10 +155,17 @@ describe('T03 登录与同意', () => {
     );
     expect(revokedConsent.granted).toBe(false);
 
-    const deniedAgain = await api()
+    // 撤回后：写接口立即拒绝；只读接口仍可查看历史数据（页面承诺「只读仍可使用」）
+    const readAfterRevoke = await api()
       .get('/test-protected/analysis-like')
       .set('Authorization', `Bearer ${freshToken}`);
-    expect(deniedAgain.body.code).toBe(40310);
+    expect(readAfterRevoke.body.code).toBe(0);
+
+    const writeAfterRevoke = await api()
+      .post('/test-protected/write-like')
+      .set('Authorization', `Bearer ${freshToken}`);
+    expect(writeAfterRevoke.body.code).toBe(40310);
+    expect(writeAfterRevoke.body.message).toContain('已撤回');
 
     // 原种子用户不受影响（已同意）
     const stillOk = await api()

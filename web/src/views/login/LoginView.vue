@@ -18,6 +18,7 @@ import AppInput from '@/components/AppInput.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import BrandLogo from '@/components/BrandLogo.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
 import { sendSmsCode } from '@/api/auth'
 
 /** 左侧三个价值项（文案按设计稿） */
@@ -44,9 +45,7 @@ let timer: number | undefined
 
 const codeActionText = computed(() => (countdown.value > 0 ? `${countdown.value} 秒后重试` : '获取验证码'))
 
-function toast(title: string) {
-  alert(title)
-}
+const toast = useToast()
 
 function startCountdown() {
   countdown.value = 60

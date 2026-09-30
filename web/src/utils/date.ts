@@ -31,3 +31,11 @@ export function weeksSince(iso: string): number {
   const weeks = Math.floor((Date.now() - start) / (7 * 24 * 3600 * 1000))
   return Math.max(1, weeks + 1)
 }
+
+/** UTC ISO8601 → 北京时间「YYYY-MM-DD HH:mm」（界面展示一律用北京时间） */
+export function beijingDateTime(iso?: string): string {
+  const time = iso ? new Date(iso).getTime() : Date.now()
+  if (Number.isNaN(time)) return ''
+  const d = new Date(time + 8 * 60 * 60 * 1000)
+  return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)}`
+}

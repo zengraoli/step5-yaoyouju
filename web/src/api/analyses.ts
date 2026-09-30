@@ -15,7 +15,15 @@ export interface AnalysisView {
     unknown: string[]
     next: { text: string; type: string }[]
     videos: { content_item_id: string; title: string; reason: string }[]
-    meta: { model_release: string; generated_at: string; version: number; disclaimer: string }
+    meta: {
+      model_release: string
+      model_release_id?: string
+      prompt_version?: string
+      content_lib_version?: string | null
+      generated_at: string
+      version: number
+      disclaimer: string
+    }
   }
   retrieval_snapshot: Record<string, unknown> | null
   disclaimer: string

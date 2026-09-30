@@ -16,6 +16,8 @@ export interface ContentListItem {
   /** 当前生效（已发布）版本号 */
   version: number | null
   published_at: string | null
+  /** 时长（mm:ss；服务端由字幕长度估算） */
+  duration: string | null
   /** 推荐理由（服务端生成，用户可见） */
   recommend_reason: string
 }

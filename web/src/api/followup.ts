@@ -92,3 +92,12 @@ export function exportFollowup(
     data: { format },
   })
 }
+
+/** 用户主动加入复诊问题（问与解释一键加入；进入摘要问题清单） */
+export function addFollowupQuestion(episodeId: string, question: string): Promise<{ id: string }> {
+  return request<{ id: string }>({
+    url: `/episodes/${encodeURIComponent(episodeId)}/followup-questions`,
+    method: 'POST',
+    data: { question },
+  })
+}

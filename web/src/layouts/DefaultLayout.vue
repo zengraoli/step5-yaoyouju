@@ -86,10 +86,11 @@ function onLogout() {
 .layout__header-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: var(--spacing-md) var(--spacing-xxl);
+  padding: var(--spacing-md) var(--spacing-md);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--spacing-xxl);
+  gap: var(--spacing-sm) var(--spacing-md);
 }
 
 .layout__brand {
@@ -99,8 +100,10 @@ function onLogout() {
 
 .layout__nav {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-xs);
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .layout__nav-item {
@@ -156,13 +159,14 @@ function onLogout() {
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
-  padding: var(--spacing-xxl);
+  padding: var(--spacing-lg) var(--spacing-md);
+  min-width: 0;
 }
 
 .layout__footer {
   border-top: 1px solid var(--color-border);
   background: var(--color-surface);
-  padding: var(--spacing-lg) var(--spacing-xxl);
+  padding: var(--spacing-md);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -175,3 +179,39 @@ function onLogout() {
   color: var(--color-error);
 }
 </style>
+
+
+/* 窄屏（390 宽）：导航可横向滚动，页边距收紧，避免横向溢出 */
+@media (max-width: 640px) {
+  .layout__header-inner {
+    padding: var(--spacing-sm) var(--spacing-md);
+    gap: var(--spacing-xs);
+  }
+
+  .layout__nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .layout__nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .layout__nav-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .layout__main {
+    padding: var(--spacing-md);
+  }
+
+  .layout__footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+}

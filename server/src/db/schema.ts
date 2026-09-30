@@ -393,6 +393,14 @@ CREATE TABLE IF NOT EXISTS qa_message (
   created_at       TEXT NOT NULL
 );
 
+-- 用户主动加入的复诊问题（问与解释一键加入；生成摘要时排在最前）
+CREATE TABLE IF NOT EXISTS followup_question (
+  id         TEXT PRIMARY KEY,
+  episode_id TEXT NOT NULL REFERENCES episode(id),
+  question   TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 -- 审计日志只追加：数据库层触发器（T14，见 AUDIT_LOG_TRIGGERS 定义）
 ${AUDIT_LOG_TRIGGERS}
 `;

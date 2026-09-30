@@ -133,6 +133,8 @@ export interface ContentListItem {
   version: number | null;
   published_at: string | null;
   recommend_reason: string;
+  /** 时长（mm:ss；由字幕长度估算，演示实现） */
+  duration: string | null;
 }
 
 export interface ContentVersionView {
@@ -175,6 +177,16 @@ export interface ContentDetail {
   versions: ContentVersionView[];
   review_records: ReviewRecordView[];
   disclaimer: string;
+}
+
+/** 由字幕文本估算视频时长（演示实现：约 4 字 / 秒） */
+function estimateDuration(subtitle?: string): string | null {
+  const text = (subtitle ?? '').replace(/s+/g, '');
+  if (!text) return null;
+  const seconds = Math.max(30, Math.round(text.length / 4));
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const ss = String(seconds % 60).padStart(2, '0');
+  return mm + ':' + ss;
 }
 
 /** 引用定位：哪些分析引用了该内容（analysis.sections.videos 的 content_item_id） */
@@ -285,6 +297,7 @@ export class ContentsService {
         not_applicable: row.not_applicable ?? '',
         version: current?.version ?? null,
         published_at: current?.published_at ?? null,
+        duration: estimateDuration(current?.subtitle_text ?? undefined),
         recommend_reason: this.recommendReason(row, keywords),
       });
     }

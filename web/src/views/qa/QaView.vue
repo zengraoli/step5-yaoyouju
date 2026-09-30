@@ -17,6 +17,7 @@ import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useToast } from '@/composables/useToast'
 import {
   askQuestion,
   createQaSession,
@@ -27,9 +28,9 @@ import {
   type QaSessionListItem,
 } from '@/api/qa'
 import { getStructured } from '@/api/reports'
-import { getLatestAnalysis } from '@/api/analyses'
 import { listEpisodes } from '@/api/episodes'
 import { beijingDate } from '@/utils/date'
+import { addFollowupQuestion } from '@/api/followup'
 
 /** 本地存储键：已加入复诊问题清单 */
 const QUESTIONS_KEY = 'yyj_web_followup_questions'
@@ -41,6 +42,8 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const sessionId = ref('')
+/** 当前会话关联的病程（加入复诊问题要用） */
+const episodeId = ref('')
 const messages = ref<QaMessageView[]>([])
 const history = ref<QaSessionListItem[]>([])
 const inputText = ref('')
@@ -59,9 +62,7 @@ onMounted(async () => {
   await init()
 })
 
-function toast(title: string) {
-  alert(title)
-}
+const toast = useToast()
 
 function readStoredQuestions(): string[] {
   try {
@@ -81,11 +82,13 @@ async function init() {
       sessionId.value = list[0].id
       const detail = await getQaSession(sessionId.value)
       messages.value = detail.messages
+      episodeId.value = detail.episode_id ?? ''
     } else {
       const episodes = await listEpisodes()
       const active = episodes.find((e) => e.status === '进行中') ?? episodes[0] ?? null
       const created = await createQaSession(active?.id)
       sessionId.value = created.id
+      episodeId.value = created.episode_id ?? ''
       messages.value = created.messages
     }
     await loadContext()
@@ -94,16 +97,16 @@ async function init() {
   }
 }
 
-/** 本轮上下文：当前情况日期 + 报告日期 + 主要困惑 + 腿部无力 */
+/** 用户在 A04 选择过的主要困惑（没有则不展示，不写死） */
+const CONFUSION_KEY = 'yaoyouju.confusion'
+
+/** 本轮上下文：当前情况日期 + 检查报告 + 主要困惑 + 腿部无力 */
 async function loadContext() {
   try {
     const episodes = await listEpisodes()
     const active = episodes.find((e) => e.status === '进行中') ?? episodes[0] ?? null
     if (!active) return
-    const [structured, analysis] = await Promise.all([
-      getStructured(active.id).catch(() => null),
-      getLatestAnalysis(active.id).catch(() => null),
-    ])
+    const [structured] = await Promise.all([getStructured(active.id).catch(() => null)])
     const rows: { label: string; value: string; tag: 'confirmed' | 'quote' | 'unconfirmed' }[] = []
     const symptom = structured?.items.find((i) => i.event_type === '症状')
     if (symptom) {
@@ -116,11 +119,14 @@ async function loadContext() {
       rows.push({ label: '腿部无力', value: leg || '尚未回答', tag: 'unconfirmed' })
     }
     const report = structured?.items.find((i) => i.report)
+    // 主要困惑只在用户真正选择过时展示（不再对所有用户显示同一句）
+    const confusion = localStorage.getItem(CONFUSION_KEY)
+    if (confusion) rows.push({ label: '主要困惑', value: confusion, tag: 'confirmed' })
+    const firstTerm = Array.isArray(report?.report?.extracted_terms)
+      ? ((report.report.extracted_terms[0] as { term?: string } | undefined)?.term as string | undefined)
+      : undefined
     if (report?.report?.report_date) {
-      rows.push({ label: '报告', value: `${report.report.report_date} 腰椎 MRI`, tag: 'quote' })
-    }
-    if (analysis) {
-      rows.push({ label: '主要困惑', value: '报告术语', tag: 'confirmed' })
+      rows.push({ label: '检查报告', value: `${report.report.report_date}${firstTerm ? ' · ' + firstTerm : ''}`, tag: 'quote' })
     }
     context.value = rows
   } catch {
@@ -177,14 +183,21 @@ async function onSend(text?: string) {
 }
 
 /** 一键加入复诊问题清单 */
-function onAddFollowup(question: string) {
+async function onAddFollowup(question: string) {
   if (!question || addedQuestions.value.includes(question)) {
     toast('该问题已在复诊问题清单中')
     return
   }
-  addedQuestions.value = [...addedQuestions.value, question]
-  localStorage.setItem(QUESTIONS_KEY, JSON.stringify(addedQuestions.value))
-  toast('已加入复诊问题清单')
+    // 同时写入服务端（复诊摘要从这里取问题），本地只做即时回显
+    try {
+      await addFollowupQuestion(episodeId.value, question)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '加入复诊问题失败')
+      return
+    }
+    addedQuestions.value = [...addedQuestions.value, question]
+    localStorage.setItem(QUESTIONS_KEY, JSON.stringify(addedQuestions.value))
+    toast('已加入复诊问题清单，重新生成摘要即可看到')
 }
 
 const answeredCount = computed(() => messages.value.filter((m) => m.role === 'assistant').length)

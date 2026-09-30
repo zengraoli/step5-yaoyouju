@@ -124,3 +124,14 @@ export function logToday(
     data: { ...input },
   })
 }
+
+export interface CreateEpisodeInput {
+  title: string
+  onset_date?: string
+  onset_certainty?: string
+}
+
+/** 建立病程（当前关键变化确认后创建；缺失不默认阴性） */
+export function createEpisode(input: CreateEpisodeInput): Promise<EpisodeDetail> {
+  return request<EpisodeDetail>({ url: '/episodes', method: 'POST', data: { ...input } })
+}
