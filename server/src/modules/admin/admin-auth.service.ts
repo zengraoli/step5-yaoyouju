@@ -198,14 +198,14 @@ export class AdminAuthService {
     return hashAdminPassword(password);
   }
 
-  /** 记录一次失败；达到阈值即锁定 15 分钟 */
+  /** 记录一次失败；达到阈值即锁定 30 分钟 */
   private recordFailure(account: string): void {
     const prev = this.attempts.get(account);
     const fails = (prev?.fails ?? 0) + 1;
     const lockedUntil = fails >= MAX_FAILED_ATTEMPTS ? Date.now() + LOCK_MS : (prev?.lockedUntil ?? 0);
     this.attempts.set(account, { fails, lockedUntil });
     if (lockedUntil > Date.now()) {
-      this.logger.warn(`[admin-auth] 账号 ${account} 连续失败 ${fails} 次，已锁定 15 分钟`);
+      this.logger.warn(`[admin-auth] 账号 ${account} 连续失败 ${fails} 次，已锁定 30 分钟`);
     }
   }
 

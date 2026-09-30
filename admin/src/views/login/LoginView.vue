@@ -61,7 +61,7 @@ async function onSubmit() {
     <div class="login-card">
       <div class="login-card__head">
         <h1 class="login-card__title">登录</h1>
-        <span class="login-card__env">生产环境</span>
+        <span class="login-card__env">演示环境</span>
       </div>
       <p class="login-card__desc">仅限受邀成员；不提供自助注册。登录需账号密码 + 动态验证码（MFA）。</p>
 

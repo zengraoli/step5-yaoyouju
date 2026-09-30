@@ -99,7 +99,7 @@ function onLogout() {
         </RouterLink>
       </nav>
       <div class="sidebar__foot">
-        <span class="sidebar__env">生产环境</span>
+        <span class="sidebar__env">演示环境</span>
         <span class="sidebar__note">后台与用户端分离</span>
       </div>
     </aside>
@@ -108,7 +108,7 @@ function onLogout() {
       <header class="topbar">
         <h1 class="topbar__title">{{ (route.meta.title as string) ?? '后台管理系统' }}</h1>
         <div class="topbar__right">
-          <span class="topbar__env">生产环境</span>
+          <span class="topbar__env">演示环境</span>
           <span class="topbar__admin">{{ auth.admin?.name ?? '' }}（{{ auth.role }}）</span>
           <button type="button" class="topbar__logout" @click="onLogout">退出</button>
         </div>
