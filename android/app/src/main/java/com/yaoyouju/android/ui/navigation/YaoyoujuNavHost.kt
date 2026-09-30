@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -41,16 +43,35 @@ private val BOTTOM_ROUTES = setOf(
 )
 
 @Composable
-fun YaoyoujuApp(deepLinkRoute: String? = null) {
+fun YaoyoujuApp(
+    deepLinkRoute: String? = null,
+    startDestination: String = Routes.HOME,
+) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    // 带参数的页面（如 analysis?taskId=…）也要能高亮对应的底部 Tab
+    val currentHierarchy: Set<String> = remember(currentRoute) {
+        val route = currentRoute ?: return@remember emptySet()
+        when {
+            route.startsWith(Routes.ANALYSIS) -> setOf(Routes.HOME)
+            route.startsWith(Routes.REPORT_DIFF) -> setOf(Routes.HOME)
+            route.startsWith(Routes.REPORT_INPUT) || route.startsWith(Routes.REPORT_VERIFY) -> setOf(Routes.HOME)
+            route.startsWith(Routes.CONTENTS) || route.startsWith(Routes.CONTENT_DETAIL) -> setOf(Routes.HOME)
+            route.startsWith(Routes.CONFUSION) -> setOf(Routes.HOME)
+            route.startsWith(Routes.TODAY) -> setOf(Routes.TIMELINE)
+            route.startsWith(Routes.FALLBACK) -> setOf(Routes.HOME)
+            route.startsWith(Routes.EMERGENCY) -> setOf(Routes.HOME)
+            else -> setOf(route)
+        }
+    }
 
     Scaffold(
         bottomBar = {
             if (currentRoute in BOTTOM_ROUTES) {
                 BottomNav(
                     currentRoute = currentRoute,
+                    selectedRoutes = currentHierarchy,
                     onSelect = { route ->
                         navController.navigate(route) {
                             popUpTo(Routes.HOME) { inclusive = route == Routes.HOME }
@@ -66,7 +87,7 @@ fun YaoyoujuApp(deepLinkRoute: String? = null) {
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            NavHost(navController = navController, startDestination = Routes.HOME) {
+            NavHost(navController = navController, startDestination = startDestination) {
                 composable(Routes.HOME) { HomeScreen(navController) }
                 composable(Routes.LOGIN) { LoginScreen(navController) }
                 composable(Routes.CHANGE) { ChangeScreen(navController) }
@@ -149,8 +170,14 @@ fun YaoyoujuApp(deepLinkRoute: String? = null) {
         }
     }
 
-    // deep link 打开对应页面（yaoyouju://A07）
-    deepLinkRoute?.let { route ->
-        navController.navigate(route) { launchSingleTop = true }
+    // deep link 打开对应页面（yaoyouju://A07）。
+    // 必须在图设置完成之后再跳转：组合期直接 navigate 会抛
+    // "Navigation graph has not been set for NavController"（验收反馈第 19 条）。
+    LaunchedEffect(deepLinkRoute) {
+        val target = deepLinkRoute ?: return@LaunchedEffect
+        val exists = runCatching { navController.getBackStackEntry(target) }.isSuccess
+        if (exists) {
+            navController.navigate(target) { launchSingleTop = true }
+        }
     }
 }

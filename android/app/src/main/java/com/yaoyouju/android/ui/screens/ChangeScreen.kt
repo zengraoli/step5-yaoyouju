@@ -80,7 +80,7 @@ fun ChangeScreen(navController: NavHostController) {
     val sideOptions = listOf("左侧", "右侧", "双侧", "尚未确认")
     var side by remember { mutableStateOf<String?>(null) }
     // 第 4 题：大约开始时间（单选）
-    val onsetOptions = listOf("记不清", "约1周内", "约1个月内", "超过3个月")
+    val onsetOptions = listOf("约1周内", "约1个月内", "约3个月内", "更久 / 说不清", "尚未确认")
     var onset by remember { mutableStateOf<String?>(null) }
 
     var submitting by remember { mutableStateOf(false) }
@@ -103,6 +103,23 @@ fun ChangeScreen(navController: NavHostController) {
     )
     val redFlagNone = "none"
     val redFlagUnsure = "unsure"
+
+    /** 第 4 题选项 → 起病日期（YYYY-MM-DD；「尚未确认」返回空） */
+    fun onsetDateOf(option: String?): String? {
+        if (option.isNullOrBlank() || option == "尚未确认") return null
+        val days = when (option) {
+            "一周内" -> 7
+            "1-4 周" -> 14
+            "约1个月内" -> 30
+            "1-3 个月" -> 60
+            "更久 / 说不清" -> null
+            else -> null
+        } ?: return null
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -days)
+        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        return fmt.format(cal.time)
+    }
 
     fun hasHighSeverity(): Boolean =
         redFlagOptions.any { redFlags.contains(it.key) && it.severity == "high" }
@@ -134,7 +151,7 @@ fun ChangeScreen(navController: NavHostController) {
                         episodesApi.create(
                             mapOf(
                                 "title" to "我的腰痛病程",
-                                "start_date" to (onset ?: "尚未确认"),
+                                "onset_date" to (onsetDateOf(onset)),
                             ),
                         ),
                     )
@@ -206,6 +223,17 @@ fun ChangeScreen(navController: NavHostController) {
             Text(text = "第 1/4 步", fontSize = 12.sp, color = Text3)
         }
 
+        // 顶部说明常驻（设计稿 A02）：不随问题滚动
+        Text(
+            text = "接下来四个低负担问题，帮助我们理解你的情况。没有回答的问题会记录为「尚未确认」，不会默认阴性或无。",
+            fontSize = 13.sp,
+            color = Text2,
+            lineHeight = 20.sp,
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .padding(top = 12.dp),
+        )
+
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -213,12 +241,6 @@ fun ChangeScreen(navController: NavHostController) {
                 .padding(horizontal = 20.dp),
         ) {
             Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "接下来四个低负担问题，帮助我们理解你的情况。没有回答的问题会记录为「尚未确认」，不会默认阴性或无。",
-                fontSize = 13.sp,
-                color = Text2,
-                lineHeight = 20.sp,
-            )
 
             // 第 1 题
             Spacer(modifier = Modifier.height(24.dp))
@@ -337,27 +359,28 @@ fun ChangeScreen(navController: NavHostController) {
 
 /** 单选芯片行（自绘，保证长文案可换行） */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 private fun ChipRow(
     options: List<String>,
     selected: String?,
     onSelect: (String) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { option ->
-                    AppChip(
-                        text = option,
-                        selected = selected == option,
-                        onClick = { onSelect(option) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
-            }
+    // 芯片组用 FlowRow：长文案自动换行，不会被屏幕左右边裁掉（设计稿 A02）
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { option ->
+            AppChip(
+                text = option,
+                selected = selected == option,
+                skip = option == "尚未确认",
+                onClick = { onSelect(option) },
+            )
         }
     }
 }
+
 
 /** 题目标题 */
 @Composable

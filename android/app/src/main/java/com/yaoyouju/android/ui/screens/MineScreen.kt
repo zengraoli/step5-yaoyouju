@@ -19,6 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +37,7 @@ import com.yaoyouju.android.core.net.AuthApi
 import com.yaoyouju.android.core.net.ConsentItem
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.SafetyApi
+import com.yaoyouju.android.core.net.TokenProvider
 import com.yaoyouju.android.core.net.handleResponse
 import com.yaoyouju.android.data.ServiceLocator
 import com.yaoyouju.android.ui.components.AppButton
@@ -56,6 +59,7 @@ import com.yaoyouju.android.ui.theme.Surface
 import com.yaoyouju.android.ui.theme.Text1
 import com.yaoyouju.android.ui.theme.Text2
 import com.yaoyouju.android.ui.theme.Text3
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -75,6 +79,7 @@ fun MineScreen(navController: NavHostController) {
     val safetyApi: SafetyApi = NetworkModule.api()
     val authRepository = ServiceLocator.authRepository
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var loading by remember { mutableStateOf(true) }
     var loggedIn by remember { mutableStateOf(false) }
@@ -83,20 +88,20 @@ fun MineScreen(navController: NavHostController) {
     var toastText by remember { mutableStateOf("") }
 
     /** 版本信息（按设计稿） */
-    val versionInfo = "App v0.1.0 · 分析模型 M-2609 · 内容库 2026-09"
+    val versionInfo = "App v0.1.0 · 安全规则集 safety-rules-v2.0"
 
     fun load() {
         loading = true
         scope.launch {
             try {
-                val token = ServiceLocator.tokenStore.token
-                var tokenValue = ""
-                token.collect { tokenValue = it }
+                val tokenValue = ServiceLocator.tokenStore.token.first()
                 if (tokenValue.isBlank()) {
                     loggedIn = false
+                    loading = false
                     return@launch
                 }
                 loggedIn = true
+                TokenProvider.token = tokenValue
                 val me = handleResponse(authApi.me())
                 phoneMasked = me.phoneMasked
                 consents = handleResponse(authApi.consents())
@@ -243,19 +248,100 @@ fun MineScreen(navController: NavHostController) {
                     // 数据操作
                     Text(text = "数据", fontSize = 15.sp, color = Text1)
                     Spacer(modifier = Modifier.height(10.dp))
+                    var deleteStep by remember { mutableStateOf(0) }
+                    var deletePhone by remember { mutableStateOf("") }
+                    val demoCode = "123456"
+
                     AppButton(
-                        text = "导出我的数据",
+                        text = "导出我的数据（JSON）",
                         type = AppButtonType.Secondary,
                         block = true,
-                        onClick = { toastText = "导出任务已提交，完成后可在通知中查看" },
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val json = authRepository.exportData()
+                                    // 演示实现：导出内容写到应用缓存目录，用户在通知里看到路径
+                                    val file = java.io.File(
+                                        context.cacheDir,
+                                        "yaoyouju-export-" + System.currentTimeMillis() + ".json",
+                                    )
+                                    file.writeText(json)
+                                    toastText = "已导出到 " + file.name
+                                } catch (e: Exception) {
+                                    toastText = e.message ?: "导出失败，请稍后重试"
+                                }
+                            }
+                        },
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    if (deleteStep > 0) {
+                        AppNotice(
+                            type = NoticeType.Warn,
+                            text = when (deleteStep) {
+                                1 -> "请输入注册手机号（演示验证码 $demoCode），提交后进入 24 小时冷静期。"
+                                else -> "冷静期内可以取消；到期后才能确认删除。"
+                            },
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                     AppButton(
-                        text = "删除我的数据",
+                        text = when (deleteStep) {
+                            0 -> "删除我的数据"
+                            1 -> "提交删除申请"
+                            else -> "确认删除（不可恢复）"
+                        },
                         type = AppButtonType.Danger,
                         block = true,
-                        onClick = { toastText = "删除需要二次确认，演示环境未开放" },
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    when (deleteStep) {
+                                        0 -> deleteStep = 1
+                                        1 -> {
+                                            authRepository.requestDelete(deletePhone, demoCode)
+                                            deleteStep = 2
+                                            toastText = "删除申请已提交，24 小时冷静期内可取消"
+                                        }
+                                        else -> {
+                                            authRepository.confirmDelete(deletePhone, demoCode)
+                                            authRepository.logout()
+                                            loggedIn = false
+                                            toastText = "账户与数据已删除"
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    toastText = e.message ?: "操作失败，请稍后重试"
+                                }
+                            }
+                        },
                     )
+                    if (deleteStep > 0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        AppButton(
+                            text = "取消删除申请",
+                            type = AppButtonType.Secondary,
+                            block = true,
+                            onClick = {
+                                scope.launch {
+                                    try {
+                                        authRepository.cancelDelete()
+                                        deleteStep = 0
+                                        toastText = "已取消删除申请"
+                                    } catch (e: Exception) {
+                                        toastText = e.message ?: "取消失败"
+                                    }
+                                }
+                            },
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = deletePhone,
+                            onValueChange = { deletePhone = it },
+                            label = { Text("手机号") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 

@@ -1,6 +1,7 @@
 package com.yaoyouju.android.core.net
 
 import kotlinx.serialization.json.Json
+import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -31,11 +32,22 @@ object NetworkModule {
         }
     }
 
+    /** 统一注入登录令牌（验收反馈第 18 条：请求必须带 Authorization） */
+    private val authInterceptor = Interceptor { chain ->
+        val original = chain.request()
+        val builder = original.newBuilder()
+        if (original.header("Authorization") == null) {
+            TokenProvider.bearer()?.let { builder.header("Authorization", it) }
+        }
+        chain.proceed(builder.build())
+    }
+
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(authInterceptor)
             .addInterceptor(logging)
             .build()
     }

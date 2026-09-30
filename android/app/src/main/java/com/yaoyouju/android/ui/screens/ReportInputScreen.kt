@@ -81,6 +81,8 @@ fun ReportInputScreen(navController: NavHostController) {
     var reportDate by remember { mutableStateOf("") }
     val examTypes = listOf("MRI", "CT", "X 光", "超声", "其他")
     var examType by remember { mutableStateOf(examTypes[0]) }
+    /** 检查机构（可选；写入报告原文来源行） */
+    var institution by remember { mutableStateOf("") }
     var doctorAdvice by remember { mutableStateOf("") }
 
     var submitting by remember { mutableStateOf(false) }
@@ -101,13 +103,20 @@ fun ReportInputScreen(navController: NavHostController) {
                 }
                 val id = episodeId ?: return@launch
                 if (tab == tabs[0] && reportText.isNotBlank()) {
+                    // 检查类型与机构写进事件原文（服务端按原文保存并抽取术语）
+                    val head = buildString {
+                        append(reportDate)
+                        append(" ")
+                        append(examType)
+                        if (institution.isNotBlank()) append(" · ").append(institution.trim())
+                        append("\n")
+                    }
                     handleResponse(
                         reportsApi.create(
                             mapOf(
                                 "episode_id" to id,
-                                "raw_text" to reportText,
+                                "raw_text" to head + reportText,
                                 "report_date" to reportDate,
-                                "exam_type" to examType,
                             ),
                         ),
                     )
@@ -223,6 +232,17 @@ Column(
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(text = "检查机构（可选）", fontSize = 13.sp, color = Text2)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = institution,
+                        onValueChange = { institution = it },
+                        placeholder = { Text("例如：市第一医院", fontSize = 12.sp) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
 
                     Spacer(modifier = Modifier.height(16.dp))
 

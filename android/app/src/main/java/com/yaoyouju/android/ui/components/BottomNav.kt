@@ -38,6 +38,7 @@ fun BottomNav(
     currentRoute: String?,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    selectedRoutes: Set<String?> = emptySet(),
 ) {
     val tabs = listOf(
         TabVisual(Routes.HOME, "当前情况", Icons.Filled.Home),
@@ -56,7 +57,7 @@ fun BottomNav(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         tabs.forEach { tab ->
-            val selected = currentRoute == tab.route
+            val selected = currentRoute == tab.route || selectedRoutes.contains(tab.route)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier

@@ -10,6 +10,7 @@ import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.SafetyApi
 import com.yaoyouju.android.core.net.SwitchesApi
 import com.yaoyouju.android.core.net.SwitchState
+import com.yaoyouju.android.core.net.TokenProvider
 import com.yaoyouju.android.core.net.handleResponse
 import kotlinx.coroutines.flow.Flow
 
@@ -30,9 +31,42 @@ class AuthRepository(
 
     suspend fun login(phone: String, code: String): LoginResult {
         val result = handleResponse(api.login(mapOf("phone" to phone, "code" to code)))
+        TokenProvider.token = result.token
         tokenStore.saveToken(result.token)
         return result
     }
+
+    /** 用本地保存的令牌恢复登录态（冷启动） */
+    fun restoreToken(saved: String) {
+        TokenProvider.token = saved
+    }
+
+    /** 退出登录：先吊销服务端令牌，再清理本地（旧令牌立即失效） */
+    suspend fun logout() {
+        try {
+            handleResponse(api.logout())
+        } catch (_: Exception) {
+            // 网络异常也允许本地退出
+        }
+        TokenProvider.token = ""
+        tokenStore.clear()
+    }
+
+    /** 导出我的数据（JSON 全文） */
+    suspend fun exportData(): String =
+        NetworkModule.json.encodeToString(
+            kotlinx.serialization.json.JsonElement.serializer(),
+            handleResponse(api.exportData()),
+        )
+
+    /** 申请删除账户（验证码二次确认 → 24 小时冷静期） */
+    suspend fun requestDelete(phone: String, code: String) = handleResponse(api.requestDelete(mapOf("phone" to phone, "code" to code)))
+
+    /** 确认删除（冷静期后生效） */
+    suspend fun confirmDelete(phone: String, code: String) = handleResponse(api.confirmDelete(mapOf("phone" to phone, "code" to code)))
+
+    /** 取消删除申请 */
+    suspend fun cancelDelete() = handleResponse(api.cancelDelete())
 
     suspend fun me() = handleResponse(api.me())
 
@@ -46,9 +80,6 @@ class AuthRepository(
     suspend fun revokeConsent(scope: String): List<ConsentItem> =
         handleResponse(api.revokeConsent(scope))
 
-    suspend fun logout() {
-        tokenStore.clear()
-    }
 }
 
 /** 就医提示（公开接口，无需登录） */

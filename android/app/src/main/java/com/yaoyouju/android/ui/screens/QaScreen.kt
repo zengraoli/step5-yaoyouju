@@ -166,6 +166,20 @@ fun QaScreen(navController: NavHostController) {
                 val detail = handleResponse(qaApi.session(result.sessionId))
                 messages = detail.messages
             } catch (e: Exception) {
+                val api = e as? com.yaoyouju.android.core.net.ApiException
+                if (api != null && (api.code == 40910 || api.code == 40911)) {
+                    // 命中红旗：直接进入就医提示页（不被会话流程阻断，也不撤回用户消息）
+                    val labels = api.data
+                        ?.let { runCatching { org.json.JSONObject(it).getJSONArray("matched") }.getOrNull() }
+                        ?.let { arr -> (0 until arr.length()).map { arr.getJSONObject(it).getString("label") } }
+                        ?.joinToString(",")
+                        ?: ""
+                    navController.navigate(
+                        Routes.EMERGENCY + "?signals=" + labels +
+                            "&stop=" + (if (api.code == 40911) "1" else "0"),
+                    )
+                    return@launch
+                }
                 toastText = e.message ?: "提问失败，请稍后重试"
                 // 回滚乐观更新
                 messages = messages.filterNot { it.id.startsWith("local-") }

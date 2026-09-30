@@ -130,8 +130,23 @@ fun AnalysisScreen(
                 loading = false
             }
         } else {
-            errorText = "缺少分析任务信息，请从核对信息页重新生成"
-            loading = false
+            // 没有带任务 / 分析 ID：直接加载该病程最新一页分析（从首页 / 病程 / 困惑页进入）
+            try {
+                val episodes = handleResponse(episodesApi.list())
+                val active = episodes.firstOrNull()?.id
+                if (active != null) {
+                    analysis = handleResponse(analysesApi.latestByEpisode(active))
+                    if (analysis == null) {
+                        errorText = "还没有一页分析，请从核对信息页生成"
+                    }
+                } else {
+                    errorText = "还没有病程记录"
+                }
+            } catch (e: Exception) {
+                errorText = e.message ?: "分析加载失败"
+            } finally {
+                loading = false
+            }
         }
     }
 

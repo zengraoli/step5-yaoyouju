@@ -2,10 +2,21 @@ package com.yaoyouju.android
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
+import com.yaoyouju.android.data.ServiceLocator
+import com.yaoyouju.android.ui.navigation.Routes
+import com.yaoyouju.android.ui.theme.Surface
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.mutableStateOf
 import com.yaoyouju.android.core.deepLink.DeepLinks
+import com.yaoyouju.android.core.net.TokenProvider
 import com.yaoyouju.android.ui.navigation.YaoyoujuApp
 import com.yaoyouju.android.ui.theme.YaoyoujuTheme
 
@@ -16,13 +27,30 @@ import com.yaoyouju.android.ui.theme.YaoyoujuTheme
 class MainActivity : ComponentActivity() {
 
     private val deepLinkRoute = mutableStateOf<String?>(null)
+    /** 本地令牌（null = 尚未读取；空串 = 未登录） */
+    private val savedToken = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
+        // 启动时读取本地令牌：未登录直接进登录页（验收反馈第 17 条）
+        lifecycleScope.launch {
+            val token = ServiceLocator.tokenStore.token.first()
+            ServiceLocator.authRepository.restoreToken(token)
+            savedToken.value = token
+        }
         setContent {
             YaoyoujuTheme {
-                YaoyoujuApp(deepLinkRoute = deepLinkRoute.value)
+                val token = savedToken.value
+                if (token == null) {
+                    // 读取中：留白，避免未登录用户看到首页数据
+                    Box(modifier = Modifier.fillMaxSize().background(Surface))
+                } else {
+                    YaoyoujuApp(
+                        deepLinkRoute = deepLinkRoute.value,
+                        startDestination = if (token.isBlank()) Routes.LOGIN else Routes.HOME,
+                    )
+                }
             }
         }
     }

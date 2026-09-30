@@ -118,6 +118,10 @@ interface AnalysesApi {
 
     @GET("analyses/task/{taskId}")
     suspend fun task(@Path("taskId") taskId: String): Response<ApiResponse<AnalysisTaskView>>
+
+    /** 某病程最新一页分析（没有则返回 null） */
+    @GET("analyses/by-episode/{episodeId}")
+    suspend fun latestByEpisode(@Path("episodeId") episodeId: String): Response<ApiResponse<AnalysisView?>>
 }
 
 @kotlinx.serialization.Serializable

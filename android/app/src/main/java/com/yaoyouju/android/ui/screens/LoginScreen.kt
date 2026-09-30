@@ -73,14 +73,12 @@ fun LoginScreen(navController: NavHostController) {
     var toastText by remember { mutableStateOf("") }
     var action by remember { mutableStateOf("idle") }
 
-    // 已登录用户直接进首页
-    LaunchedEffect(Unit) {
-        auth.token.collect { value ->
-            if (value.isNotBlank()) {
-                navController.navigate(Routes.HOME) {
-                    popUpTo(Routes.HOME) { inclusive = true }
-                    launchSingleTop = true
-                }
+    // 登录成功后进首页（含同意授予）
+    LaunchedEffect(action) {
+        if (action == "logged_in") {
+            navController.navigate(Routes.HOME) {
+                popUpTo(Routes.HOME) { inclusive = true }
+                launchSingleTop = true
             }
         }
     }
@@ -126,10 +124,12 @@ fun LoginScreen(navController: NavHostController) {
                 } catch (e: Exception) {
                     toastText = "已登录，但健康信息处理同意未提交，部分功能暂不可用"
                 }
+                action = "logged_in"
             } catch (e: Exception) {
                 toastText = e.message ?: "登录失败，请稍后重试"
-            } finally {
                 action = "idle"
+            } finally {
+                if (action == "logging") action = "idle"
             }
         }
     }

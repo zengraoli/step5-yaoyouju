@@ -1,5 +1,6 @@
 package com.yaoyouju.android.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,9 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +82,8 @@ fun EmergencyScreen(
     stop: Boolean = false,
 ) {
     val safetyApi: SafetyApi = NetworkModule.api()
+    val context = LocalContext.current
+    var toastText by remember { mutableStateOf("") }
 
     var notice by remember { mutableStateOf<EmergencyNotice?>(null) }
     var offline by remember { mutableStateOf(false) }
@@ -224,7 +230,24 @@ fun EmergencyScreen(
                             else -> AppButtonType.Secondary
                         },
                         block = true,
-                        onClick = { /* 演示：拨打 / 查找 / 联系均跳系统能力 */ },
+                        onClick = {
+                            when (action.type) {
+                                "call" -> runCatching {
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:120")),
+                                    )
+                                }
+                                "hospital" -> runCatching {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode("医院")),
+                                        ),
+                                    )
+                                }
+                                "doctor" -> toastText = "演示环境：主治医生联系方式需在「我的」中保存"
+                            }
+                        },
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                 }
@@ -290,6 +313,12 @@ fun EmergencyScreen(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
+                if (toastText.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(text = toastText, fontSize = 12.sp, color = Text2)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
                 // 脚注
                 Text(
                     text = data.footerNote,

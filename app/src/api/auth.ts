@@ -62,3 +62,36 @@ export function grantConsent(scope: string): Promise<ConsentItem[]> {
 export function revokeConsent(scope: string): Promise<ConsentItem[]> {
   return request({ url: `/auth/consents/${encodeURIComponent(scope)}/revoke`, method: 'POST' })
 }
+
+/** 退出登录（吊销服务端令牌；旧令牌立即失效） */
+export function logout(): Promise<{ ok: true }> {
+  return request({ url: '/auth/logout', method: 'POST' })
+}
+
+/** 导出我的数据（JSON 全文） */
+export function exportMyData(): Promise<unknown> {
+  return request({ url: '/auth/export' })
+}
+
+export interface DeletionStatus {
+  status: string
+  requested_at: string
+  effective_at: string
+  executed_at: string | null
+  can_confirm: boolean
+}
+
+/** 申请删除账户（验证码二次确认 → 24 小时冷静期） */
+export function requestDelete(phone: string, code: string): Promise<DeletionStatus> {
+  return request({ url: '/auth/delete-request', method: 'POST', data: { phone, code } })
+}
+
+/** 冷静期结束后确认删除（硬删全部数据） */
+export function confirmDelete(phone: string, code: string): Promise<{ deleted: boolean; removed: Record<string, number> }> {
+  return request({ url: '/auth/delete-confirm', method: 'POST', data: { phone, code } })
+}
+
+/** 取消删除申请 */
+export function cancelDelete(): Promise<{ cancelled: boolean }> {
+  return request({ url: '/auth/delete-cancel', method: 'POST' })
+}

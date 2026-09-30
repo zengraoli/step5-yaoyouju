@@ -5,6 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -72,6 +74,7 @@ import kotlinx.coroutines.launch
  * - POST /episodes/{id}/followup/{summaryId}/export  导出（文本 / PDF / 图片）
  */
 @Composable
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 fun FollowupScreen(navController: NavHostController) {
     val followupApi: FollowupApi2 = NetworkModule.api()
     val episodesApi: EpisodesApi = NetworkModule.api()
@@ -165,7 +168,7 @@ fun FollowupScreen(navController: NavHostController) {
             .fillMaxSize()
             .background(Surface),
     ) {
-        // 顶栏
+        // 顶栏（复诊准备是底部 Tab，不显示返回箭头）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -173,15 +176,6 @@ fun FollowupScreen(navController: NavHostController) {
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Filled.ArrowBack,
-                contentDescription = "返回",
-                tint = Text1,
-                modifier = Modifier
-                    .size(28.dp)
-                    .clickable { navController.popBackStack() },
-            )
-            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = "复诊摘要",
                 fontSize = 17.sp,
@@ -359,12 +353,13 @@ fun FollowupScreen(navController: NavHostController) {
             }
         }
 
-        // 底部操作区
-        Row(
+        // 底部操作区（窄屏可换行：三个导出按钮不会因文字过长而折行挤压）
+        FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             AppButton(
                 text = "导出文本",

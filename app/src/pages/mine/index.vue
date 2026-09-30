@@ -17,11 +17,21 @@ import AppNotice from '../../components/AppNotice.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import TabBar from '../../components/TabBar.vue'
 import { useAuthStore } from '../../stores/auth'
-import { listConsents, me, revokeConsent, type ConsentItem } from '../../api/auth'
+import {
+  cancelDelete,
+  confirmDelete,
+  exportMyData,
+  listConsents,
+  me,
+  requestDelete,
+  revokeConsent,
+  type ConsentItem,
+  type DeletionStatus,
+} from '../../api/auth'
 import { getStatusBarHeight } from '../../utils/system'
 
 /** 版本信息（按设计稿） */
-const VERSION_INFO = 'App v0.1.0 · 分析模型 M-2609 · 内容库 2026-09'
+const VERSION_INFO = 'App v0.1.0 · 规则集 safety-rules-v2.0 · 版本号见分析页'
 
 const auth = useAuthStore()
 const statusBarHeight = ref(0)
@@ -104,20 +114,104 @@ async function onRevokeHealth() {
   })
 }
 
+/** 删除账户：验证码二次确认 → 24 小时冷静期 → 确认后硬删 */
+const deleteStep = ref<'idle' | 'requested' | 'ready'>('idle')
+const deletePhone = ref('')
+const deleteCode = ref('123456')
+const deletion = ref<DeletionStatus | null>(null)
+
 function onExportData() {
-  uni.showToast({ title: '导出任务已创建，完成后可在站内查收（演示）', icon: 'none' })
+  uni.showModal({
+    title: '导出我的全部数据',
+    content: '导出为 JSON 文件（包含病程、报告原文、分析版本、问答与同意记录），保存在本地，不上传服务器。',
+    confirmText: '导出',
+    success: async (res) => {
+      if (!res.confirm) return
+      try {
+        const data = await exportMyData()
+        const text = JSON.stringify(data, null, 2)
+        // #ifdef H5
+        const blob = new Blob([text], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `yaoyouju-export-${new Date().toISOString().slice(0, 10)}.json`
+        link.click()
+        URL.revokeObjectURL(url)
+        // #endif
+        toast('已生成导出文件（JSON）')
+      } catch (e) {
+        toast(e instanceof Error ? e.message : '导出失败，请稍后重试')
+      }
+    },
+  })
 }
 
 function onDeleteAccount() {
+  if (deleteStep.value === 'idle') {
+    uni.showModal({
+      title: '删除账户与数据',
+      content: '需要验证码二次确认，之后进入 24 小时冷静期（可取消）。删除会覆盖病程、报告、分析、问答与反馈。',
+      confirmText: '继续',
+      confirmColor: '#D93B3B',
+      success: () => {
+        deleteStep.value = 'requested'
+      },
+    })
+    return
+  }
+  if (deleteStep.value === 'requested') {
+    uni.showModal({
+      title: '填写删除信息',
+      content: '演示环境验证码固定 123456',
+      editable: true,
+      placeholderText: '请输入 11 位手机号',
+      success: async (res) => {
+        if (!res.confirm) {
+          deleteStep.value = 'idle'
+          return
+        }
+        deletePhone.value = (res.content || '').trim()
+        try {
+          deletion.value = await requestDelete(deletePhone.value, deleteCode.value)
+          deleteStep.value = 'ready'
+          toast('删除申请已提交，24 小时冷静期内可取消')
+          await load()
+        } catch (e) {
+          toast(e instanceof Error ? e.message : '提交删除申请失败')
+        }
+      },
+    })
+    return
+  }
   uni.showModal({
-    title: '删除账户与数据',
-    content: '删除会覆盖公开卡片、搜索索引、向量、缓存与派生摘要；依法需要保留的信息按政策管理，不承诺瞬时全网删除。',
+    title: '确认删除',
+    content: '确认后不可恢复，将清除全部个人数据。',
     confirmText: '删除',
     confirmColor: '#D93B3B',
-    success: (res) => {
-      if (res.confirm) toast('演示实现：删除任务已记录，稍后由合规人员处理')
+    success: async (res) => {
+      if (!res.confirm) return
+      try {
+        await confirmDelete(deletePhone.value, deleteCode.value)
+        toast('账户与数据已删除')
+        auth.logout()
+        uni.reLaunch({ url: '/pages/login/login' })
+      } catch (e) {
+        toast(e instanceof Error ? e.message : '删除失败，请确认冷静期是否结束')
+      }
     },
   })
+}
+
+async function doCancelDelete() {
+  try {
+    await cancelDelete()
+    deleteStep.value = 'idle'
+    deletion.value = null
+    toast('已取消删除申请')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '取消失败')
+  }
 }
 
 function onCaseSubmission() {
@@ -218,6 +312,14 @@ function onSettings() {
           <view class="row__body">
             <text class="row__title">导出我的全部数据</text>
             <text class="row__desc">可读格式（PDF / JSON），包含病程、报告原文与分析版本</text>
+          </view>
+          <AppIcon name="arrow-right" :size="16" />
+        </view>
+
+        <view v-if="deleteStep !== 'idle'" class="row" hover-class="row--hover" :hover-stay-time="80" @click="doCancelDelete">
+          <view class="row__body">
+            <text class="row__title">取消删除申请</text>
+            <text class="row__desc">冷静期内可以撤销，删除不会执行</text>
           </view>
           <AppIcon name="arrow-right" :size="16" />
         </view>

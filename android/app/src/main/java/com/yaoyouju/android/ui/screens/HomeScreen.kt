@@ -144,7 +144,7 @@ fun HomeScreen(navController: NavHostController) {
                 .verticalScroll(rememberScrollState()),
         ) {
             // 自定义顶栏
-            HomeTopBar()
+            HomeTopBar(navController)
 
             if (loading) {
                 Box(
@@ -270,7 +270,7 @@ fun HomeScreen(navController: NavHostController) {
 
 /** 顶栏：标题 + 病程摘要 + 通知/头像 */
 @Composable
-private fun HomeTopBar() {
+private fun HomeTopBar(navController: NavHostController) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -288,10 +288,22 @@ private fun HomeTopBar() {
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(PrimaryLight),
+                .background(PrimaryLight)
+                .clickable { navController.navigate(Routes.MINE) },
             contentAlignment = Alignment.Center,
         ) {
             Text(text = "我", fontSize = 14.sp, color = Primary)
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Surface)
+                .clickable { navController.navigate(Routes.FEEDBACK) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(text = "铃", fontSize = 14.sp, color = Text2)
         }
     }
 }
