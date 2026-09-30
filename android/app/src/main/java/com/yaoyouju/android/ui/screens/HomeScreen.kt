@@ -219,6 +219,15 @@ fun HomeScreen(navController: NavHostController) {
                         onFollowup = { navController.navigate(Routes.FOLLOWUP) },
                     )
 
+                    // 选择主要困惑（A04）：按需调整解释方式
+                    Spacer(modifier = Modifier.height(16.dp))
+                    AppButton(
+                        text = "选择主要困惑，调整解释方式",
+                        type = AppButtonType.Soft,
+                        block = true,
+                        onClick = { navController.navigate(Routes.CONFUSION) },
+                    )
+
                     // 记录今天入口（今天未记录时显示）
                     if (todayRecorded == false) {
                         Spacer(modifier = Modifier.height(16.dp))
