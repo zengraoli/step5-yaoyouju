@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { DbService } from '../../db/db.service';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { normalizeInstant, todayBeijing } from '../../common/time.util';
+import { SafetyResult, SafetyService } from '../safety/safety.service';
 
 export const EVENT_TYPES = ['报告', '症状', '医嘱', '行动', '结局'] as const;
 export const SOURCE_TYPES = ['自述', '报告原文', '医生记录'] as const;
@@ -11,6 +12,17 @@ export const LEG_CHANGES = ['有', '无', '尚未确认'] as const;
 export const ACTIVITY_DONE = ['完成', '部分完成', '未完成', '尚未确认'] as const;
 
 export const UNCONFIRMED = '尚未确认';
+
+export interface SafetyNotice {
+  title: string;
+  headline: string;
+  body: string;
+  matched: { rule_code: string; label: string; severity: string; action: string; advice: string; excerpt: string }[];
+  actions: { type: string; label: string }[];
+  bring_list: string[];
+  footer_note: string;
+  rule_set_version: string;
+}
 
 export interface SymptomLogView {
   id: string;
@@ -23,6 +35,8 @@ export interface SymptomLogView {
   sleep_impact_display: string;
   top_worry: string;
   leg_change: string;
+  /** 命中红旗时的就医提示（未命中为 null） */
+  safety_notice?: SafetyNotice | null;
 }
 
 export interface CareEventView {
@@ -36,12 +50,16 @@ export interface CareEventView {
   verify_status: string;
   symptom_log: SymptomLogView | null;
   report: { id: string; report_date: string | null; extracted_terms: unknown } | null;
+  /** 命中红旗时的就医提示（未命中为 null） */
+  safety_notice?: SafetyNotice | null;
 }
 
 @Injectable()
 export class EpisodesService {
-  constructor(private readonly db: DbService) {}
-
+  constructor(
+    private readonly db: DbService,
+    private readonly safety: SafetyService,
+  ) {}
   // ---------- 病程 ----------
 
   list(userId: string) {
@@ -152,6 +170,12 @@ export class EpisodesService {
     if (!VERIFY_STATUSES.includes(verify as never)) {
       throw new ApiException(ErrorCode.BAD_REQUEST, `核实状态必须是：${VERIFY_STATUSES.join(' / ')}`);
     }
+    // 安全规则引擎：事件原文命中红旗 → 立即返回就医提示（不阻断记录本身）
+    const safety = this.safety.checkRedFlags({
+      user_id: userId,
+      episode_id: episodeId,
+      texts: input.raw_text ? [input.raw_text] : [],
+    });
     const id = randomUUID();
     const now = new Date().toISOString();
     const occurred = normalizeInstant(input.occurred_at);
@@ -162,7 +186,8 @@ export class EpisodesService {
       )
       .run(id, episodeId, input.event_type, occurred, now, input.source_type, input.raw_text ?? null, verify, now);
     const row = this.db.app.prepare('SELECT * FROM care_event WHERE id = ?').get(id) as Record<string, unknown>;
-    return this.eventView(row);
+    const view = this.eventView(row);
+    return { ...view, safety_notice: this.safetyNoticeOf(safety) };
   }
 
   /** 用户纠正自己的记录：内容变化时核实状态降级为「有冲突」，需再次确认 */
@@ -238,6 +263,12 @@ export class EpisodesService {
     const now = new Date().toISOString();
     const occurred = normalizeInstant(date);
     const skipped = input.skipped === true;
+    // 安全规则引擎：「最担心」里出现红旗说法 → 立即返回就医提示（记录仍然保存）
+    const safety = this.safety.checkRedFlags({
+      user_id: userId,
+      episode_id: episodeId,
+      texts: input.top_worry ? [input.top_worry] : [],
+    });
     this.db.app
       .prepare(
         `INSERT INTO care_event (id, episode_id, event_type, occurred_at, reported_at, source_type, raw_text, verify_status, created_at)
@@ -266,10 +297,13 @@ export class EpisodesService {
         input.top_worry?.trim() || null,
         input.leg_change ?? UNCONFIRMED,
       );
-    return this.symptomLogView(
-      this.db.app.prepare('SELECT * FROM symptom_log WHERE id = ?').get(logId) as Record<string, unknown>,
-      date,
-    );
+    return {
+      ...this.symptomLogView(
+        this.db.app.prepare('SELECT * FROM symptom_log WHERE id = ?').get(logId) as Record<string, unknown>,
+        date,
+      ),
+      safety_notice: this.safetyNoticeOf(safety),
+    };
   }
 
   /** 今天的记录状态：没有则返回空（不返回昨日答案） */
@@ -312,6 +346,38 @@ export class EpisodesService {
   }
 
   // ---------- 内部 ----------
+
+  /**
+   * 命中红旗时返回的就医提示（结构与 /analyses、问与解释一致）。
+   * 未命中返回 null：记录类接口不做硬拦截，避免用户无法记录自己的变化，
+   * 但必须让客户端立刻看到就医提示。
+   */
+  private safetyNoticeOf(result: SafetyResult): SafetyNotice | null {
+    if (result.matched.length === 0) return null;
+    const high = result.matched.find((m) => m.severity === 'high');
+    const labels = result.matched.map((m) => m.label);
+    return {
+      title: '需要及时寻求专业帮助',
+      headline: high ? '建议尽快就医' : '建议及时就医评估',
+      body: `你记录的内容包含${high ? '需要尽快' : '建议及时'}就医的信号：${labels.join('、')}。这类变化需要医生及时评估，本产品无法替你判断严重程度。`,
+      matched: result.matched.map((m) => ({
+        rule_code: m.rule_code,
+        label: m.label,
+        severity: m.severity,
+        action: m.action,
+        advice: m.advice,
+        excerpt: m.excerpt,
+      })),
+      actions: [
+        { type: 'call', label: '拨打 120 / 前往急诊' },
+        { type: 'hospital', label: '查找附近医院' },
+        { type: 'doctor', label: '联系我的主治医生（已保存）' },
+      ],
+      bring_list: ['已录入的检查报告原文', '症状开始时间与最近变化记录', '正在使用的药物与既有医嘱'],
+      footer_note: '此提示由临床审定规则触发，不是诊断结论；请以医生的评估为准。',
+      rule_set_version: result.rule_set_version,
+    };
+  }
 
   private ownedEpisode(userId: string, episodeId: string) {
     const ep = this.db.app.prepare('SELECT * FROM episode WHERE id = ?').get(episodeId) as

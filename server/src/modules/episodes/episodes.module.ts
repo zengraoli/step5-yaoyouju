@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DbModule } from '../../db/db.module';
+import { SafetyModule } from '../safety/safety.module';
 import { EpisodesService } from './episodes.service';
 import { EpisodesController } from './episodes.controller';
 
@@ -9,7 +10,7 @@ import { EpisodesController } from './episodes.controller';
  * 用户可纠正、删除自己的记录；缺失字段一律「尚未确认」。
  */
 @Module({
-  imports: [DbModule],
+  imports: [DbModule, SafetyModule],
   controllers: [EpisodesController],
   providers: [EpisodesService],
   exports: [EpisodesService],

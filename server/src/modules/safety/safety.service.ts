@@ -6,13 +6,20 @@ import {
   OUT_OF_SCOPE_RULES,
   RED_FLAG_RULES,
   RULE_SET_VERSION,
+  RedFlagRule,
   SafetyAction,
   ScopeCategory,
   ScopeRule,
+  matchesRedFlagRule,
+  matchesScopeRule,
+  normalizeSafetyText,
+  redFlagExcerpt,
 } from './safety.rules';
 
 export interface SafetyInput {
   user_id?: string;
+  /** 关联病程（写入安全事件，便于按病程复查） */
+  episode_id?: string;
   /** 待校验文本：症状变化、报告原文、提问等 */
   texts?: string[];
 }
@@ -55,15 +62,14 @@ export class SafetyService {
     const matched: MatchedRule[] = [];
     for (const rule of RED_FLAG_RULES) {
       for (const text of texts) {
-        const hit = rule.patterns.find((p) => p.test(text));
-        if (hit) {
+        if (matchesRedFlagRule(rule, text)) {
           matched.push({
             rule_code: rule.code,
             label: rule.label,
             severity: rule.severity,
             action: rule.action,
             advice: rule.advice,
-            excerpt: excerptAround(text, hit),
+            excerpt: redFlagExcerpt(rule, text),
           });
           break;
         }
@@ -75,7 +81,7 @@ export class SafetyService {
 
     if (matched.length > 0 && input.user_id) {
       for (const m of matched) {
-        this.recordEvent(input.user_id, m);
+        this.recordEvent(input.user_id, input.episode_id, m);
       }
       this.logger.warn(
         `[safety] 命中红旗 ${matched.map((m) => m.rule_code).join(',')}（规则集 ${RULE_SET_VERSION}）`,
@@ -84,10 +90,10 @@ export class SafetyService {
     return { safety_flag, matched, rule_set_version: RULE_SET_VERSION, out_of_scope: null };
   }
 
-  /** 服务范围校验：诊断 / 手术 / 用药越界（不写安全事件，直接不答） */
+  /** 服务范围校验：诊断 / 手术 / 用药 / 预后越界（不写安全事件，直接不答） */
   checkScope(question: string): SafetyResult['out_of_scope'] {
     for (const rule of OUT_OF_SCOPE_RULES) {
-      if (rule.patterns.some((p) => p.test(question))) {
+      if (matchesScopeRule(rule, question)) {
         return {
           rule_code: rule.code,
           category: rule.category,
@@ -106,21 +112,29 @@ export class SafetyService {
     return { ...result, out_of_scope };
   }
 
-  private recordEvent(userId: string, m: MatchedRule): void {
+  /** 病程已记录的安全事件（生成分析前复查：既有红旗不能被绕过） */
+  episodeRedFlagEvents(episodeId: string): { rule_code: string; severity: string; label: string }[] {
+    const rows = this.db.app
+      .prepare(
+        `SELECT rule_code, severity FROM safety_event
+         WHERE episode_id = ? AND severity = 'high' ORDER BY created_at ASC`,
+      )
+      .all(episodeId) as { rule_code: string; severity: string }[];
+    return rows.map((r) => ({
+      rule_code: r.rule_code,
+      severity: r.severity,
+      label: RED_FLAG_RULES.find((x) => x.code === r.rule_code)?.label ?? r.rule_code,
+    }));
+  }
+
+  private recordEvent(userId: string, episodeId: string | undefined, m: MatchedRule): void {
     this.db.app
       .prepare(
-        `INSERT INTO safety_event (id, user_id, rule_code, severity, action_taken, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO safety_event (id, user_id, episode_id, rule_code, severity, action_taken, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(randomUUID(), userId, m.rule_code, m.severity, m.action, new Date().toISOString());
+      .run(randomUUID(), userId, episodeId ?? null, m.rule_code, m.severity, m.action, new Date().toISOString());
   }
-}
-
-function excerptAround(text: string, re: RegExp): string {
-  const idx = text.search(re);
-  if (idx < 0) return text.slice(0, 40);
-  const start = Math.max(0, idx - 10);
-  return text.slice(start, Math.min(text.length, idx + 30));
 }
 
 /** 命中红旗时抛出的异常（附带安全提示，供控制器转成 409 + 提示内容） */
@@ -132,4 +146,5 @@ export function safetyException(result: SafetyResult): ApiException {
   );
 }
 
-export type { ScopeRule };
+export type { RedFlagRule, ScopeRule };
+export { normalizeSafetyText };

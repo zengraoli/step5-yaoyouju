@@ -5,13 +5,15 @@ import { ApiException, ErrorCode } from '../../common/api-error';
 import { SafetyResult, SafetyService } from '../safety/safety.service';
 import { LocalEvidenceRetriever } from '../evidence/evidence-retrieval';
 import {
+  OUT_OF_SCOPE_RULES,
   QA_DISCLAIMER,
   QaAnswer,
   QaCitation,
   REASSURANCE_REPLY,
   REASSURANCE_STREAK,
   buildQaAnswer,
-  isReassurance,
+  isWorryLoop,
+  matchesScopeRule,
 } from './qa-answer';
 
 /**
@@ -227,7 +229,36 @@ export class QaService {
       );
     }
 
-    // 3. 服务范围校验：诊断 / 手术 / 用药越界 → 明确不答（不加载分析上下文，直接拒答）
+    // 3. 反复求保证 / 预后类提问：给出稳定解释，不做个性化
+    const prognosis = safety.out_of_scope?.category === '预后';
+    if (prognosis || isWorryLoop(question)) {
+      const messageId = this.insertMessage(sessionId, 'assistant', REASSURANCE_REPLY, [], false, null);
+      const streak = this.reassuranceStreak(sessionId);
+      this.logger.log(
+        `[qa] 会话 ${sessionId} ${prognosis ? '预后类提问' : '连续求保证'}(${streak}/${REASSURANCE_STREAK})`,
+      );
+      return {
+        session_id: sessionId,
+        user_message_id: userMessageId,
+        message_id: messageId,
+        reply: `${REASSURANCE_REPLY}
+
+${QA_DISCLAIMER}`,        refused: false,
+        followup_question: null,
+        add_to_followup: false,
+        close_round: streak >= REASSURANCE_STREAK,
+        citations: [],
+        safety_notice: null,
+        disclaimer: QA_DISCLAIMER,
+        context: {
+          episode_id: session.episode_id ?? null,
+          analysis_id: null,
+          analysis_version: null,
+        },
+      };
+    }
+
+    // 4. 服务范围校验：诊断 / 手术 / 用药越界 → 明确不答（不加载分析上下文，直接拒答）
     if (safety.out_of_scope) {
       const oos = safety.out_of_scope;
       const messageId = this.insertMessage(
@@ -248,31 +279,6 @@ export class QaService {
         followup_question: oos.followup_question,
         add_to_followup: true,
         close_round: false,
-        citations: [],
-        safety_notice: null,
-        disclaimer: QA_DISCLAIMER,
-        context: {
-          episode_id: session.episode_id ?? null,
-          analysis_id: null,
-          analysis_version: null,
-        },
-      };
-    }
-
-    // 4. 反复求保证：同一会话内连续 ≥3 次求保证类问题 → 稳定解释并结束本轮
-    if (this.reassuranceStreak(sessionId) >= REASSURANCE_STREAK) {
-      const reply = `${REASSURANCE_REPLY}\n\n${QA_DISCLAIMER}`;
-      const messageId = this.insertMessage(sessionId, 'assistant', reply, [], false, null);
-      this.logger.log(`[qa] 会话 ${sessionId} 连续求保证，结束本轮`);
-      return {
-        session_id: sessionId,
-        user_message_id: userMessageId,
-        message_id: messageId,
-        reply,
-        refused: false,
-        followup_question: null,
-        add_to_followup: false,
-        close_round: true,
         citations: [],
         safety_notice: null,
         disclaimer: QA_DISCLAIMER,
@@ -380,7 +386,7 @@ export class QaService {
       .all(sessionId) as { content: string }[];
     let n = 0;
     for (const r of rows) {
-      if (!isReassurance(r.content)) break;
+      if (!isWorryLoop(r.content)) break;
       n += 1;
     }
     return n;

@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import request from 'supertest';
 import { APP_GUARD } from '@nestjs/core';
 import { DbModule } from '../../db/db.module';
+import { SafetyModule } from '../safety/safety.module';
 import { DbService } from '../../db/db.service';
 import { SchemaService } from '../../db/schema.service';
 import { AuthService } from '../auth/auth.service';
@@ -33,12 +34,13 @@ describe('T07 一页分析流水线与 Worker', () => {
   let episodeId: string;
   let dir: string;
   let analysisId = '';
+  let cleanEpisodeId = '';
 
   beforeAll(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yaoyouju-an-'));
     process.env.DB_DIR = dir;
     const moduleRef = await Test.createTestingModule({
-      imports: [DbModule],
+      imports: [DbModule, SafetyModule],
       controllers: [AnalysesController],
       providers: [
         AuthService,
@@ -76,6 +78,23 @@ describe('T07 一页分析流水线与 Worker', () => {
       verify_status: '已确认',
     });
     episodes.addEvent(me.user.id, episodeId, {
+      event_type: '报告',
+      occurred_at: '2026-08-30',
+      source_type: '报告原文',
+      raw_text: '腰椎 MRI：L5/S1 椎间盘轻度膨出，报告未描述下肢肌力情况',
+      verify_status: '已确认',
+    });
+    // 另一个干净病程：前面的用例会写入红旗安全事件，用干净病程验证正常流程
+    const ep2 = episodes.create(me.user.id, { title: '久坐腰痛正常流程测试' });
+    cleanEpisodeId = ep2.id as string;
+    episodes.addEvent(me.user.id, cleanEpisodeId, {
+      event_type: '症状',
+      occurred_at: '2026-09-01',
+      source_type: '自述',
+      raw_text: '久坐 4 小时后腰痛，起身活动可缓解',
+      verify_status: '已确认',
+    });
+    episodes.addEvent(me.user.id, cleanEpisodeId, {
       event_type: '报告',
       occurred_at: '2026-08-30',
       source_type: '报告原文',
@@ -136,7 +155,7 @@ describe('T07 一页分析流水线与 Worker', () => {
   it('个性化分析开关关闭：返回回退结果，不创建任务', async () => {
     switches.setEnabled('个性化分析', false, '测试：关闭', null);
     const before = countTasks();
-    const res = await api().post('/analyses').set(H()).send({ episode_id: episodeId });
+    const res = await api().post('/analyses').set(H()).send({ episode_id: cleanEpisodeId });
     expect(res.body.code).toBe(0);
     expect(res.body.data.status).toBe('fallback');
     expect(res.body.data.fallback.meta.fallback).toBe(true);
@@ -151,7 +170,7 @@ describe('T07 一页分析流水线与 Worker', () => {
     const res = await api()
       .post('/analyses')
       .set(H())
-      .send({ episode_id: episodeId, question: '复查时需要重点看什么' });
+      .send({ episode_id: cleanEpisodeId, question: '复查时需要重点看什么' });
     expect(res.status).toBe(202);
     expect(res.body.data.status).toBe('queued');
     const taskId = res.body.data.task_id as string;

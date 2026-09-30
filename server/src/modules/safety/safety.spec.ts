@@ -7,7 +7,16 @@ import { DbModule } from '../../db/db.module';
 import { DbService } from '../../db/db.service';
 import { SchemaService } from '../../db/schema.service';
 import { SafetyService } from './safety.service';
-import { RED_FLAG_RULES, OUT_OF_SCOPE_RULES, RULE_SET_VERSION } from './safety.rules';
+import {
+  RED_FLAG_RULES,
+  OUT_OF_SCOPE_RULES,
+  RULE_SET_VERSION,
+  matchesRedFlagRule,
+  matchesScopeRule,
+  isReassurance,
+  isWorryLoop,
+  REASSURANCE_STREAK,
+} from './safety.rules';
 
 describe('T04 安全规则引擎', () => {
   let app: INestApplication;
@@ -44,10 +53,12 @@ describe('T04 安全规则引擎', () => {
       ['RF-01', '坐下时会阴部麻木'],
       ['RF-02', '最近双腿进行性无力'],
       ['RF-03', '这两天大小便控制困难'],
-      ['RF-04', '摔倒后腰痛越来越重'],
-      ['RF-05', '腰痛并且发热'],
-      ['RF-06', '体重下降伴腰痛'],
+      ['RF-04', '夜间痛持续不缓解'],
+      ['RF-05', '体重三个月掉了10斤'],
+      ['RF-06', '腰痛并且发热'],
       ['RF-07', '有肿瘤病史，新发腰痛'],
+      ['RF-08', '摔了一跤后腰痛加重'],
+      ['RF-09', '左脚背发麻'],
     ];
     for (const [code, text] of cases) {
       const r = safety.checkRedFlags({ texts: [text] });
@@ -55,7 +66,7 @@ describe('T04 安全规则引擎', () => {
     }
     // 规则编号连续且带版本
     expect(RED_FLAG_RULES.map((r) => r.code)).toEqual([
-      'RF-01', 'RF-02', 'RF-03', 'RF-04', 'RF-05', 'RF-06', 'RF-07',
+      'RF-01', 'RF-02', 'RF-03', 'RF-04', 'RF-05', 'RF-06', 'RF-07', 'RF-08', 'RF-09',
     ]);
     expect(RULE_SET_VERSION).toMatch(/^safety-rules-v\d/);
   });
@@ -109,12 +120,84 @@ describe('T04 安全规则引擎', () => {
 
     // 范围内问题放行
     expect(safety.checkScope('报告里写的 L5/S1 是什么意思？')).toBeNull();
-    expect(OUT_OF_SCOPE_RULES.map((r) => r.category)).toEqual(['诊断', '手术', '用药']);
+    expect(OUT_OF_SCOPE_RULES.map((r) => r.category)).toEqual(['诊断', '手术', '用药', '预后']);
   });
 
   it('evaluateQuestion 合并范围校验与红旗校验', () => {
     const r = safety.evaluateQuestion('我是不是椎间盘突出，最近还双腿进行性无力', userId);
     expect(r.out_of_scope?.category).toBe('诊断');
     expect(r.safety_flag).toBe('stop_personal');
+  });
+});
+
+describe('T04b 红旗说法的否定识别（验收反馈第 2 条）', () => {
+  const flagged = (text: string) =>
+    RED_FLAG_RULES.filter((r) => matchesRedFlagRule(r, text)).map((r) => r.code);
+
+  it('口语 / 错别字 / App 文案里的红旗说法都要命中', () => {
+    const cases: [string, string][] = [
+      ['RF-01', '会阴部发麻'],
+      ['RF-01', '会阴区或鞍区麻木'],
+      ['RF-01', '屁股有点麻'],
+      ['RF-01', '会音麻木'],
+      ['RF-03', '尿不出来'],
+      ['RF-02', '腿越来越没力气'],
+      ['RF-02', '两条腿越来越没劲'],
+      ['RF-02', '双退无力'],
+      ['RF-03', '解不出小便'],
+      ['RF-03', '大便憋不住'],
+      ['RF-03', '大小便失禁'],
+      ['RF-03', '大小变失禁'],
+      ['RF-03', '大小便控制异常'],
+      ['RF-04', '夜间痛持续不缓解'],
+      ['RF-04', '发热、夜间痛持续不缓解或体重明显下降'],
+      ['RF-05', '体重三个月掉了10斤'],
+      ['RF-05', '体重明显下降'],
+      ['RF-06', '发热'],
+      ['RF-07', '有肿瘤病史，新发腰痛'],
+      ['RF-08', '摔了一跤后腰痛加重'],
+      ['RF-09', '左脚背发麻'],
+    ];
+    for (const [code, text] of cases) {
+      expect(flagged(text)).toContain(code);
+    }
+  });
+
+  it('否定说法与正常描述不能误判为红旗', () => {
+    const negatives = [
+      '没有大小便失禁',
+      '大小便控制良好',
+      '双腿没有无力',
+      '双腿力量正常',
+      '双腿无麻木无力',
+      '没有发烧，腰痛久坐后加重',
+      '大小便控制正常，会阴部感觉正常，双腿肌力正常',
+      '没有夜间痛',
+      '报告未见会阴部麻木',
+      '否认大小便失禁',
+      '无发热',
+      '蹲久了腿有点酸',
+      '三个月前来过',
+      '久坐 4 小时后腰痛，起身活动可缓解',
+    ];
+    for (const text of negatives) {
+      expect(flagged(text)).toEqual([]);
+    }
+  });
+
+  it('越界提问：诊断 / 手术 / 用药 / 预后都要拒答', () => {
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-01')!, '我是不是腰椎间盘突出症？')).toBe(true);
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-01')!, '帮我确定一下是哪种病')).toBe(true);
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-03')!, '我要不要去打封闭针')).toBe(true);
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-03')!, '塞来昔布一天吃两次可以吗')).toBe(true);
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-04')!, '我不会瘫痪吧')).toBe(true);
+    // 范围内的问题放行
+    expect(OUT_OF_SCOPE_RULES.some((r) => matchesScopeRule(r, '我能不能多坐一会儿？'))).toBe(false);
+    expect(OUT_OF_SCOPE_RULES.some((r) => matchesScopeRule(r, '报告里写的 L5/S1 是什么意思？'))).toBe(false);
+  });
+
+  it('连续 4 次问「不会瘫痪吧」会结束本轮', () => {
+    expect(isWorryLoop('不会瘫痪吧')).toBe(true);
+    expect(REASSURANCE_STREAK).toBe(3);
   });
 });

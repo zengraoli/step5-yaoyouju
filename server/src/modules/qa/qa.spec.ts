@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import request from 'supertest';
 import { APP_GUARD } from '@nestjs/core';
 import { DbModule } from '../../db/db.module';
+import { SafetyModule } from '../safety/safety.module';
 import { DbService } from '../../db/db.service';
 import { SchemaService } from '../../db/schema.service';
 import { AuthService } from '../auth/auth.service';
@@ -33,7 +34,7 @@ describe('T08 问与解释', () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yaoyouju-qa-'));
     process.env.DB_DIR = dir;
     const moduleRef = await Test.createTestingModule({
-      imports: [DbModule],
+      imports: [DbModule, SafetyModule],
       controllers: [QaController],
       providers: [
         AuthService,

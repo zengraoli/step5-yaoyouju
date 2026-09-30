@@ -42,6 +42,20 @@ CREATE TABLE IF NOT EXISTS audit_anchor (
 `;
 
 /**
+ * 既有库的列增量迁移（T04：安全事件关联病程）。
+ */
+export function ensureSafetyColumns(db: {
+  exec(sql: string): unknown;
+  prepare(sql: string): { all(...args: unknown[]): unknown };
+}): void {
+  const cols = db.prepare('PRAGMA table_info(safety_event)').all() as { name: string }[];
+  if (cols.length === 0) return;
+  if (!cols.some((c) => c.name === 'episode_id')) {
+    db.exec('ALTER TABLE safety_event ADD COLUMN episode_id TEXT');
+  }
+}
+
+/**
  * 既有库的列增量迁移（审计序号与链头锚点）。
  */
 export function ensureAuditColumns(db: {
@@ -177,6 +191,7 @@ CREATE TABLE IF NOT EXISTS feedback_handling (
 CREATE TABLE IF NOT EXISTS safety_event (
   id           TEXT PRIMARY KEY,
   user_id      TEXT NOT NULL REFERENCES users(id),
+  episode_id   TEXT,
   rule_code    TEXT NOT NULL,
   severity     TEXT NOT NULL,
   action_taken TEXT NOT NULL,

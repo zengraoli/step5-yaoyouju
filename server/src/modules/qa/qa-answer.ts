@@ -1,4 +1,7 @@
 import { RetrievedChunk, queryTerms } from '../evidence/evidence-retrieval';
+import { matchesScopeRule, OUT_OF_SCOPE_RULES } from '../safety/safety.rules';
+
+export { matchesScopeRule, OUT_OF_SCOPE_RULES } from '../safety/safety.rules';
 
 /**
  * 问与解释的本地回答构造（模板 + 证据片段，不调用任何外部服务）。
@@ -11,25 +14,17 @@ import { RetrievedChunk, queryTerms } from '../evidence/evidence-retrieval';
 /** 产品红线 disclaimer（固定文案，系统生成内容必须携带） */
 export const QA_DISCLAIMER = '系统生成内容，仅供参考，不作诊断';
 
-/** 求保证类问题特征（同一会话内连续命中达到阈值即结束本轮） */
-export const REASSURANCE_PATTERNS: RegExp[] = [
-  /保证/,
-  /肯定/,
-  /(一定|百分百|百分之百|100\s*%|铁定)/,
-  /(没事|不要紧|问题不大)/,
-];
-
-/** 同一会话内连续求保证达到该次数 → 给出稳定解释并结束本轮 */
-export const REASSURANCE_STREAK = 3;
-
-/** 结束本轮时的固定回复（文案稳定，不做个性化，提示以医生评估为准） */
-export const REASSURANCE_REPLY =
-  '我能理解你希望听一句“肯定没事”。但要不要紧、会不会好，只有医生结合查体、影像和病史才能判断，我没法给你保证，也不会说“肯定没事”。把你的担心写进复诊问题清单，复诊时请医生评估，以医生的评估为准。';
-
-/** 判断一条用户提问是否为「求保证」类问题 */
-export function isReassurance(question: string): boolean {
-  return REASSURANCE_PATTERNS.some((p) => p.test(question));
-}
+/**
+ * 求保证类问题特征与「结束本轮」阈值统一由安全规则集提供（单一数据源）。
+ * 历史导出名保留，避免各端与测试引用分散。
+ */
+export {
+  REASSURANCE_PATTERNS,
+  REASSURANCE_STREAK,
+  REASSURANCE_REPLY,
+  isReassurance,
+  isWorryLoop,
+} from '../safety/safety.rules';
 
 /** 问与解释的引用：一条关键陈述对应一个来源（三种 ID 只带一种） */
 export interface QaCitation {

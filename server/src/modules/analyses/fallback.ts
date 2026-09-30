@@ -14,7 +14,7 @@ export interface FallbackEvent {
 export interface FallbackInput {
   episode_title: string;
   events: FallbackEvent[];
-  reason: 'switch_off' | 'service_unavailable';
+  reason: 'switch_off' | 'service_unavailable' | 'safety_stop';
 }
 
 export interface FallbackSections {
@@ -41,7 +41,9 @@ export function buildFallbackSections(input: FallbackInput): FallbackSections {
   const reasonText =
     input.reason === 'switch_off'
       ? '个性化分析当前已关闭，本轮不生成个性化解释。'
-      : '分析服务暂时不可用，本轮不生成个性化解释。';
+      : input.reason === 'safety_stop'
+        ? '你的记录里有需要及时就医的信号，本轮不生成个性化解释，请尽快就医。'
+        : '分析服务暂时不可用，本轮不生成个性化解释。';
   return {
     known: input.events.map((e) => ({
       text: e.raw_text ?? `（${e.event_type}，无原文）`,

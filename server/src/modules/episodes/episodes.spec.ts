@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import request from 'supertest';
 import { DbModule } from '../../db/db.module';
+import { SafetyModule } from '../safety/safety.module';
 import { DbService } from '../../db/db.service';
 import { SchemaService } from '../../db/schema.service';
 import { AuthService } from '../auth/auth.service';
@@ -29,7 +30,7 @@ describe('T05 病程、病程事件与记录今天', () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yaoyouju-ep-'));
     process.env.DB_DIR = dir;
     const moduleRef = await Test.createTestingModule({
-      imports: [DbModule],
+      imports: [DbModule, SafetyModule],
       controllers: [EpisodesController],
       providers: [
         AuthService,

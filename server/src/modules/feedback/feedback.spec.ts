@@ -217,7 +217,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     expect(v.content!.version).toBeGreaterThanOrEqual(1);
     // 规则集版本
     expect(v.rule_set_version).toBe(RULE_SET_VERSION);
-    expect(v.rule_set_version).toBe('safety-rules-v1.0');
+    expect(v.rule_set_version).toBe('safety-rules-v2.0');
 
     // 落库 feedback（is_error_report=1），四类版本存进 report_meta
     const row = db.app

@@ -4,6 +4,7 @@ import { DbService } from '../../db/db.service';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { AuditService } from '../../common/audit.service';
 import { SafetyService, SafetyResult } from '../safety/safety.service';
+import { RULE_SET_VERSION } from '../safety/safety.rules';
 import { SwitchesService } from '../switches/switches.service';
 import { buildFallbackSections, FallbackEvent, FallbackSections } from './fallback';
 
@@ -62,7 +63,47 @@ export class AnalysesService {
     const texts = [input.symptom_change, input.report_text, input.question].filter(
       (t): t is string => typeof t === 'string' && t.trim().length > 0,
     );
-    const result = this.safety.checkRedFlags({ user_id: userId, texts });
+    // 同一次提交之外的既有记录也要复查：病程里已经写过红旗说法，不能再被绕过
+    for (const ev of this.episodeEvents(ep.id as string)) {
+      if (ev.raw_text && ev.raw_text.trim()) texts.push(ev.raw_text);
+    }
+    const result = this.safety.checkRedFlags({
+      user_id: userId,
+      episode_id: ep.id as string,
+      texts,
+    });
+
+    // 1b. 病程内已记录过的 high 级红旗同样要停止个性化分析
+    if (result.safety_flag === 'none') {
+      const recorded = this.safety.episodeRedFlagEvents(ep.id as string);
+      if (recorded.length > 0) {
+        const notice = this.buildNotice({
+          safety_flag: 'stop_personal',
+          matched: recorded.map((r) => ({
+            rule_code: r.rule_code,
+            label: r.label,
+            severity: 'high',
+            action: '停止个性化分析' as const,
+            advice: '该病程中已记录需要及时就医的信号，请先就医，本产品不再生成个性化分析。',
+            excerpt: '',
+          })),
+          rule_set_version: RULE_SET_VERSION,
+          out_of_scope: null,
+        });
+        this.logger.warn(
+          `[analysis] 病程 ${ep.id} 已记录红旗 ${recorded.map((r) => r.rule_code).join(',')}，停止个性化分析`,
+        );
+        return {
+          status: 'fallback',
+          fallback: buildFallbackSections({
+            episode_title: ep.title as string,
+            events: this.episodeEvents(ep.id as string),
+            reason: 'safety_stop',
+          }),
+          safety_notice: notice,
+        };
+      }
+    }
 
     // 2. 命中 high（停止个性化）→ 不创建任务，返回就医提示（40911，由控制器抛错）
     if (result.safety_flag === 'stop_personal') {

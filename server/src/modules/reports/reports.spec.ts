@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import request from 'supertest';
 import { DbModule } from '../../db/db.module';
+import { SafetyModule } from '../safety/safety.module';
 import { DbService } from '../../db/db.service';
 import { SchemaService } from '../../db/schema.service';
 import { AuthService } from '../auth/auth.service';
@@ -35,7 +36,7 @@ describe('T06 报告录入与结构化核对', () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yaoyouju-rp-'));
     process.env.DB_DIR = dir;
     const moduleRef = await Test.createTestingModule({
-      imports: [DbModule],
+      imports: [DbModule, SafetyModule],
       controllers: [ReportsController, EpisodeReportsController],
       providers: [
         AuthService,

@@ -9,6 +9,11 @@ import { AppModule } from '../../app.module';
 import { DbModule } from '../../db/db.module';
 import { SchemaService } from '../../db/schema.service';
 import { AuthService } from './auth.service';
+import { DbService } from '../../db/db.service';
+import { SafetyModule } from '../safety/safety.module';
+import { EpisodesService } from '../episodes/episodes.service';
+import { EpisodesController } from '../episodes/episodes.controller';
+import { SafetyService } from '../safety/safety.service';
 import { AuthController } from './auth.controller';
 import { SafetyNoticeController } from '../safety/safety.controller';
 import { AuthGuard } from '../../common/auth.guard';
@@ -187,5 +192,141 @@ describe('T03 登录与同意', () => {
     const a = moduleRef.createNestApplication();
     await a.init();
     await a.close();
+  });
+});
+
+describe('T03b 退出登录、账户删除与数据导出', () => {
+  let app: INestApplication;
+  let dir: string;
+
+  beforeAll(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yaoyouju-auth2-'));
+    process.env.DB_DIR = dir;
+    const moduleRef = await Test.createTestingModule({
+      imports: [DbModule, SafetyModule],
+      controllers: [AuthController, TestProtectedController, EpisodesController],
+      providers: [
+        AuthService,
+        EpisodesService,
+        SafetyService,
+        SchemaService,
+        { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_GUARD, useClass: ConsentGuard },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    app.useGlobalInterceptors(new ResponseInterceptor());
+    app.useGlobalFilters(new AllExceptionsFilter());
+    await app.init();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const api = () => request(app.getHttpServer());
+  const H = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+  it('退出登录后旧令牌立即失效', async () => {
+    const res = await api().post('/auth/login').send({ phone: '13900001111', code: '123456' });
+    const token = res.body.data.token as string;
+    // 登录后可用
+    expect((await api().get('/auth/me').set(H(token))).body.code).toBe(0);
+    // 退出登录
+    const out = await api().post('/auth/logout').set(H(token)).send({});
+    expect(out.body.code).toBe(0);
+    // 旧令牌失效
+    const after = await api().get('/auth/me').set(H(token));
+    expect(after.body.code).toBe(40100);
+    // 重新登录拿到新令牌（同一手机号）
+    const again = await api().post('/auth/login').send({ phone: '13900001111', code: '123456' });
+    expect(again.body.data.token).not.toBe(token);
+  });
+
+  it('导出数据包含病程、问答、反馈与安全事件', async () => {
+    const res = await api().post('/auth/login').send({ phone: '13900003333', code: '123456' });
+    const token = res.body.data.token as string;
+    const exported = await api().get('/auth/export').set(H(token));
+    expect(exported.body.code).toBe(0);
+    const data = exported.body.data as { episodes: unknown[]; qa_sessions: unknown[]; feedback: unknown[]; safety_events: unknown[] };
+    expect(Array.isArray(data.episodes)).toBe(true);
+    expect(Array.isArray(data.qa_sessions)).toBe(true);
+    expect(Array.isArray(data.safety_events)).toBe(true);
+    expect(data.episodes.length).toBe(0);
+  });
+
+  it('删除账户：二次确认 → 冷静期 → 确认后数据清除，同号登录不再有旧数据', async () => {
+    const login = await api().post('/auth/login').send({ phone: '13900004444', code: '123456' });
+    const token = login.body.data.token as string;
+    const userId = login.body.data.user.id as string;
+    // 造一点数据
+    const eps = app.get(EpisodesService);
+    const ep = eps.create(userId, { title: '待删除的病程' });
+    eps.addEvent(userId, ep.id as string, {
+      event_type: '症状',
+      occurred_at: '2026-09-01',
+      source_type: '自述',
+      raw_text: '久坐后腰痛',
+      verify_status: '已确认',
+    });
+
+    // 验证码错误不能申请
+    const bad = await api().post('/auth/delete-request').set(H(token)).send({ phone: '13900004444', code: '000000' });
+    expect(bad.body.code).toBe(40000);
+
+    // 申请删除 → 冷静期 24 小时
+    const req = await api()
+      .post('/auth/delete-request')
+      .set(H(token))
+      .send({ phone: '13900004444', code: '123456' });
+    expect(req.body.code).toBe(0);
+    expect(req.body.data.status).toBe('冷静期中');
+    expect(req.body.data.can_confirm).toBe(false);
+
+    // 冷静期内确认被拒绝
+    const early = await api()
+      .post('/auth/delete-confirm')
+      .set(H(token))
+      .send({ phone: '13900004444', code: '123456' });
+    expect(early.body.code).toBe(40900);
+
+    // 取消后可以重新申请
+    const cancel = await api().post('/auth/delete-cancel').set(H(token));
+    expect(cancel.body.code).toBe(0);
+    const req2 = await api()
+      .post('/auth/delete-request')
+      .set(H(token))
+      .send({ phone: '13900004444', code: '123456' });
+    expect(req2.body.code).toBe(0);
+
+    // 直接把冷静期改到过去，再确认删除（演示环境等价于冷静期结束）
+    const db = app.get(DbService) as unknown as { app: { prepare: (sql: string) => { get: (...a: unknown[]) => unknown; run: (...a: unknown[]) => unknown } } };
+    db.app
+      .prepare("UPDATE deletion_request SET effective_at = ? WHERE user_id = ? AND status = '冷静期中'")
+      .run(new Date(Date.now() - 60_000).toISOString(), userId);
+
+    const confirm = await api()
+      .post('/auth/delete-confirm')
+      .set(H(token))
+      .send({ phone: '13900004444', code: '123456' });
+    expect(confirm.body.code).toBe(0);
+    expect(confirm.body.data.deleted).toBe(true);
+
+    // 旧令牌失效、业务数据被硬删
+    const list = await api().get('/auth/me').set(H(token));
+    expect(list.body.code).toBe(40100);
+    expect((db.app.prepare('SELECT COUNT(*) n FROM episode WHERE user_id=?').get(userId) as { n: number }).n).toBe(0);
+    expect((db.app.prepare('SELECT COUNT(*) n FROM care_event WHERE episode_id=?').get(ep.id) as { n: number }).n).toBe(0);
+
+    // 同一手机号重新登录：旧病程已不存在
+    const relogin = await api().post('/auth/login').send({ phone: '13900004444', code: '123456' });
+    expect(relogin.body.code).toBe(0);
+    const newToken = relogin.body.data.token as string;
+    // 新账号需要重新同意健康信息处理（同意本身是可查可撤的）
+    await api().post('/auth/consents').set(H(newToken)).send({ scope: '健康信息处理' });
+    const episodes = await api().get('/episodes').set(H(newToken));
+    expect(episodes.body.code).toBe(0);
+    expect(episodes.body.data).toEqual([]);
   });
 });
