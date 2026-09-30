@@ -124,28 +124,23 @@ export class AdminSafetyController {
   @Get('switches')
   switchList() {
     const list = this.switches.list();
-    // 最近变更（审计日志）
+    // 最近变更（审计日志）：返回操作人姓名与角色，不再返回「原因」冒充操作人
     const lastChange = (key: string) => {
       const row = this.db.app
         .prepare(
-          `SELECT diff, created_at FROM audit_log WHERE action = 'switch.update' AND target = ? ORDER BY created_at DESC LIMIT 1`,
+          `SELECT actor_id, created_at FROM audit_log
+           WHERE action = 'switch.update' AND target = ? ORDER BY created_at DESC LIMIT 1`,
         )
-        .get(`feature_switch:${key}`) as { diff: string | null; created_at: string } | undefined;
+        .get(`feature_switch:${key}`) as { actor_id: string | null; created_at: string } | undefined;
       if (!row) return null;
-      let actor = '—';
-      try {
-        const diff = row.diff ? JSON.parse(row.diff) : {};
-        actor = diff.reason ?? '—';
-      } catch {
-        actor = '—';
-      }
+      const actor = row.actor_id ? this.adminName(row.actor_id) : '—';
       return { at: row.created_at.slice(0, 10), by: actor };
     };
     const requirements: Record<string, string> = {
-      个性化分析: '双人',
+      个性化分析: '双人（技术负责人发起 + 临床审核 / 超级管理员确认）',
       视频推荐: '单人 + 原因',
       拍照提取: '单人',
-      案例卡片: '双人',
+      案例卡片: '双人（技术负责人 + 超级管理员）',
     };
     return list.map((s) => ({
       key: s.key,
@@ -155,6 +150,14 @@ export class AdminSafetyController {
       requirement: requirements[s.key] ?? '单人',
       last_change: lastChange(s.key),
     }));
+  }
+
+  /** 后台账号姓名（操作人展示用） */
+  private adminName(id: string): string {
+    const row = this.db.app
+      .prepare('SELECT name FROM admin_user WHERE id = ?')
+      .get(id) as { name: string } | undefined;
+    return row?.name ?? '已注销账号';
   }
 
   @ApiOperation({ summary: '变更应急开关（立即生效，写审计；高危开关需 switch.manage）' })

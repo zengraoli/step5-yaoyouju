@@ -13,13 +13,25 @@ import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import DualConfirm from '@/components/DualConfirm.vue'
 import { batchTakeOffline, listContentsAdmin, type ContentAdminItem } from '@/api/contents'
+import { request } from '@/api/request'
 
 /** 筛选选项（按设计稿） */
 const TYPE_OPTIONS = ['全部', '视频', '图文组件', '案例']
 const STATUS_OPTIONS = ['全部', '草稿', '待医学审核', '已审定', '已发布', '更正中', '已撤回', '已下线']
 const SCOPE_OPTIONS = ['全部', '报告术语', '病程变化', '复诊准备', '生活影响', '信息来源']
-const REVIEWER_OPTIONS = ['全部', '李医生', '王编辑', '张医生']
+/** 审核人下拉：来自真实成员表 */
+const reviewerOptions = ref<string[]>(['全部'])
+
+async function loadReviewers() {
+  try {
+    const users = await request<{ name: string }[]>({ url: '/admin/users' })
+    reviewerOptions.value = ['全部', ...users.map((u) => u.name)]
+  } catch {
+    reviewerOptions.value = ['全部']
+  }
+}
 
 const router = useRouter()
 
@@ -30,12 +42,14 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const selected = ref<string[]>([])
+/** 批量下线双人确认弹层 */
+const dualOfflineRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
 const errorText = ref('')
 
 const filters = ref({ type: '全部', status: '全部', scope: '全部', reviewer: '全部' })
 
 onMounted(async () => {
-  await load()
+  await Promise.all([load(), loadReviewers()])
 })
 
 async function load() {
@@ -65,10 +79,6 @@ function notify(title: string) {
   globalThis.alert?.(title)
 }
 
-function confirmAction(message: string): boolean {
-  return globalThis.confirm ? globalThis.confirm(message) : true
-}
-
 function onMore() {
   notify('更多操作：撤回 / 标记更正 / 提交新版本')
 }
@@ -92,22 +102,23 @@ function onToggleAll() {
   selected.value = allSelected.value ? [] : items.value.map((i) => i.id)
 }
 
-/** 批量下线（需双人确认） */
+/** 批量下线（需双人确认：先发起确认单，另一人确认后才真正下线） */
 async function onBatchOffline() {
   if (selected.value.length === 0) {
     notify('请先选择内容')
     return
   }
-  const ok = confirmAction(`确认批量下线 ${selected.value.length} 条内容？下线需双人确认，立即对用户端不可见。`)
-  if (!ok) return
-  try {
-    await batchTakeOffline(selected.value, '批量下线（双人确认）')
-    notify(`已提交批量下线 ${selected.value.length} 条（需另一人确认后生效）`)
-    selected.value = []
-    await load()
-  } catch (e) {
-    notify(e instanceof Error ? e.message : '批量下线失败')
-  }
+  dualOfflineRef.value?.start(selected.value.length, `批量下线 ${selected.value.length} 条内容`)
+}
+
+/** 第二人确认后执行批量下线 */
+async function submitBatchOffline(confirmationId: string): Promise<unknown> {
+  const ids = [...selected.value]
+  const result = await batchTakeOffline(ids, '批量下线（双人确认后执行）', confirmationId)
+  notify(`已批量下线 ${ids.length} 条（双人确认后生效）`)
+  selected.value = []
+  await load()
+  return result
 }
 
 function onCreate() {
@@ -159,7 +170,7 @@ const pageCount = computed<number>(() => Math.max(1, Math.ceil(total.value / pag
         <label class="filter">
           <span class="filter__label">审核人：</span>
           <select v-model="filters.reviewer" class="filter__select" @change="onFilterChange">
-            <option v-for="o in REVIEWER_OPTIONS" :key="o" :value="o">{{ o }}</option>
+            <option v-for="o in reviewerOptions" :key="o" :value="o">{{ o }}</option>
           </select>
         </label>
       </div>
@@ -241,6 +252,17 @@ const pageCount = computed<number>(() => Math.max(1, Math.ceil(total.value / pag
     <AppNotice type="warn">
       “下线开关”立即对用户端隐藏内容且不改变审核状态，用于应急；正式撤回请在详情页走“撤回”流程并定位引用页面。
     </AppNotice>
+
+    <!-- 批量下线双人确认弹层 -->
+    <DualConfirm
+      :ref="(el) => (dualOfflineRef = el as never)"
+      action="content.offline"
+      target-id="batch-take-offline"
+      target-label="批量下线（临床审核 + 超级管理员）"
+      :submit="submitBatchOffline"
+      button-text="占位"
+      @done="loadReviewers()"
+    />
   </div>
 </template>
 

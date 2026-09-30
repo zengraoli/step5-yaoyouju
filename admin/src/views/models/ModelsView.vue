@@ -18,6 +18,7 @@ import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import DualConfirm from '@/components/DualConfirm.vue'
 import { request } from '@/api/request'
 
 interface GateStatus {
@@ -101,10 +102,6 @@ function notify(title: string) {
   globalThis.alert?.(title)
 }
 
-function confirmAction(message: string): boolean {
-  return globalThis.confirm ? globalThis.confirm(message) : true
-}
-
 /** 选中候选（查看门禁详情） */
 const selectedRelease = computed<ReleaseItem | undefined>(() =>
   releases.value.find((r) => r.id === selectedReleaseId.value) ??
@@ -167,35 +164,43 @@ const failedCases = computed<FailedCase[]>(() => {
     .flatMap((r) => r.failed_cases ?? [])
 })
 
-/** 推进状态（候选 → 灰度 → 生效） */
+/** 双人确认弹层状态（模型提升 / 回滚） */
+const dualModel = ref<ReleaseItem | null>(null)
+const dualAction = ref<'promote' | 'rollback'>('promote')
+
+/** 推进状态（候选 → 灰度 → 生效）：技术负责人发起 + 超级管理员确认 */
 async function onPromote(release: ReleaseItem) {
-  if (!confirmAction(`确认将 ${release.model_name} ${release.prompt_version} 推进到下一阶段？门禁未通过将被拒绝。`)) return
-  promoting.value = release.id
-  try {
-    await request({ url: `/admin/models/${release.id}/promote`, method: 'POST' })
-    notify('已推进')
-    await load()
-  } catch (e) {
-    notify(e instanceof Error ? e.message : '推进失败')
-  } finally {
-    promoting.value = ''
-  }
+  dualAction.value = 'promote'
+  dualModel.value = release
+  dualRef.value?.start("", `模型 ${release.prompt_version} 提升`)
 }
 
-/** 回滚 */
+/** 回滚：技术负责人发起 + 超级管理员确认 */
 async function onRollback(release: ReleaseItem) {
-  if (!confirmAction(`确认回滚 ${release.model_name} ${release.prompt_version}？回滚将立即生效并写入审计。`)) return
-  rollingBack.value = release.id
-  try {
-    await request({ url: `/admin/models/${release.id}/rollback`, method: 'POST' })
-    notify('已回滚')
-    await load()
-  } catch (e) {
-    notify(e instanceof Error ? e.message : '回滚失败')
-  } finally {
-    rollingBack.value = ''
-  }
+  dualAction.value = 'rollback'
+  dualModel.value = release
+  dualRef.value?.start("", `模型 ${release.prompt_version} 回滚`)
 }
+
+async function submitModelDual(confirmationId: string): Promise<unknown> {
+  const release = dualModel.value
+  if (!release) throw new Error('未选择发布')
+  const action = dualAction.value
+  const body =
+    action === 'promote'
+      ? { confirmation_id: confirmationId }
+      : { reason: '双人确认后回滚', confirmation_id: confirmationId };
+  const result = await request({
+    url: `/admin/models/${release.id}/${action}`,
+    method: 'POST',
+    data: body,
+  })
+  notify(action === 'promote' ? '已按双人确认结果推进' : '已按双人确认结果回滚')
+  await load()
+  return result
+}
+
+const dualRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
 
 function statusKey(status: string): 'confirmed' | 'unconfirmed' | 'unverified' | 'offline' | 'self' {
   if (status === '生效') return 'confirmed'
@@ -368,6 +373,17 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
     </div>
 
     <AppNotice v-else type="info">暂无候选发布。点击「新建候选发布」创建一个候选并通过评测门禁后推进。</AppNotice>
+
+    <!-- 模型提升 / 回滚双人确认弹层 -->
+    <DualConfirm
+      :ref="(el) => (dualRef = el as never)"
+      :action="dualAction === 'promote' ? 'model.promote' : 'model.rollback'"
+      :target-id="dualModel?.id ?? ''"
+      :target-label="dualAction === 'promote' ? '模型发布提升（双人确认）' : '模型发布回滚（双人确认）'"
+      :submit="submitModelDual"
+      button-text="占位"
+      @done="load()"
+    />
   </div>
 </template>
 

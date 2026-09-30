@@ -134,6 +134,10 @@ export function resubmitContent(id: string): Promise<ContentDetail> {
 }
 
 /** 批量下线（需双人确认） */
-export function batchTakeOffline(ids: string[], reason?: string): Promise<unknown> {
-  return request({ url: '/admin/contents/batch-take-offline', method: 'POST', data: { ids, reason } })
+export function batchTakeOffline(ids: string[], reason?: string, confirmationId?: string): Promise<unknown> {
+  return request({
+    url: '/admin/contents/batch-take-offline',
+    method: 'POST',
+    data: { ids, reason, ...(confirmationId ? { confirmation_id: confirmationId } : {}) },
+  })
 }

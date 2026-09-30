@@ -45,7 +45,10 @@ export class AdminFeedbackController {
     @Query('type') type?: string,
     @Query('status') status?: string,
   ) {
-    return this.feedback.queue({ type, status });
+    return {
+      items: this.feedback.queue({ type, status }),
+      stats: this.feedback.stats(),
+    };
   }
 
   @ApiOperation({ summary: '反馈 / 举报详情（未授权时用户原始内容不可见；读取写审计）' })

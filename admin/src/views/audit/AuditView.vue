@@ -48,6 +48,9 @@ const items = ref<AuditItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
+/** 操作人下拉：来自真实成员表（不再写死姓名） */
+const actorOptions = ref<string[]>([])
+
 const filters = ref({ actor: '全部', role: '全部', action: '全部', target_type: '全部', hours: '168' })
 const verify = ref<VerifyResult | null>(null)
 const lastVerifiedAt = ref('')
@@ -61,8 +64,17 @@ const TIME_OPTIONS = [
 ]
 
 onMounted(async () => {
-  await Promise.all([load(), verifyChain()])
+  await Promise.all([load(), verifyChain(), loadActors()])
 })
+
+async function loadActors() {
+  try {
+    const users = await request<{ name: string }[]>({ url: '/admin/users' })
+    actorOptions.value = users.map((u) => u.name)
+  } catch {
+    actorOptions.value = []
+  }
+}
 
 async function load() {
   loading.value = true
@@ -145,9 +157,7 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
           <span>操作人：</span>
           <select v-model="filters.actor" @change="onFilterChange">
             <option>全部</option>
-            <option>周工</option>
-            <option>李医生</option>
-            <option>王编辑</option>
+            <option v-for="a in actorOptions" :key="a" :value="a">{{ a }}</option>
             <option>系统</option>
           </select>
         </label>

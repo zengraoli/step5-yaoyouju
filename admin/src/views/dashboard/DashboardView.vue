@@ -16,13 +16,14 @@ import { request } from '@/api/request'
 
 interface DashboardSummary {
   generated_at: string
-  today: { analysis_total: number; analysis_done: number; analysis_failed: number; analysis_blocked: number }
+  today: { date: string; analysis_total: number; analysis_done: number; analysis_failed: number; analysis_blocked: number }
   fail_rate_15m: { value: number; threshold: number; total: number; failed: number }
-  pending_review: number
-  pending_reports: { total: number; high: number; medium: number; low: number }
-  safety_events_24h: { rule_code: string; severity: string; action: string; source: string; created_at: string }[]
-  switches: { key: string; enabled: boolean; reason: string | null }[]
+  blocked_candidates: number
+  pending_reports: { total: number; high: number; medium: number; low: number; avg_handle_days: number | null }
   eval_gate: { result: string; metrics: Record<string, number>; created_at: string } | null
+  pending_review: number
+  switches: { key: string; enabled: boolean; reason: string | null }[]
+  safety_events_24h: { rule_code: string; severity: string; action: string; source: string; created_at: string }[]
   last_7_days: { date: string; total: number; failed: number }[]
   todos: string[]
 }
@@ -55,6 +56,25 @@ function severityText(s: string): string {
   return s === 'low' ? '低' : '待确认'
 }
 
+/** 待医学审核：真实队列状态（不再写死「最早提交 2 天前」） */
+const reviewWaitText = computed<string>(() => {
+  const d = data.value
+  if (!d || d.pending_review === 0) return '暂无待审内容'
+  return `今日待审队列（${d.today.date}）`
+})
+
+/** 评测门禁说明（数据驱动，不写死候选编号） */
+const evalNote = computed<string>(() => {
+  const d = data.value
+  if (!d) return '暂无评测运行记录'
+  const gate = d.eval_gate
+  if (!gate) return '还没有评测运行记录'
+  const at = gate.created_at ? gate.created_at.slice(0, 10) : '—'
+  if (d.blocked_candidates > 0) {
+    return `最近运行：${at} ${gate.result}；当前有 ${d.blocked_candidates} 个候选因门禁未通过暂时不能生效，请修复后重跑。`
+  }
+  return `最近运行：${at} ${gate.result}；没有被阻断的候选发布。`
+})
 /** 开关中文名 */
 const SWITCH_LABELS: Record<string, string> = {
   个性化分析: '个性化分析',
@@ -106,25 +126,32 @@ const evalMetrics = computed<{ label: string; value: string; pass: boolean }[]>(
           <p class="stat-card__sub">告警阈值 {{ data.fail_rate_15m.threshold }}%</p>
         </AppCard>
         <AppCard class="stat-card">
-          <p class="stat-card__label">P95 生成时长</p>
-          <p class="stat-card__value stat-card__value--ok">41 s</p>
-          <p class="stat-card__sub">告警阈值 90 s</p>
+          <p class="stat-card__label">今日完成任务</p>
+          <p class="stat-card__value" :class="{ 'stat-card__value--ok': data.today.analysis_done > 0 }">
+            {{ data.today.analysis_done }}
+          </p>
+          <p class="stat-card__sub">今日合计 {{ data.today.analysis_total }} 条任务</p>
         </AppCard>
         <AppCard class="stat-card">
-          <p class="stat-card__label">今日模型成本</p>
-          <p class="stat-card__value">¥ 86.4</p>
-          <p class="stat-card__sub">预算 ¥150 · 已用 57.8%</p>
+          <p class="stat-card__label">阻断候选发布</p>
+          <p class="stat-card__value" :class="{ 'stat-card__value--warn': data.blocked_candidates > 0 }">
+            {{ data.blocked_candidates }}
+          </p>
+          <p class="stat-card__sub">评测未通过、暂时不能生效的候选</p>
         </AppCard>
         <AppCard class="stat-card">
           <p class="stat-card__label">待医学审核内容</p>
           <p class="stat-card__value">{{ data.pending_review }}</p>
-          <p class="stat-card__sub">最早提交 2 天前</p>
+          <p class="stat-card__sub">{{ reviewWaitText }}</p>
         </AppCard>
         <AppCard class="stat-card">
           <p class="stat-card__label">待处理举报</p>
           <p class="stat-card__value">{{ data.pending_reports.total }}</p>
           <p class="stat-card__sub">
             高 {{ data.pending_reports.high }} · 中 {{ data.pending_reports.medium }} · 低 {{ data.pending_reports.low }}
+            <template v-if="data.pending_reports.avg_handle_days !== null">
+              · 平均处理 {{ data.pending_reports.avg_handle_days }} 天
+            </template>
           </p>
         </AppCard>
       </div>
@@ -204,9 +231,7 @@ const evalMetrics = computed<{ label: string; value: string; pass: boolean }[]>(
                 <span class="eval-row__value" :class="{ 'eval-row__value--fail': !m.pass }">{{ m.value }}</span>
               </div>
             </div>
-            <p class="eval-card__note">
-              候选发布 R-2026.09.21-c 被阻断：左右侧混淆 1 例，待修复后重跑。
-            </p>
+            <p class="eval-card__note">{{ evalNote }}</p>
           </AppCard>
 
           <!-- 待办 -->

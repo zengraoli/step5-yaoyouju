@@ -24,6 +24,17 @@ interface AffectedUser {
   phone_masked: string
 }
 
+interface FeedbackStats {
+  pending: number
+  pending_high: number
+  pending_medium: number
+  pending_low: number
+  reviewing: number
+  closed: number
+  avg_review_days: number | null
+  avg_closed_days: number | null
+}
+
 interface QueueItem {
   id: string
   type: 'feedback' | 'error_report'
@@ -66,6 +77,16 @@ const HANDLING_ACTIONS = ['转内容修正', '转模型复盘', '已回复用户
 
 const auth = useAuthStore()
 
+/** 平均处理时长（来自服务端统计，没有记录时显示「暂无」） */
+const avgReviewDaysText = computed<string>(() => {
+  const v = stats.value.avg_review_days
+  return v === null || v === undefined ? '暂无已完成记录' : `平均处理 ${v} 天`
+})
+const avgClosedDaysText = computed<string>(() => {
+  const v = stats.value.avg_closed_days
+  return v === null || v === undefined ? '暂无已完成记录' : `平均处理 ${v} 天`
+})
+
 const loading = ref(true)
 const items = ref<QueueItem[]>([])
 const stats = ref({
@@ -75,6 +96,8 @@ const stats = ref({
   pendingLow: 0,
   reviewing: 0,
   closed: 0,
+  avg_review_days: null as number | null,
+  avg_closed_days: null as number | null,
   helpTotal: 0,
   helpUnderstood: 0,
   helpNext: 0,
@@ -95,34 +118,38 @@ onMounted(async () => {
 async function load() {
   loading.value = true
   try {
-    const list = await request<QueueItem[]>({
+    const res = await request<{ items: QueueItem[]; stats: FeedbackStats }>({
       url: '/admin/feedback',
       data: { type: tab.value },
     })
-    items.value = list
-    // 统计（全部类型；帮助类型反馈按 7 天窗口汇总）
-    const [all, help7d] = await Promise.all([
-      request<QueueItem[]>({ url: '/admin/feedback' }),
-      request<QueueItem[]>({ url: '/admin/feedback', data: { type: 'feedback' } }),
-    ])
-    const open = all.filter((i) => i.status !== '已关闭' && i.status !== '无需处理')
-    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000
-    const recent = help7d.filter((i) => new Date(i.created_at).getTime() >= weekAgo)
-    const helpTotal = recent.length
-    const pct = (k: string) =>
-      helpTotal > 0 ? Math.round((recent.filter((i) => i.help_type === k).length / helpTotal) * 100) : 0
+    items.value = res.items
     stats.value = {
-      pending: open.length,
-      pendingHigh: open.filter((i) => i.severity === 'high').length,
-      pendingMedium: open.filter((i) => i.severity === 'medium').length,
-      pendingLow: open.filter((i) => i.severity === 'low').length,
-      reviewing: all.filter((i) => i.status === '临床复核中' || i.status === '已分配').length,
-      closed: all.filter((i) => i.status === '已关闭').length,
-      helpTotal,
-      helpUnderstood: pct('看懂了'),
-      helpNext: pct('知道下一步'),
-      helpNone: pct('都不好'),
+      pending: res.stats.pending,
+      pendingHigh: res.stats.pending_high,
+      pendingMedium: res.stats.pending_medium,
+      pendingLow: res.stats.pending_low,
+      reviewing: res.stats.reviewing,
+      closed: res.stats.closed,
+      avg_review_days: res.stats.avg_review_days,
+      avg_closed_days: res.stats.avg_closed_days,
+      helpTotal: 0,
+      helpUnderstood: 0,
+      helpNext: 0,
+      helpNone: 0,
     }
+    // 帮助类型反馈（近 7 天）单独统计
+    const help7d = await request<{ items: QueueItem[] }>({
+      url: '/admin/feedback',
+      data: { type: 'feedback' },
+    })
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000
+    const recent = help7d.items.filter((i) => new Date(i.created_at).getTime() >= weekAgo)
+    stats.value.helpTotal = recent.length
+    const pct = (k: string) =>
+      recent.length > 0 ? Math.round((recent.filter((i) => i.help_type === k).length / recent.length) * 100) : 0
+    stats.value.helpUnderstood = pct('看懂了')
+    stats.value.helpNext = pct('知道下一步')
+    stats.value.helpNone = pct('都不好')
   } finally {
     loading.value = false
   }
@@ -238,12 +265,12 @@ const affectedText = computed<string>(() => {
       <AppCard class="stat-card">
         <p class="stat-card__label">临床复核中</p>
         <p class="stat-card__value">{{ stats.reviewing }}</p>
-        <p class="stat-card__sub">平均处理 1.5 天</p>
+        <p class="stat-card__sub">{{ avgReviewDaysText }}</p>
       </AppCard>
       <AppCard class="stat-card">
         <p class="stat-card__label">本周已关闭</p>
         <p class="stat-card__value">{{ stats.closed }}</p>
-        <p class="stat-card__sub">平均处理 2.1 天</p>
+        <p class="stat-card__sub">{{ avgClosedDaysText }}</p>
       </AppCard>
       <AppCard class="stat-card">
         <p class="stat-card__label">帮助类型反馈（7 天）</p>

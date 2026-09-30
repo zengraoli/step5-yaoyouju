@@ -292,7 +292,7 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
 
     const queue = await api().get('/admin/feedback?type=error_report').set(HA());
     expect(queue.body.code).toBe(0);
-    const items = queue.body.data as QueueItem[];
+    const items = (queue.body.data as { items: QueueItem[] }).items;
     const idx = (id: string) => items.findIndex((i) => i.id === id);
     // 队列按严重度分级排序：high 在 medium 前，medium 在 low 前
     expect(idx(highId)).toBeGreaterThanOrEqual(0);
@@ -311,13 +311,13 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
 
     // 类型筛选：只返回帮助类型反馈
     const helpOnly = await api().get('/admin/feedback?type=feedback').set(HA());
-    const helpItems = helpOnly.body.data as QueueItem[];
+    const helpItems = (helpOnly.body.data as { items: QueueItem[] }).items;
     expect(helpItems.length).toBeGreaterThan(0);
     expect(helpItems.every((i) => i.type === 'feedback')).toBe(true);
 
     // 状态筛选：只返回待处理
     const pending = await api().get('/admin/feedback?status=待处理').set(HA());
-    const pendingItems = pending.body.data as QueueItem[];
+    const pendingItems = (pending.body.data as { items: QueueItem[] }).items;
     expect(pendingItems.every((i) => i.status === '待处理')).toBe(true);
     expect(pendingItems.map((i) => i.id)).toContain(highId);
   });

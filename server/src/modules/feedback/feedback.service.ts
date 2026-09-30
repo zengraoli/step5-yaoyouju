@@ -349,6 +349,53 @@ export class FeedbackService {
     };
   }
 
+  /**
+   * 队列统计（B06 顶部卡片）：待处理 / 临床复核中 / 已关闭，以及平均处理时长。
+   * 平均值由 feedback_handling 的首条处置记录与反馈创建时间差算出（没有记录时为 null）。
+   */
+  stats() {
+    const rows = this.db.app
+      .prepare(`SELECT severity, status FROM feedback WHERE is_error_report = 1`)
+      .all() as { severity: string | null; status: string }[];
+    const closedStatuses = ['已关闭', '无需处理', '已处理'];
+    const pending = rows.filter((r) => !closedStatuses.includes(r.status));
+    const handled = this.db.app
+      .prepare(
+        `SELECT f.created_at AS created_at, MIN(h.created_at) AS handled_at
+         FROM feedback f JOIN feedback_handling h ON h.feedback_id = f.id
+         GROUP BY f.id`,
+      )
+      .all() as { created_at: string; handled_at: string }[];
+    const avgDays = (min: number, max: number): number | null => {
+      const slice = handled.filter((r) => {
+        const d = (new Date(r.handled_at).getTime() - new Date(r.created_at).getTime()) / (24 * 3600 * 1000);
+        return d >= min && d < max;
+      });
+      if (slice.length === 0) return null;
+      return (
+        Math.round(
+          (slice.reduce(
+            (sum, r) => sum + (new Date(r.handled_at).getTime() - new Date(r.created_at).getTime()),
+            0,
+          ) /
+            slice.length /
+            (24 * 3600 * 1000)) *
+            10,
+        ) / 10
+      );
+    };
+    return {
+      pending: pending.length,
+      pending_high: pending.filter((r) => r.severity === 'high').length,
+      pending_medium: pending.filter((r) => r.severity === 'medium').length,
+      pending_low: pending.filter((r) => r.severity === 'low').length,
+      reviewing: rows.filter((r) => r.status === '临床复核中').length,
+      closed: rows.filter((r) => closedStatuses.includes(r.status)).length,
+      avg_review_days: avgDays(0, 7),
+      avg_closed_days: avgDays(7, 365),
+    };
+  }
+
   // ---------- 后台（B06；T35 复用；登录鉴权完善留待 T14 / T35） ----------
 
   /**

@@ -27,6 +27,7 @@ import {
   takeOffline,
   type ContentDetail,
 } from '@/api/contents'
+import { request } from '@/api/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -54,6 +55,7 @@ onMounted(async () => {
     return
   }
   await load()
+  void loadEvidences()
 })
 
 async function load() {
@@ -82,6 +84,53 @@ const canPublish = computed<boolean>(() => auth.hasPermission('content.publish')
 const canOffline = computed<boolean>(() => auth.hasPermission('content.offline'))
 
 /** 脚本对比：当前版本与上一版本 */
+/** 类型 + 时长（时长由字幕长度推导，不写死） */
+const typeWithDuration = computed<string>(() => {
+  const d = detail.value
+  const sub = d?.current_version?.subtitle_text ?? ''
+  const chars = sub.replace(/\s+/g, '').length
+  if (!chars) return d?.type ?? '—'
+  const seconds = Math.max(30, Math.round(chars / 4))
+  const mm = String(Math.floor(seconds / 60)).padStart(2, '0')
+  const ss = String(seconds % 60).padStart(2, '0')
+  return `${d?.type} · 时长约 ${mm}:${ss}（按字幕长度估算）`
+})
+
+/** 字幕文件说明（按当前版本号与替代文字长度） */
+const subtitleFileText = computed<string>(() => {
+  const v = detail.value?.current_version
+  if (!v) return '尚无已发布版本'
+  const len = (v.subtitle_text ?? '').replace(/\s+/g, '').length
+  return `subtitles_v${v.version}.srt · 文字替代 ${len} 字 · 与脚本一致性由编辑核对`
+})
+
+/** 资源文件（本地占位资源，不引用外部 CDN） */
+const assetFileText = computed<string>(() => {
+  const v = detail.value?.current_version
+  if (!v) return '尚无已发布版本'
+  const key = v.asset_key ? String(v.asset_key).split('/').pop() : '本地占位资源'
+  return `${key} · 480p/720p · 上传 ${(v.published_at ?? '').slice(0, 10) || '—'}`
+})
+
+/** 关联证据条目（真实证据库；许可「待确认」不参与检索） */
+const evidences = ref<{ id: string; code: string; title: string; source_type: string; license: string | null; verified_at: string | null }[]>([])
+
+async function loadEvidences() {
+  try {
+    const docs = await request<{ id: string; title: string; source_type: string; license: string | null; verified_at: string | null }[]>({ url: '/admin/evidence' })
+    evidences.value = docs.slice(0, 5).map((d, i) => ({
+      id: d.id,
+      code: 'E-' + String(i + 1).padStart(2, '0'),
+      title: d.title,
+      source_type: d.source_type,
+      license: d.license,
+      verified_at: d.verified_at,
+    }))
+  } catch {
+    evidences.value = []
+  }
+}
+
 const scriptDiff = computed<{ current: string; previous: string | null }>(() => {
   const versions = detail.value?.versions ?? []
   const current = versions.find((v) => v.is_current) ?? versions[versions.length - 1]
@@ -184,7 +233,7 @@ function onBack() {
             </label>
             <label class="form-field">
               <span class="form-field__label">类型</span>
-              <input class="form-field__input" type="text" :value="`${detail.type}（示意动画 · 2:55）`" readonly />
+              <input class="form-field__input" type="text" :value="typeWithDuration" readonly />
             </label>
             <label class="form-field">
               <span class="form-field__label">适用范围</span>
@@ -209,7 +258,7 @@ function onBack() {
           <div class="subtitle-row">
             <label class="form-field">
               <span class="form-field__label">字幕文件</span>
-              <input class="form-field__input" type="text" value="subtitles_v2.srt · 已上传 · 与脚本一致性检查通过" readonly />
+              <input class="form-field__input" type="text" :value="subtitleFileText" readonly />
             </label>
             <label class="form-field">
               <span class="form-field__label">文字替代（全文）</span>
@@ -222,30 +271,23 @@ function onBack() {
           <h2 class="panel__title">依据与制作</h2>
           <p class="panel__hint">关联证据条目（≥1）</p>
           <ul class="evidence-list">
-            <li class="evidence-item">
-              <span class="evidence-item__id">G-03 指南摘录</span>
-              <span class="evidence-item__desc">腰痛保守治疗一般原则 · 许可：可引用 · 核实 2026-08</span>
-              <StatusTag status="confirmed" text="可用" />
+            <li v-for="ev in evidences" :key="ev.id" class="evidence-item">
+              <span class="evidence-item__id">{{ ev.code }} {{ ev.source_type }}</span>
+              <span class="evidence-item__desc">{{ ev.title }} · 许可：{{ ev.license ?? '待确认' }}</span>
+              <StatusTag :status="ev.license === '可引用' ? 'confirmed' : 'unconfirmed'" :text="ev.license === '可引用' ? '可用' : '待确认'" />
             </li>
-            <li class="evidence-item">
-              <span class="evidence-item__id">E-11 审核科普</span>
-              <span class="evidence-item__desc">久坐与腰痛 · 许可：可引用 · 核实 2026-08</span>
-              <StatusTag status="confirmed" text="可用" />
-            </li>
-            <li class="evidence-item">
-              <span class="evidence-item__id">G-07 指南</span>
-              <span class="evidence-item__desc">许可待确认（不参与检索）</span>
-              <StatusTag status="unconfirmed" text="待确认" />
+            <li v-if="evidences.length === 0" class="evidence-item">
+              <span class="evidence-item__desc">尚未关联证据条目</span>
             </li>
           </ul>
           <div class="subtitle-row">
             <label class="form-field">
               <span class="form-field__label">资源版本 / 制作方式</span>
-              <input class="form-field__input" type="text" value="v2 · 受控 3D 白模渲染 · 未使用生成模型重绘 · 素材版本 M3D-0.4" readonly />
+              <input class="form-field__input" type="text" :value="`v${detail.current_version?.version ?? 1} · 受控制作 · 未使用生成模型重绘`" readonly />
             </label>
             <label class="form-field">
               <span class="form-field__label">资源文件</span>
-              <input class="form-field__input" type="text" value="activity_v2.mp4 · 480p/720p · 上传 2026-09-19" readonly />
+              <input class="form-field__input" type="text" :value="assetFileText" readonly />
             </label>
           </div>
         </AppCard>

@@ -77,6 +77,15 @@ const SOURCE_OPTIONS = ['全部', '指南', '研究', '审核科普', '其他']
 const LICENSE_OPTIONS = ['全部', '可引用', '待确认', '仅内部']
 const STATUS_OPTIONS = ['全部', '已启用', '已停用']
 
+/** 索引统计（真实片段数与文档数） */
+const indexStats = ref({ chunks: 0, docs: 0 })
+
+/** 新建 / 导入证据表单 */
+const showCreate = ref(false)
+const createMode = ref<'create' | 'import'>('create')
+const createForm = ref({ title: '', source_type: '指南', source_url: '', license: '待确认', raw_text: '' })
+const creating = ref(false)
+
 const loading = ref(true)
 const items = ref<EvidenceListItem[]>([])
 const stats = ref<Record<string, number>>({})
@@ -95,6 +104,43 @@ const disabling = ref(false)
 onMounted(async () => {
   await load()
 })
+
+async function loadIndexStats() {
+  try {
+    const docs = await request<EvidenceListItem[]>({ url: '/admin/evidence' })
+    indexStats.value = {
+      chunks: docs.reduce((n, d) => n + (d.chunk_count ?? 0), 0),
+      docs: docs.length,
+    }
+  } catch {
+    indexStats.value = { chunks: 0, docs: 0 }
+  }
+}
+
+async function submitCreate() {
+  creating.value = true
+  try {
+    await request<{ id: string }>({
+      url: '/admin/evidence',
+      method: 'POST',
+      data: {
+        title: createForm.value.title.trim(),
+        source_type: createForm.value.source_type,
+        source_url: createForm.value.source_url.trim() || undefined,
+        license: createForm.value.license,
+        raw_text: createForm.value.raw_text.trim() || undefined,
+      },
+    })
+    notify('已创建证据条目，许可确认后才可被用户检索引用')
+    showCreate.value = false
+    createForm.value = { title: '', source_type: '指南', source_url: '', license: '待确认', raw_text: '' }
+    await Promise.all([load(), loadIndexStats()])
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '创建失败，请稍后重试')
+  } finally {
+    creating.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -237,11 +283,11 @@ function stepTag(status: string): { key: 'confirmed' | 'unconfirmed' | 'offline'
             <option v-for="o in STATUS_OPTIONS" :key="o" :value="o">{{ o }}</option>
           </select>
         </label>
-        <span class="filter-bar__index">向量索引：embedding v3 · 1,284 片段</span>
+        <span class="filter-bar__index">向量索引：本地 16 维演示向量 · {{ indexStats.chunks }} 片段 / {{ indexStats.docs }} 篇</span>
       </div>
       <div class="filter-bar__actions">
-        <AppButton type="soft" @click="notify('导入指南 / 文献表单将在后续版本提供')">＋ 导入指南/文献</AppButton>
-        <AppButton type="primary" @click="notify('新建证据条目表单将在后续版本提供')">＋ 新建证据条目</AppButton>
+        <AppButton type="soft" @click="showCreate = true; createMode = 'import'">＋ 导入指南/文献</AppButton>
+        <AppButton type="primary" @click="showCreate = true; createMode = 'create'">＋ 新建证据条目</AppButton>
       </div>
     </AppCard>
 
@@ -343,9 +389,88 @@ function stepTag(status: string): { key: 'confirmed' | 'unconfirmed' | 'offline'
       只有“可引用”且“已核实”的条目才参与检索；用户反馈、对话与投稿不得写入证据库。“引用了”不等于确实支持，引用核对对在分析管线中进行。
     </AppNotice>
   </div>
+
+  <!-- 新建 / 导入证据条目（许可默认「待确认」，需临床审核确认后才可引用） -->
+  <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
+    <AppCard class="modal">
+      <h3 class="modal__title">{{ createMode === 'create' ? '新建证据条目' : '导入指南 / 文献' }}</h3>
+      <p class="modal__desc">许可默认「待确认」：只有临床审核标记许可已确认后，条目才会参与用户检索。</p>
+      <label class="modal__field">
+        <span>标题</span>
+        <input v-model="createForm.title" class="modal__input" type="text" maxlength="200" placeholder="例如：腰椎间盘突出症诊疗指南" />
+      </label>
+      <label class="modal__field">
+        <span>来源类型</span>
+        <select v-model="createForm.source_type" class="modal__input">
+          <option v-for="o in SOURCE_OPTIONS" :key="o" :value="o">{{ o }}</option>
+        </select>
+      </label>
+      <label class="modal__field">
+        <span>来源地址（可选）</span>
+        <input v-model="createForm.source_url" class="modal__input" type="text" maxlength="300" placeholder="https://…" />
+      </label>
+      <label class="modal__field">
+        <span>原文 / 摘要</span>
+        <textarea v-model="createForm.raw_text" class="modal__input modal__input--area" rows="5" maxlength="20000" placeholder="粘贴指南或文献原文，保存后可切分入库" />
+      </label>
+      <div class="modal__actions">
+        <AppButton type="primary" :disabled="creating || !createForm.title.trim()" @click="submitCreate">
+          {{ creating ? '提交中…' : '创建' }}
+        </AppButton>
+        <AppButton type="soft" @click="showCreate = false">取消</AppButton>
+      </div>
+    </AppCard>
+  </div>
 </template>
 
 <style scoped>
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgb(27 34 48 / 45%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  z-index: 40;
+}
+.modal {
+  width: 100%;
+  max-width: 560px;
+}
+.modal__title {
+  margin: 0 0 var(--spacing-xs);
+  font-size: var(--font-size-card-title);
+}
+.modal__desc {
+  margin: 0 0 var(--spacing-md);
+  font-size: var(--font-size-aux);
+  color: var(--color-text-2);
+}
+.modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-size-aux);
+  color: var(--color-text-2);
+}
+.modal__input {
+  height: 36px;
+  padding: 0 var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  font-size: var(--font-size-body);
+}
+.modal__input--area {
+  height: auto;
+  padding: var(--spacing-sm);
+  line-height: 1.6;
+}
+.modal__actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
 .evidence-page {
   display: flex;
   flex-direction: column;

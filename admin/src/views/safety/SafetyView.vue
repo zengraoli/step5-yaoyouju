@@ -17,9 +17,12 @@ import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
+import DualConfirm from '@/components/DualConfirm.vue'
 import { useAuthStore } from '@/stores/auth'
 import { request } from '@/api/request'
 
+/** 高危开关：变更必须双人确认（B10） */
+const HIGH_RISK = ['个性化分析', '案例卡片']
 interface SafetyEvent {
   id: string
   rule_code: string
@@ -70,6 +73,28 @@ const ruleSet = ref<RuleSet | null>(null)
 const loading = ref(true)
 const filters = ref({ rule: '全部', severity: '全部', hours: '168' })
 const updating = ref('')
+/** 双人确认弹层引用（高危开关） */
+const dualRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
+const dualTarget = ref<{ enabled: boolean; label: string }>({ enabled: false, label: '' })
+
+const dualSwitch = computed<SwitchItem | undefined>(() => switches.value.find((s) => HIGH_RISK.includes(s.key)))
+
+/** 带确认单 ID 提交开关变更（第二人确认后生效） */
+async function submitSwitchWithConfirm(confirmationId: string): Promise<unknown> {
+  const s = dualSwitch.value
+  if (!s) throw new Error('开关不存在')
+  const result = await request({
+    url: `/admin/safety/switches/${encodeURIComponent(s.key)}`,
+    method: 'PUT',
+    data: {
+      enabled: dualTarget.value.enabled,
+      reason: '双人确认后变更',
+      confirmation_id: confirmationId,
+    },
+  })
+  notify('已按双人确认结果变更并写入审计')
+  return result
+}
 
 const RULE_OPTIONS = ['全部', 'RF-01', 'RF-02', 'RF-03', 'RF-04', 'RF-05', 'RF-06', 'RF-07', 'SC-01', 'SC-02']
 const SEVERITY_OPTIONS = ['全部', '高', '中', '低']
@@ -125,17 +150,22 @@ function confirmAction(message: string): boolean {
 /** 变更开关（需确认；立即生效，写审计） */
 async function onToggleSwitch(item: SwitchItem) {
   if (!canManage.value) {
-    notify('当前角色无开关管理权限（需要「技术」角色）')
+    notify('当前角色无开关管理权限')
     return
   }
   const next = !item.enabled
-  const ok = confirmAction(
-    `确认${next ? '开启' : '关闭'}「${SWITCH_LABELS[item.key] ?? item.key}」？确认要求：${item.requirement}。变更立即生效并写入审计。`,
-  )
+  const label = SWITCH_LABELS[item.key] ?? item.key
+  // 高危开关（个性化分析 / 案例卡片）必须双人确认：先发起确认单，另一人确认后生效
+  if (HIGH_RISK.includes(item.key)) {
+    dualTarget.value = { enabled: next, label }
+    dualRef.value?.start(next, label)
+    return
+  }
+  const ok = confirmAction(`确认${next ? '开启' : '关闭'}「${label}」？确认要求：${item.requirement}。变更立即生效并写入审计。`)
   if (!ok) return
   updating.value = item.key
   try {
-    const reason = window.prompt ? window.prompt('变更原因（写入审计）') ?? '' : ''
+    const reason = globalThis.prompt ? globalThis.prompt('变更原因（写入审计）') ?? '' : ''
     await request({
       url: `/admin/safety/switches/${encodeURIComponent(item.key)}`,
       method: 'PUT',
@@ -188,7 +218,7 @@ const headerSummary = computed<string>(() => {
                 <p class="switch-row__key">{{ s.key }}</p>
                 <p class="switch-row__meta">
                   确认：{{ s.requirement }}
-                  <template v-if="s.last_change"> · 最近变更 {{ s.last_change.at }} 周工 · {{ s.last_change.by }}</template>
+                  <template v-if="s.last_change"> · 最近变更 {{ s.last_change.at }} · {{ s.last_change.by }}</template>
                 </p>
               </div>
               <button
@@ -204,6 +234,18 @@ const headerSummary = computed<string>(() => {
           <p class="panel__note">
             关闭后：不做个性化分析与对话任务；用户端显示回退页；已审核科普与摘要仍可用。
           </p>
+
+          <!-- 高危开关双人确认弹层：一个人改不了，必须另一名具备权限的账号确认 -->
+          <DualConfirm
+            v-if="dualSwitch"
+            :ref="(el) => (dualRef = el as never)"
+            action="switch.update"
+            :target-id="dualSwitch.key"
+            :target-label="`开关 ${SWITCH_LABELS[dualSwitch.key] ?? dualSwitch.key} → ${dualTarget.enabled ? '开启' : '关闭'}`"
+            :submit="submitSwitchWithConfirm"
+            button-text="占位"
+            @done="loadAll()"
+          />
         </AppCard>
 
         <AppCard class="panel">
