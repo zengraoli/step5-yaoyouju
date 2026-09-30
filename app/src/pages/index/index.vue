@@ -286,9 +286,9 @@ const quickEntries = computed<QuickEntry[]>(() => {
       title: '记录今天',
       desc: '约 1 分钟',
       icon: 'edit',
-      onClick: goTimeline,
+      onClick: goToday,
     },
-    { key: 'report', title: '录入报告', desc: '粘贴文字', icon: 'upload', onClick: goTimeline },
+    { key: 'report', title: '录入报告', desc: '粘贴文字', icon: 'upload', onClick: goReportInput },
     { key: 'qa', title: '问与解释', desc: '基于当前上下文', icon: 'chat', onClick: goQa },
     {
       key: 'followup',
@@ -420,6 +420,15 @@ async function onCreateEpisode() {
 
 function goTimeline() {
   uni.reLaunch({ url: '/pages/timeline/index' })
+}
+
+/** 快捷入口「记录今天」直接进记录页，「录入报告」直接进录入页（反馈第 46 条） */
+function goToday() {
+  uni.reLaunch({ url: '/pages/timeline/record' })
+}
+
+function goReportInput() {
+  uni.reLaunch({ url: '/pages/report/input' })
 }
 
 function goQa() {

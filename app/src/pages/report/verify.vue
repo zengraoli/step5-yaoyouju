@@ -16,7 +16,7 @@ import AppIcon from '../../components/AppIcon.vue'
 import AppNotice from '../../components/AppNotice.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import { useAuthStore } from '../../stores/auth'
-import { confirmEvent, getEpisode, listEpisodes, type EpisodeDetail } from '../../api/episodes'
+import { addCareEvent, getEpisode, listEpisodes, type EpisodeDetail } from '../../api/episodes'
 import { getStructured, type ExtractedTerm, type StructuredItem } from '../../api/reports'
 import { createAnalysis, safetyNoticeFromError } from '../../api/analyses'
 import { getStatusBarHeight } from '../../utils/system'
@@ -139,13 +139,24 @@ function termLine(term: ExtractedTerm, rawText: string): number {
 
 /* ---------- 侧别冲突确认 ---------- */
 
+/**
+ * 侧别冲突确认（反馈第 30 条）：把用户选择写回病程事件，
+ * 「已确认」不能一键覆盖整条关键变化确认（含红旗答案）。
+ */
 async function onSideChoice(choice: string) {
   sideChoice.value = choice
   const item = symptomItem.value
   if (!item) return
   try {
-    await confirmEvent(episodeId.value, item.care_event_id)
-    toast('已记录你的确认')
+    const sideText = `侧别冲突确认：报告为「${reportSide.value}」，我的描述为「${selfSide.value}」，以「${choice}」为准`
+    await addCareEvent(episodeId.value, {
+      event_type: '症状',
+      source_type: '自述',
+      raw_text: sideText,
+      verify_status: '已确认',
+      occurred_at: new Date().toISOString(),
+    })
+    toast('已记录你对侧别的选择')
   } catch (e) {
     toast(e instanceof Error ? e.message : '确认失败，请稍后重试')
   }
