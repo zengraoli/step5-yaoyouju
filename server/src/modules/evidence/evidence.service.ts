@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { DbService } from '../../db/db.service';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { AuditService } from '../../common/audit.service';
+import { todayBeijing } from '../../common/time.util';
 import {
   EvidenceRetriever,
   EvidenceSearchOutcome,
@@ -277,7 +278,14 @@ export class EvidenceService implements EvidenceRetriever {
   }
 
   /** 编辑证据文档（改动写审计） */
-  update(actorId: string | null, docId: string, input: Partial<EvidenceDocInput>): EvidenceDocDetail {
+  update(
+    actorId: string | null,
+    docId: string,
+    input: Partial<EvidenceDocInput>,
+    options: { canVerifyLicense?: boolean } = {},
+  ): EvidenceDocDetail {
+    // 许可与核实日期只有临床审核 / 超级管理可以改（B10：证据核实归临床审核）
+    const canVerify = options.canVerifyLicense === true;
     const row = this.loadDoc(docId);
     const title = input.title === undefined ? row.title : input.title.trim();
     if (!title) throw new ApiException(ErrorCode.BAD_REQUEST, '证据文档标题不能为空');
@@ -289,9 +297,19 @@ export class EvidenceService implements EvidenceRetriever {
       );
     }
     const sourceUrl = input.source_url === undefined ? row.source_url : input.source_url?.trim() || null;
-    const license = input.license === undefined ? row.license : input.license?.trim() || null;
-    const verifiedAt =
-      input.verified_at === undefined ? row.verified_at : normalizeDate(input.verified_at, '核实日期');
+    let license = row.license;
+    let verifiedAt = row.verified_at;
+    const wantsLicense = input.license !== undefined && input.license?.trim() !== row.license;
+    const wantsVerified =
+      input.verified_at !== undefined && normalizeDate(input.verified_at, '核实日期') !== row.verified_at;
+    if ((wantsLicense || wantsVerified) && !canVerify) {
+      throw new ApiException(
+        ErrorCode.FORBIDDEN,
+        '许可与核实日期只能由临床审核或超级管理员变更',
+      );
+    }
+    if (wantsLicense) license = input.license?.trim() || null;
+    if (wantsVerified) verifiedAt = normalizeDate(String(input.verified_at), '核实日期');
     const rawText = input.raw_text === undefined ? row.raw_text : input.raw_text;
     const active = input.active === undefined ? row.active === 1 : input.active;
 
@@ -315,6 +333,26 @@ export class EvidenceService implements EvidenceRetriever {
       .run(title, sourceType, sourceUrl, license, verifiedAt, rawText, active ? 1 : 0, now(), docId);
     this.audit.append(actorId, 'evidence.update', `evidence_doc:${docId}`, diff);
     this.logger.log(`[evidence] ${actorId ?? 'system'} 编辑证据文档 ${docId}（改动 ${Object.keys(diff).length} 项）`);
+    return this.detail(docId);
+  }
+
+  /**
+   * 标记许可已确认（临床审核 / 超级管理）：许可置为「可引用」并记录核实日期，写审计。
+   * 许可「待确认」的证据不进入用户检索（evidence-retrieval 会排除）。
+   */
+  verifyLicense(actorId: string, docId: string, verifiedAt?: string): EvidenceDocDetail {
+    const row = this.loadDoc(docId);
+    const at = verifiedAt ? normalizeDate(verifiedAt, '核实日期') : todayBeijing();
+    this.db.app
+      .prepare('UPDATE evidence_doc SET license = ?, verified_at = ?, updated_at = ? WHERE id = ?')
+      .run('可引用', at, now(), docId);
+    this.audit.append(actorId, 'evidence.verify_license', `evidence_doc:${docId}`, {
+      title: row.title,
+      from_license: row.license,
+      to_license: '可引用',
+      verified_at: at,
+    });
+    this.logger.log(`[evidence] ${actorId} 标记证据 ${docId} 许可已确认（${at}）`);
     return this.detail(docId);
   }
 

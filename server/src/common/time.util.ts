@@ -16,6 +16,12 @@ export function todayBeijing(): string {
   return beijingDate();
 }
 
+/** UTC ISO8601 → 北京时间（UTC ISO8601 字符串，界面直接展示） */
+export function beijingDateTime(iso?: string): string {
+  const d = iso ? new Date(iso) : new Date();
+  return new Date(d.getTime() + 8 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+}
+
 /** 归一化日期 / 时间输入为 UTC ISO8601；仅日期按北京时间当天 00:00 处理 */
 export function normalizeInstant(input: string | Date): string {
   if (input instanceof Date) return input.toISOString();

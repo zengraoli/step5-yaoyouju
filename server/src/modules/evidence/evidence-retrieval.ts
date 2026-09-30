@@ -219,7 +219,8 @@ export function searchEvidence(
       `SELECT c.id AS chunk_id, c.doc_id, c.content, c.embedding, c.position,
               d.title AS doc_title, d.source_type, d.license
        FROM evidence_chunk c JOIN evidence_doc d ON d.id = c.doc_id
-       WHERE d.active = 1`,
+       WHERE d.active = 1
+         AND (d.license IS NULL OR trim(d.license) NOT IN ('待确认'))`,
     )
     .all() as ChunkRow[];
 

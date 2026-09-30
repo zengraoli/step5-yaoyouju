@@ -314,7 +314,7 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
       title: '《演示编辑后（T11）》',
       license: '演示数据（已修订）',
       verified_at: '2026-09-25',
-    });
+    }, { canVerifyLicense: true });
     expect(after.title).toBe('《演示编辑后（T11）》');
     expect(after.license).toBe('演示数据（已修订）');
     expect(after.verified_at).toBe('2026-09-25');
@@ -328,6 +328,15 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
     expect(Object.keys(diff).sort()).toEqual(['license', 'title', 'verified_at']);
     expect(diff.title).toEqual({ from: '《演示编辑前（T11）》', to: '《演示编辑后（T11）》' });
     expect(diff.source_type).toBeUndefined();
+
+    // 运营编辑不能改许可与核实日期（B10：证据核实归临床审核）
+    expect(caught(() => evidence.update(editor(), doc.id, { license: '待确认' })).code).toBe(
+      ErrorCode.FORBIDDEN,
+    );
+    // 标记许可已确认（临床审核）
+    const verified = evidence.verifyLicense(clinician(), doc.id, '2026-09-26');
+    expect(verified.license).toBe('可引用');
+    expect(verified.verified_at).toBe('2026-09-26');
 
     // 非法来源类型 / 空标题
     expect(caught(() => evidence.update(clinician(), doc.id, { title: ' ' })).code).toBe(

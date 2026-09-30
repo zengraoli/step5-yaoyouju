@@ -1,11 +1,11 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { RequirePermission } from '../admin/permission.decorator';
 import { AdminContext } from '../admin/admin-auth.service';
-import { CurrentUser } from '../../common/current-user.decorator';
 import { EvidenceService } from './evidence.service';
 import { CurrentAdmin } from '../../common/current-admin.decorator';
+
 class AdminEvidenceDocBody {
   @ApiProperty()
   @IsString()
@@ -40,6 +40,13 @@ class AdminEvidenceDocBody {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+}
+
+class AdminEvidenceVerifiedBody {
+  @ApiProperty({ description: '核实日期（YYYY-MM-DD，缺省今天）', required: false })
+  @IsOptional()
+  @Matches(/^d{4}-d{2}-d{2}$/, { message: '日期格式应为 YYYY-MM-DD' })
+  verified_at?: string;
 }
 
 class AdminEvidenceActiveBody {
@@ -97,26 +104,40 @@ export class AdminEvidenceController {
   @ApiOperation({ summary: '新建证据文档' })
   @RequirePermission('evidence.ingest')
   @Post()
-  create(@CurrentUser() admin: AdminContext, @Body() body: AdminEvidenceDocBody) {
+  create(@CurrentAdmin() admin: AdminContext, @Body() body: AdminEvidenceDocBody) {
     return this.evidence.create(admin.id, body);
   }
 
-  @ApiOperation({ summary: '编辑证据文档（改动写审计）' })
+  @ApiOperation({ summary: '编辑证据文档（改动写审计；许可与核实日期需临床审核）' })
   @RequirePermission('evidence.ingest')
   @Patch(':id')
   update(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() body: AdminEvidenceDocBody,
   ) {
-    return this.evidence.update(admin.id, id, body);
+    return this.evidence.update(admin.id, id, body, {
+      canVerifyLicense:
+        admin.permissions.includes('*') || admin.permissions.includes('evidence.verify'),
+    });
+  }
+
+  @ApiOperation({ summary: '标记许可已确认（临床审核 / 超级管理；写审计；之后才可被用户检索引用）' })
+  @RequirePermission('evidence.verify')
+  @Post(':id/verify-license')
+  verifyLicense(
+    @CurrentAdmin() admin: AdminContext,
+    @Param('id') id: string,
+    @Body() body: AdminEvidenceVerifiedBody,
+  ) {
+    return this.evidence.verifyLicense(admin.id, id, body.verified_at ?? undefined);
   }
 
   @ApiOperation({ summary: '停用 / 启用证据文档（停用时返回影响预览，供确认）' })
   @RequirePermission('evidence.deactivate')
   @Post(':id/active')
   setActive(
-    @CurrentUser() admin: AdminContext,
+    @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
     @Body() body: AdminEvidenceActiveBody,
   ) {
@@ -126,7 +147,7 @@ export class AdminEvidenceController {
   @ApiOperation({ summary: '切分入库（切分片段并计算本地向量，幂等）' })
   @RequirePermission('evidence.ingest')
   @Post(':id/ingest')
-  ingest(@CurrentUser() admin: AdminContext, @Param('id') id: string) {
+  ingest(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
     return this.evidence.ingest(admin.id, id);
   }
 }
