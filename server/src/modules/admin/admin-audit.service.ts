@@ -132,9 +132,9 @@ export class AdminAuditService {
   }
 
   /** 哈希链校验（委托 AuditService） */
-  verify(): { ok: boolean; broken_at: string | null } {
+  verify(): { ok: boolean; broken_at: string | null; reason?: string } {
     const result = this.audit.verifyChain();
-    return { ok: result.ok, broken_at: result.brokenAt ?? null };
+    return { ok: result.ok, broken_at: result.broken_at, ...(result.reason ? { reason: result.reason } : {}) };
   }
 
   /** 单条授权记录（T12 授权写审计 action=feedback.authorize_view） */

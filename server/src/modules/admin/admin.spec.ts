@@ -270,6 +270,14 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     await api().post('/admin/auth/logout').set(H(tokens.compliance01));
     await api().post('/admin/auth/logout').set(H(tokens.super01));
 
+    // 退出登录后旧令牌立即失效（验收反馈第 5 条）
+    const revoked = await api().get('/admin/auth/me').set(H(tokens.super01));
+    expect(revoked.body.code).toBe(40100);
+
+    // 重新登录拿新令牌继续
+    tokens.compliance01 = (await login('compliance01')).body.data.token as string;
+    tokens.super01 = (await login('super01')).body.data.token as string;
+
     const byActor = await api().get('/admin/audit?actor=super01').set(H(tokens.compliance01));
     expect(byActor.body.code).toBe(0);
     const actorItems = (byActor.body.data as { items: AuditLogItem[]; total: number }).items;
@@ -327,10 +335,28 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
 
     const res = await api().get('/admin/audit/verify').set(H(tokens.super01));
     expect(res.body.code).toBe(0);
-    expect(res.body.data).toEqual({ ok: false, broken_at: target.id });
+    expect(res.body.data.ok).toBe(false);
+    expect(res.body.data.broken_at).toBe(target.id);
 
     // 恢复触发器，保证后续用例仍在数据库层保护下
     db.app.exec(AUDIT_LOG_TRIGGERS);
+  });
+
+  it('删掉最后一条审计也能被发现（链头锚点）', async () => {
+    const anchorBefore = db.app
+      .prepare('SELECT head_hash, total FROM audit_anchor WHERE id = 1')
+      .get() as { head_hash: string; total: number };
+    expect(anchorBefore.total).toBeGreaterThan(0);
+    // 模拟数据库层保护被绕过：先删触发器，再删尾记录
+    db.app.exec('DROP TRIGGER audit_log_no_delete');
+    db.app.exec('DELETE FROM audit_log WHERE rowid = (SELECT MAX(rowid) FROM audit_log)');
+    try {
+      const res = await api().get('/admin/audit/verify').set(H(tokens.super01));
+      expect(res.body.code).toBe(0);
+      expect(res.body.data.ok).toBe(false);
+    } finally {
+      db.app.exec(AUDIT_LOG_TRIGGERS);
+    }
   });
 
   it('审计日志只追加：数据库触发器拒绝 UPDATE 与 DELETE', () => {
@@ -348,6 +374,7 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     expect(res.body.code).toBe(0);
     const logs = auditRows('admin.logout').filter((l) => l.actor_id === adminIds.editor01);
     expect(logs.length).toBeGreaterThanOrEqual(1);
+    tokens.editor01 = (await login('editor01')).body.data.token as string;
 
     // 没有注册接口：/admin/auth/register 不存在（404）
     const register = await api().post('/admin/auth/register').send({ name: 'x', password: 'y', totp: '123456' });

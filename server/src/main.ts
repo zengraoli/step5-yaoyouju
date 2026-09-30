@@ -4,6 +4,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/response.interceptor';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
+import { REQUEST_ID_HEADER, newRequestId, runWithRequestId } from './common/request-context';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -11,8 +12,23 @@ async function bootstrap() {
   app.enableCors({
     origin: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
+    exposedHeaders: [REQUEST_ID_HEADER],
   });
+  // 请求 ID：每个请求生成唯一标识，写响应头并进入审计日志（验收反馈第 16 条）
+  app.use(
+    (
+      req: { headers: Record<string, unknown> },
+      res: { setHeader(k: string, v: string): void },
+      next: () => void,
+    ) => {
+      const headerVal = req.headers['x-request-id'];
+      const inbound = typeof headerVal === 'string' && /^[\w-]{4,64}$/.test(headerVal) ? headerVal : null;
+      const requestId = inbound ?? newRequestId();
+      res.setHeader(REQUEST_ID_HEADER, requestId);
+      runWithRequestId(requestId, () => next());
+    },
+  );
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

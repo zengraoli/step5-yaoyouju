@@ -27,6 +27,39 @@ CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log 只追加，不能删除'); END;
 `;
 
+/**
+ * 审计链头锚点（验收反馈第 37 条）。
+ * 单独一张表保存「链头哈希 + 记录总数」，每次追加审计同步更新。
+ * 只删尾记录不会破坏哈希链，但会让锚点与链头不一致，从而被发现。
+ */
+export const AUDIT_ANCHOR_DDL = `
+CREATE TABLE IF NOT EXISTS audit_anchor (
+  id        INTEGER PRIMARY KEY CHECK (id = 1),
+  head_hash TEXT NOT NULL,
+  total     INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT ''
+);
+`;
+
+/**
+ * 既有库的列增量迁移（审计序号与链头锚点）。
+ */
+export function ensureAuditColumns(db: {
+  exec(sql: string): unknown;
+  prepare(sql: string): { all(...args: unknown[]): unknown; get(...args: unknown[]): unknown };
+}): void {
+  db.exec(AUDIT_ANCHOR_DDL);
+  const cols = db.prepare('PRAGMA table_info(audit_log)').all() as { name: string }[];
+  if (cols.length === 0) return;
+  if (!cols.some((c) => c.name === 'seq')) {
+    db.exec('ALTER TABLE audit_log ADD COLUMN seq INTEGER');
+    // 按既有顺序回填 seq，使老库也能通过连续性校验
+    db.exec(
+      `UPDATE audit_log SET seq = (SELECT COUNT(*) FROM audit_log t2 WHERE t2.rowid <= audit_log.rowid)`,
+    );
+  }
+}
+
 export const APP_DDL = `
 CREATE TABLE IF NOT EXISTS users (
   id             TEXT PRIMARY KEY,
@@ -231,6 +264,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   request_id TEXT,
   prev_hash  TEXT,
   hash       TEXT,
+  seq        INTEGER,
   created_at TEXT NOT NULL
 );
 
@@ -291,6 +325,18 @@ CREATE TABLE IF NOT EXISTS case_submission (
   consent_scope  TEXT,
   status         TEXT NOT NULL DEFAULT '待审',
   created_at     TEXT NOT NULL
+);
+
+-- 用户自助删除账户申请（验证码二次确认 + 24 小时冷静期，验收反馈第 4 条）
+CREATE TABLE IF NOT EXISTS deletion_request (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL,
+  scope        TEXT NOT NULL DEFAULT '全部数据',
+  status       TEXT NOT NULL DEFAULT '冷静期中',
+  requested_at TEXT NOT NULL,
+  effective_at TEXT NOT NULL,
+  executed_at  TEXT,
+  cancelled_at TEXT
 );
 
 -- 任务队列（演示实现替代 Redis Streams）：分析任务由 Worker 轮询消费

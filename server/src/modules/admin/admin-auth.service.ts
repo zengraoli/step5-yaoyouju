@@ -5,6 +5,7 @@ import { ApiException, ErrorCode } from '../../common/api-error';
 import { AuditService } from '../../common/audit.service';
 import { hashAdminPassword, safeEqual } from '../../common/password';
 import { DbService } from '../../db/db.service';
+import { TokenRevocationService } from '../../common/token-revocation.service';
 import { permissionCatalog, permissionsOf } from './admin.constants';
 
 /** 后台账号上下文（AdminGuard 注入 req.admin） */
@@ -39,7 +40,7 @@ interface AdminUserRow {
 const TOKEN_PREFIX = 'av1'; // admin token v1，与用户端 'v1' 区分（两套令牌互不通用）
 const TOKEN_TTL_MS = 30 * 60 * 1000; // 后台短会话：30 分钟
 const MAX_FAILED_ATTEMPTS = 5; // 连续失败锁定阈值
-const LOCK_MS = 15 * 60 * 1000; // 锁定时长 15 分钟
+const LOCK_MS = 30 * 60 * 1000; // 锁定时长 30 分钟（与登录页说明一致）
 
 interface AttemptState {
   fails: number;
@@ -49,7 +50,7 @@ interface AttemptState {
 /**
  * 后台账号与登录（T14，B01）：
  * - 账号 + 口令 + TOTP（演示固定码取 env ADMIN_TOTP_DEMO_CODE，默认 123456）；
- * - 无自助注册；连续失败 5 次锁定 15 分钟（内存记录，重启即清零）；
+ * - 无自助注册；连续失败 5 次锁定 30 分钟（内存记录，重启即清零）；
  * - 口令用 timingSafeEqual 比较 sha256 哈希；登录成功 / 失败都写审计（不记录口令与验证码）；
  * - 令牌 HMAC-SHA256 签名，密钥取 env ADMIN_TOKEN_SECRET，未设置时用派生密钥（仅本地演示）。
  */
@@ -63,6 +64,7 @@ export class AdminAuthService {
   constructor(
     private readonly db: DbService,
     private readonly audit: AuditService,
+    private readonly revocation: TokenRevocationService,
   ) {
     this.secret =
       process.env.ADMIN_TOKEN_SECRET?.trim() ||
@@ -117,8 +119,9 @@ export class AdminAuthService {
     return { token: this.issueToken(row.id), admin: this.profileOf(row) };
   }
 
-  /** 登出：令牌为无状态签名，登出即客户端丢弃；这里写审计留痕 */
-  logout(admin: AdminContext): { ok: true } {
+  /** 登出：吊销当前令牌（旧令牌立即失效）并写审计 */
+  logout(admin: AdminContext, token: string): { ok: true } {
+    this.revocation.revoke(token, 'admin', new Date(Date.now() + TOKEN_TTL_MS).toISOString());
     this.audit.append(admin.id, 'admin.logout', `admin_user:${admin.id}`, { name: admin.name });
     return { ok: true };
   }
@@ -143,13 +146,14 @@ export class AdminAuthService {
     };
   }
 
-  /** 校验后台令牌：签名 + 有效期（30 分钟）+ 账号仍然有效；无效返回 null */
+  /** 校验后台令牌：签名 + 有效期（30 分钟）+ 账号仍然有效 + 未被吊销；无效返回 null */
   verifyToken(token: string): AdminContext | null {
     const parts = token.split('.');
     if (parts.length !== 3 || parts[0] !== TOKEN_PREFIX) return null;
     const payload = Buffer.from(parts[1], 'base64url').toString('utf8');
     const expected = createHmac('sha256', this.secret).update(payload).digest('base64url');
     if (!safeEqual(expected, parts[2])) return null;
+    if (this.revocation.isRevoked(token)) return null;
     const [adminId, expRaw] = payload.split('.');
     const exp = Number(expRaw);
     if (!adminId || !Number.isFinite(exp) || exp < Date.now()) return null;

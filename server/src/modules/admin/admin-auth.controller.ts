@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, Matches, MaxLength } from 'class-validator';
 import { Public } from '../../common/public.decorator';
@@ -29,7 +29,7 @@ class AdminLoginDto {
 /**
  * 后台登录（T14，B01）：账号 + 口令 + TOTP。
  * - 无自助注册接口；
- * - 连续失败 5 次锁定 15 分钟（40300 账号已锁定）；
+ * - 连续失败 5 次锁定 30 分钟（40300 账号已锁定）；
  * - 短会话：令牌 30 分钟有效，返回 token + 角色 + 姓名；
  * - 登录成功 / 失败都写审计（失败只记录账号，不记录口令与验证码）。
  */
@@ -39,17 +39,22 @@ export class AdminAuthController {
   constructor(private readonly adminAuth: AdminAuthService) {}
 
   @Public()
-  @ApiOperation({ summary: '后台登录：账号 + 口令 + TOTP（连续失败 5 次锁定 15 分钟）' })
+  @ApiOperation({ summary: '后台登录：账号 + 口令 + TOTP（连续失败 5 次锁定 30 分钟）' })
   @Post('login')
   login(@Body() dto: AdminLoginDto): AdminLoginResult {
     return this.adminAuth.login(dto.name, dto.password, dto.totp);
   }
 
-  /** 登出（写审计；无状态令牌由客户端丢弃） */
-  @ApiOperation({ summary: '后台登出（写审计）' })
+  /** 登出（吊销当前令牌，旧令牌立即失效；写审计） */
+  @ApiOperation({ summary: '后台登出（吊销当前令牌）' })
   @Post('logout')
-  logout(@CurrentAdmin() admin: AdminContext): { ok: true } {
-    return this.adminAuth.logout(admin);
+  logout(
+    @CurrentAdmin() admin: AdminContext,
+    @Req() req: Request & { headers: Record<string, unknown> },
+  ): { ok: true } {
+    const header = (req.headers['authorization'] ?? '') as string;
+    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+    return this.adminAuth.logout(admin, token);
   }
 
   /** 当前后台账号：角色与权限 */
