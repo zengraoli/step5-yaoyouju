@@ -1,4 +1,5 @@
 import { request } from './request'
+import type { SafetyNotice } from './episodes'
 
 /**
  * 报告录入与结构化核对（对应 server reports.controller.ts）
@@ -31,6 +32,8 @@ export interface ReportView {
   source_type: string
   verify_status: string
   occurred_at: string
+  /** 命中红旗时的就医提示（未命中为 null） */
+  safety_notice?: SafetyNotice | null
 }
 
 export interface StructuredItem {

@@ -151,7 +151,17 @@ async function onExport(format: (typeof EXPORT_FORMATS)[number]) {
         fail: () => toast('复制失败，请长按文本手动复制'),
       })
     } else {
-      toast(format === 'PDF' ? '请在打印对话框中选择“另存为 PDF”' : '图片导出由浏览器打印生成')
+      // #ifdef H5
+      // H5：调起浏览器打印（目标选择「另存为 PDF」/「打印为图片」），真正打开打印面板
+      window.print()
+      // #endif
+      // #ifndef H5
+      toast(
+        format === 'PDF'
+          ? '请在系统分享里选择「打印 / 导出 PDF」'
+          : '请用系统截图保存为图片，或分享后由对方打印',
+      )
+      // #endif
     }
     summary.value = await getLatestFollowup(episodeId.value)
   } catch (e) {
@@ -250,10 +260,24 @@ const sideNote = computed<string>(() => {
       <!-- 一页交接摘要 -->
       <block v-if="tab === '一页交接摘要'">
         <AppCard>
-          <text class="summary-title">复诊交接摘要</text>
-          <text class="summary-meta">
-            成于 {{ generatedLabel }} · 由用户自述与报告原文整理 · 未经医生核实
-          </text>
+          <view class="summary-head">
+            <view class="summary-head__main">
+              <text class="summary-title">复诊交接摘要</text>
+              <text class="summary-meta">
+                成于 {{ generatedLabel }} · 由用户自述与报告原文整理 · 未经医生核实
+                {{ summary?.content.corrected ? ' · 已在预览后纠正' : '' }}
+              </text>
+            </view>
+            <view
+              class="summary-head__regen"
+              hover-class="summary-head__regen--hover"
+              :hover-stay-time="80"
+              @click="onGenerate"
+            >
+              <AppIcon name="refresh" :size="14" />
+              <text class="summary-head__regen-text">{{ generating ? '生成中…' : '重新生成' }}</text>
+            </view>
+          </view>
 
           <view v-for="section in sections" :key="section.key" class="section">
             <view class="section__head">

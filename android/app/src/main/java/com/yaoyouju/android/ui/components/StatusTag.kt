@@ -45,7 +45,7 @@ private fun metaOf(key: StatusKey): StatusMeta = when (key) {
     StatusKey.Quote -> StatusMeta("报告原文", Info, InfoLight)
     StatusKey.Self -> StatusMeta("自述", Text2, NeutralLight)
     StatusKey.Generated -> StatusMeta("系统生成", Text2, NeutralLight)
-    StatusKey.Reviewed -> StatusMeta("已审核 v2", Ok, OkLight)
+    StatusKey.Reviewed -> StatusMeta("已审核", Ok, OkLight)
     StatusKey.Offline -> StatusMeta("已下线 · 更正中", Text2, NeutralLight)
     StatusKey.NoDiagnosis -> StatusMeta("不作诊断", Text2, NeutralLight)
 }

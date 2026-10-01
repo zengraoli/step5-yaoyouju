@@ -3,7 +3,7 @@ package com.yaoyouju.android.ui.screens
 import com.yaoyouju.android.core.net.QaCitation
 import com.yaoyouju.android.core.net.QaMessageView
 import com.yaoyouju.android.core.net.TimelineGroup
-import com.yaoyouju.android.core.net.TimelineItem
+import com.yaoyouju.android.core.net.CareEventView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -82,39 +82,59 @@ class QaTimelineLogicTest {
     @Test
     fun `时间线按日期分组`() {
         val groups = listOf(
-            TimelineGroup(date = "2026-09-27", items = listOf(TimelineItem(id = "1", label = "症状加重", eventType = "症状"))),
-            TimelineGroup(date = "2026-09-20", items = listOf(TimelineItem(id = "2", label = "录入报告", eventType = "症状"))),
+            TimelineGroup(date = "2026-09-27", events = listOf(event("1", "症状"))),
+            TimelineGroup(date = "2026-09-20", events = listOf(event("2", "报告"))),
         )
         assertEquals(2, groups.size)
         assertEquals("2026-09-27", groups[0].date)
         // 按日期倒序（最新在前）
         assertTrue(groups[0].date > groups[1].date)
+        assertEquals(1, groups[0].events.size)
     }
 
     @Test
     fun `区分来源类型`() {
-        val self = TimelineItem(id = "1", label = "症状加重", eventType = "症状", sourceType = "自述")
-        val report = TimelineItem(id = "2", label = "腰椎 MRI", eventType = "症状", sourceType = "报告")
-        val doctor = TimelineItem(id = "3", label = "医嘱", eventType = "症状", sourceType = "医生记录")
-        assertEquals("自述", self.sourceType)
-        assertEquals("报告", report.sourceType)
-        assertEquals("医生记录", doctor.sourceType)
+        assertEquals("自述", event("1", "症状", sourceType = "自述").sourceType)
+        assertEquals("报告原文", event("2", "报告", sourceType = "报告原文").sourceType)
+        assertEquals("医生记录", event("3", "医嘱", sourceType = "医生记录").sourceType)
     }
 
     @Test
     fun `纠正后核实状态降级为有冲突`() {
-        val item = TimelineItem(id = "1", label = "症状加重", eventType = "症状", verifyStatus = "已确认")
+        val item = event("1", "症状", verifyStatus = "已确认")
         // 纠正（内容变化）→ 有冲突
         val corrected = item.copy(verifyStatus = "有冲突")
         assertEquals("有冲突", corrected.verifyStatus)
     }
 
     @Test
-    fun `缺失时间显示尚未确认`() {
-        val item = TimelineItem(id = "1", label = "症状加重", eventType = "症状", occurredAt = null)
-        val display = item.occurredAt?.take(10) ?: "时间尚未确认"
-        assertEquals("时间尚未确认", display)
+    fun `缺失原文与时间不默认阴性`() {
+        val item = event("1", "症状", rawText = null)
+        val display = item.rawText ?: "${item.eventType}记录（无原文）"
+        assertEquals("症状记录（无原文）", display)
+        // 时间缺失时界面显示「时间尚未确认」（occurredAt 为空串）
+        val shown = item.occurredAt.takeIf { it.isNotBlank() }?.take(10) ?: "时间尚未确认"
+        assertEquals("2026-09-27", shown)
+        assertEquals("时间尚未确认", event("2", "症状", occurredAt = "").occurredAt.takeIf { it.isNotBlank() }?.take(10) ?: "时间尚未确认")
     }
+
+    private fun event(
+        id: String,
+        eventType: String,
+        sourceType: String = "自述",
+        verifyStatus: String = "尚未确认",
+        rawText: String? = "久坐后腰痛",
+        occurredAt: String? = "2026-09-27T00:00:00.000Z",
+    ) = CareEventView(
+        id = id,
+        episodeId = "ep1",
+        eventType = eventType,
+        occurredAt = occurredAt ?: "",
+        sourceType = sourceType,
+        rawText = rawText,
+        verifyStatus = verifyStatus,
+        reportedAt = occurredAt ?: "",
+    )
 
     // ---------- A11 记录今天 ----------
 

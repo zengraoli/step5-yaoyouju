@@ -35,6 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.navigation.NavHostController
+import com.yaoyouju.android.core.net.CreateCareEventRequest
+import com.yaoyouju.android.core.net.CreateEpisodeRequest
+import com.yaoyouju.android.core.net.CreateReportRequest
 import com.yaoyouju.android.core.net.EpisodesApi
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.ReportsApi
@@ -88,6 +91,9 @@ fun ReportInputScreen(navController: NavHostController) {
     var submitting by remember { mutableStateOf(false) }
     var ocrLoading by remember { mutableStateOf(false) }
     var toastText by remember { mutableStateOf("") }
+    var showEmergency by remember { mutableStateOf(false) }
+    var reportSafetyLabels by remember { mutableStateOf("") }
+    var reportSafetyStop by remember { mutableStateOf(false) }
 
     /** 医生建议快捷标签（点击追加到文本域） */
     val adviceChips = listOf("保守治疗", "复查时间", "用药", "手术评估", "康复建议")
@@ -99,7 +105,9 @@ fun ReportInputScreen(navController: NavHostController) {
                 val episodes: List<com.yaoyouju.android.core.net.EpisodeItem> = handleResponse(episodesApi.list())
                 var episodeId = episodes.firstOrNull()?.id
                 if (episodeId == null) {
-                    episodeId = handleResponse(episodesApi.create(mapOf("title" to "我的腰痛病程"))).id
+                    episodeId = handleResponse(
+                        episodesApi.create(CreateEpisodeRequest(title = "我的腰痛病程")),
+                    ).id
                 }
                 val id = episodeId ?: return@launch
                 if (tab == tabs[0] && reportText.isNotBlank()) {
@@ -111,30 +119,36 @@ fun ReportInputScreen(navController: NavHostController) {
                         if (institution.isNotBlank()) append(" · ").append(institution.trim())
                         append("\n")
                     }
-                    handleResponse(
+                    val report = handleResponse(
                         reportsApi.create(
-                            mapOf(
-                                "episode_id" to id,
-                                "raw_text" to head + reportText,
-                                "report_date" to reportDate,
+                            CreateReportRequest(
+                                episodeId = id,
+                                rawText = head + reportText,
+                                reportDate = reportDate,
                             ),
                         ),
                     )
+                    // 命中红旗：报告仍然录入，但立刻给出就医提示
+                    val notice = report.safetyNotice
+                    if (notice != null && notice.matched.isNotEmpty()) {
+                        val labels = notice.matched.joinToString("、") { it.label }
+                        val stop = notice.matched.any { it.severity == "high" }
+                        reportSafetyLabels = labels
+                        reportSafetyStop = stop
+                        showEmergency = true
+                        return@launch
+                    }
                 }
                 if (doctorAdvice.isNotBlank()) {
                     handleResponse(
-                        episodesApi.update(
+                        episodesApi.addEvent(
                             id,
-                            mapOf(
-                                "events" to listOf(
-                                    mapOf(
-                                        "event_type" to "医嘱",
-                                        "label" to "既有医嘱",
-                                        "detail" to doctorAdvice,
-                                        "verify_status" to "尚未确认",
-                                        "source_type" to "自述",
-                                    ),
-                                ),
+                            CreateCareEventRequest(
+                                eventType = "医嘱",
+                                occurredAt = java.time.Instant.now().toString(),
+                                sourceType = "自述",
+                                rawText = "医生已经给出的建议（自述转述，尚未核实）：$doctorAdvice",
+                                verifyStatus = "尚未确认",
                             ),
                         ),
                     )
@@ -148,7 +162,12 @@ fun ReportInputScreen(navController: NavHostController) {
         }
     }
 
-Column(
+    if (showEmergency) {
+        EmergencyScreen(navController = navController, signals = reportSafetyLabels, stop = reportSafetyStop)
+        return
+    }
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Surface),

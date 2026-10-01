@@ -38,6 +38,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.AnalysesApi
 import com.yaoyouju.android.core.net.FeedbackApi
+import com.yaoyouju.android.core.net.ErrorReportRequest
+import com.yaoyouju.android.core.net.HelpFeedbackRequest
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.handleResponse
 import com.yaoyouju.android.ui.components.AppButton
@@ -241,11 +243,15 @@ fun FeedbackScreen(
                             submitting = true
                             scope.launch {
                                 try {
-                                    val body = mutableMapOf<String, Any?>()
-                                    if (analysisId.isNotBlank()) body["analysis_id"] = analysisId
-                                    if (helpType.isNotBlank()) body["help_type"] = helpType
-                                    if (unsolved.isNotBlank()) body["unsolved_question"] = unsolved
-                                    handleResponse(feedbackApi.help(body))
+                                    handleResponse(
+                                        feedbackApi.help(
+                                            HelpFeedbackRequest(
+                                                analysisId = analysisId.ifBlank { return@launch },
+                                                helpType = helpType,
+                                                unsolvedQuestion = unsolved.ifBlank { null },
+                                            ),
+                                        ),
+                                    )
                                     toastText = "已收到反馈，谢谢"
                                 } catch (e: Exception) {
                                     toastText = e.message ?: "提交失败，请稍后重试"
@@ -331,13 +337,16 @@ fun FeedbackScreen(
                             submitting = true
                             scope.launch {
                                 try {
-                                    val body = mutableMapOf<String, Any?>(
-                                        "category" to reportTypesSelected.joinToString("、"),
-                                        "description" to reportDetail,
-                                        "severity" to "medium",
+                                    handleResponse(
+                                        feedbackApi.errorReport(
+                                            ErrorReportRequest(
+                                                analysisId = analysisId.ifBlank { null },
+                                                category = reportTypesSelected.joinToString("、").ifBlank { "其他" },
+                                                description = reportDetail,
+                                                severity = "medium",
+                                            ),
+                                        ),
                                     )
-                                    if (analysisId.isNotBlank()) body["analysis_id"] = analysisId
-                                    handleResponse(feedbackApi.errorReport(body))
                                     toastText = "举报已提交，我们会尽快核实"
                                 } catch (e: Exception) {
                                     toastText = e.message ?: "提交失败，请稍后重试"

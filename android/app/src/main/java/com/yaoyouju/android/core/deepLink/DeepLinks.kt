@@ -1,9 +1,9 @@
 package com.yaoyouju.android.core.deepLink
 
 /**
- * Deep link 映射：yaoyouju://<页面编号>（如 yaoyouju://A07）→ 应用内路由。
+ * Deep link 映射：yaoyoujuapp://<页面编号>（如 yaoyoujuapp://A07）→ 应用内路由。
  * 编号对应 docs/design/app/ 的设计稿编号（A01–A18），测试时用 adb 直接打开页面：
- *   adb shell am start -a android.intent.action.VIEW -d "yaoyouju://A07"
+ *   adb shell am start -a android.intent.action.VIEW -d "yaoyoujuapp://A07"
  */
 object DeepLinks {
 
@@ -28,10 +28,10 @@ object DeepLinks {
         "A18" to "fallback",
     )
 
-    /** 解析 deep link URI（yaoyouju://A07?index=0）→ 路由 + 参数 */
+    /** 解析 deep link URI（yaoyoujuapp://A07?index=0）→ 路由 + 参数 */
     fun parse(uri: String?): DeepLinkTarget? {
         if (uri.isNullOrBlank()) return null
-        val match = Regex("^yaoyouju://([A-Za-z0-9]+)").find(uri.trim()) ?: return null
+        val match = Regex("^yaoyoujuapp://([A-Za-z0-9]+)").find(uri.trim()) ?: return null
         val code = match.groupValues[1].uppercase()
         val route = ROUTES[code] ?: return null
         // 查询参数（如 ?index=0）原样透传

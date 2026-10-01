@@ -104,12 +104,31 @@ async function onNext() {
     const episodeId = await ensureEpisode()
     const text = reportText.value.trim()
     if (text) {
-      await createReport({
+      // 检查类型与机构写进报告原文头部（服务端按原文抽取术语与来源，缺失不写死）
+      const header = [
+        `检查类型：${examType.value}`,
+        institution.value.trim() ? `检查机构：${institution.value.trim()}` : '',
+        reportDate.value ? `检查日期：${reportDate.value}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+      const report = await createReport({
         episode_id: episodeId,
         report_date: reportDate.value || null,
-        raw_text: text,
+        raw_text: `${header}\n${text}`,
         source_type: '报告原文',
       })
+      // 命中红旗：报告仍然录入，但立刻给出就医提示
+      const notice = report?.safety_notice ?? null
+      if (notice) {
+        const labels = notice.matched.map((m) => m.label).join('、')
+        const stop = notice.matched.some((m) => m.severity === 'high') ? '1' : '0'
+        toast(`${notice.headline}：${labels}`)
+        uni.redirectTo({
+          url: `/pages/emergency/notice?signals=${encodeURIComponent(labels)}&stop=${stop}&rule=${encodeURIComponent(notice.rule_set_version ?? '')}`,
+        })
+        return
+      }
     }
     const advice = adviceText.value.trim()
     if (advice) {

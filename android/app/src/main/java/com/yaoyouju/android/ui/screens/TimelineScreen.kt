@@ -35,9 +35,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.EpisodesApi
 import com.yaoyouju.android.core.net.NetworkModule
-import com.yaoyouju.android.core.net.TimelineApi
+import com.yaoyouju.android.core.net.CareEventView
 import com.yaoyouju.android.core.net.TimelineGroup
-import com.yaoyouju.android.core.net.TimelineItem
 import com.yaoyouju.android.core.net.handleResponse
 import kotlinx.coroutines.launch
 import com.yaoyouju.android.ui.components.AppButton
@@ -73,7 +72,6 @@ import com.yaoyouju.android.ui.theme.Text3
 @Composable
 fun TimelineScreen(navController: NavHostController) {
     val episodesApi: EpisodesApi = NetworkModule.api()
-    val timelineApi: TimelineApi = NetworkModule.api()
 
     var groups by remember { mutableStateOf<List<TimelineGroup>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
@@ -88,7 +86,6 @@ fun TimelineScreen(navController: NavHostController) {
         loadTimelineData(
             scope = scope,
             episodesApi = episodesApi,
-            timelineApi = timelineApi,
             onResult = { g, today ->
                 groups = g
                 todayRecorded = today
@@ -176,10 +173,10 @@ fun TimelineScreen(navController: NavHostController) {
                         TimelineGroupCard(
                             group = group,
                             onCorrect = { item ->
-                                toastText = "纠正「${item.label}」后核实状态会变为有冲突"
+                                toastText = "纠正「${item.eventType}记录」后核实状态会变为有冲突"
                             },
                             onDelete = { item ->
-                                toastText = "已删除「${item.label}」（演示）"
+                                toastText = "已删除「${item.eventType}记录」（演示）"
                             },
                         )
                     }
@@ -246,8 +243,8 @@ fun TimelineScreen(navController: NavHostController) {
 @Composable
 private fun TimelineGroupCard(
     group: TimelineGroup,
-    onCorrect: (TimelineItem) -> Unit,
-    onDelete: (TimelineItem) -> Unit,
+    onCorrect: (CareEventView) -> Unit,
+    onDelete: (CareEventView) -> Unit,
 ) {
     Column {
         // 日期标签
@@ -261,10 +258,10 @@ private fun TimelineGroupCard(
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = group.date, fontSize = 13.sp, color = Text1)
             Spacer(modifier = Modifier.weight(1f))
-            Text(text = "${group.items.size} 条", fontSize = 11.sp, color = Text3)
+            Text(text = "${group.events.size} 条", fontSize = 11.sp, color = Text3)
         }
         Spacer(modifier = Modifier.height(8.dp))
-        group.items.forEach { item ->
+        group.events.forEach { item ->
             TimelineItemCard(
                 item = item,
                 onCorrect = { onCorrect(item) },
@@ -278,7 +275,7 @@ private fun TimelineGroupCard(
 /** 单条事件卡片 */
 @Composable
 private fun TimelineItemCard(
-    item: TimelineItem,
+    item: CareEventView,
     onCorrect: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -286,17 +283,19 @@ private fun TimelineItemCard(
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = item.label,
+                    text = item.rawText ?: "${item.eventType}记录（无原文）",
                     fontSize = 14.sp,
                     color = Text1,
                     modifier = Modifier.weight(1f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 // 来源类型徽标
                 Text(
                     text = item.sourceType,
                     fontSize = 10.sp,
                     color = when (item.sourceType) {
-                        "报告" -> Info
+                        "报告原文" -> Info
                         "医生记录" -> Primary
                         else -> Text2
                     },
@@ -304,7 +303,7 @@ private fun TimelineItemCard(
                         .clip(RoundedCornerShape(4.dp))
                         .background(
                             when (item.sourceType) {
-                                "报告" -> InfoLight
+                                "报告原文" -> InfoLight
                                 "医生记录" -> PrimaryLight
                                 else -> NeutralLight
                             },
@@ -320,10 +319,10 @@ private fun TimelineItemCard(
                     },
                 )
             }
-            if (!item.detail.isNullOrBlank()) {
+            if (!item.rawText.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = item.detail,
+                    text = item.rawText,
                     fontSize = 12.sp,
                     color = Text2,
                     maxLines = 2,
@@ -359,7 +358,6 @@ private fun TimelineItemCard(
 private fun loadTimelineData(
     scope: kotlinx.coroutines.CoroutineScope,
     episodesApi: EpisodesApi,
-    timelineApi: TimelineApi,
     onResult: (List<TimelineGroup>, Boolean?) -> Unit,
     onError: (String) -> Unit,
 ) {
@@ -371,9 +369,9 @@ private fun loadTimelineData(
                 onResult(emptyList(), null)
                 return@launch
             }
-            val timeline = handleResponse(timelineApi.timeline(episode.id))
+            val timeline = handleResponse(episodesApi.timeline(episode.id))
             val today = try {
-                handleResponse(episodesApi.today(episode.id)).recorded
+                handleResponse(episodesApi.today(episode.id)).logged
             } catch (_: Exception) {
                 null
             }

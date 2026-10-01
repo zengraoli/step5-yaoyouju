@@ -149,11 +149,13 @@ class ReportLogicTest {
     @Test
     fun `术语抽取字段`() {
         val terms = listOf(
-            ExtractedTerm(term = "椎间盘突出", meaning = "椎间盘的纤维环破裂、髓核向外突出", position = 12),
-            ExtractedTerm(term = "L4/5", meaning = "第4、5节腰椎", position = 5),
+            ExtractedTerm(term = "椎间盘突出", meaning = "椎间盘的纤维环破裂、髓核向外突出", start = 12, end = 17),
+            ExtractedTerm(term = "L4/5", meaning = "第4、5节腰椎", start = 5, end = 9),
         )
         assertEquals(2, terms.size)
         assertTrue(terms.any { it.term == "椎间盘突出" })
+        // 原文位置用起止下标（界面据此高亮）
+        assertTrue(terms.all { it.start >= 0 && it.end > it.start })
     }
 
     @Test

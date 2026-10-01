@@ -35,7 +35,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.yaoyouju.android.core.net.CreateAnalysisRequest
+import com.yaoyouju.android.core.net.CreateCareEventRequest
+import com.yaoyouju.android.core.net.CreateEpisodeRequest
 import com.yaoyouju.android.core.net.EpisodesApi
+import com.yaoyouju.android.core.net.SafetySignalException
+import com.yaoyouju.android.core.net.UpdateEpisodeRequest
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.handleResponse
 import com.yaoyouju.android.ui.components.AppButton
@@ -72,63 +77,32 @@ fun ChangeScreen(navController: NavHostController) {
     val scope = rememberCoroutineScope()
 
     // 第 1 题：症状变化（单选）
-    val changeOptions = listOf("加重", "差不多", "减轻", "尚未确认")
+    val changeOptions = RedFlagOptions.changeOptions
     var change by remember { mutableStateOf<String?>(null) }
     // 第 2 题：需要医生及时评估的情况（多选）
     var redFlags by remember { mutableStateOf(setOf<String>()) }
     // 第 3 题：涉及侧别（单选）
-    val sideOptions = listOf("左侧", "右侧", "双侧", "尚未确认")
+    val sideOptions = RedFlagOptions.sideOptions
     var side by remember { mutableStateOf<String?>(null) }
     // 第 4 题：大约开始时间（单选）
-    val onsetOptions = listOf("约1周内", "约1个月内", "约3个月内", "更久 / 说不清", "尚未确认")
+    val onsetOptions = RedFlagOptions.onsetOptions
     var onset by remember { mutableStateOf<String?>(null) }
 
     var submitting by remember { mutableStateOf(false) }
     var toastText by remember { mutableStateOf("") }
 
-    // 红旗选项（与 server 安全规则 RF-xx 对应）
-    data class RedFlagOption(
-        val key: String,
-        val label: String,
-        val signal: String,
-        val match: String,
-        val severity: String,
-    )
+    // 红旗选项（与 server 安全规则 RF-xx 对应；逻辑见 RedFlagOptions，单元测试直接验证）
+    val redFlagOptions = RedFlagOptions.all
+    val redFlagNone = RedFlagOptions.NONE_KEY
+    val redFlagUnsure = RedFlagOptions.UNSURE_KEY
 
-    val redFlagOptions = listOf(
-        RedFlagOption("bowel", "大小便控制异常", "大小便控制变化", "大小便控制变化", "high"),
-        RedFlagOption("saddle", "会阴区或鞍区麻木", "会阴部麻木", "会阴部麻木", "high"),
-        RedFlagOption("legs", "双腿进行性无力", "双腿进行性无力", "双腿进行性无力", "high"),
-        RedFlagOption("fever", "发热、夜间痛持续不缓解或体重明显下降", "伴发热", "腰痛伴发热", "medium"),
-    )
-    val redFlagNone = "none"
-    val redFlagUnsure = "unsure"
+    fun onsetDateOf(option: String?): String? = RedFlagOptions.onsetDateOf(option)
 
-    /** 第 4 题选项 → 起病日期（YYYY-MM-DD；「尚未确认」返回空） */
-    fun onsetDateOf(option: String?): String? {
-        if (option.isNullOrBlank() || option == "尚未确认") return null
-        val days = when (option) {
-            "一周内" -> 7
-            "1-4 周" -> 14
-            "约1个月内" -> 30
-            "1-3 个月" -> 60
-            "更久 / 说不清" -> null
-            else -> null
-        } ?: return null
-        val cal = java.util.Calendar.getInstance()
-        cal.add(java.util.Calendar.DAY_OF_YEAR, -days)
-        val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-        return fmt.format(cal.time)
-    }
+    fun hasHighSeverity(): Boolean = RedFlagOptions.hasHighSeverity(redFlags)
 
-    fun hasHighSeverity(): Boolean =
-        redFlagOptions.any { redFlags.contains(it.key) && it.severity == "high" }
+    fun selectedSignals(): List<String> = RedFlagOptions.signalsOf(redFlags)
 
-    fun selectedSignals(): List<String> =
-        redFlagOptions.filter { redFlags.contains(it.key) }.map { it.signal }
-
-    fun selectedMatchTexts(): List<String> =
-        redFlagOptions.filter { redFlags.contains(it.key) }.map { it.match }
+    fun selectedMatchTexts(): List<String> = RedFlagOptions.matchTextsOf(redFlags)
 
     fun submit() {
         submitting = true
@@ -146,26 +120,35 @@ fun ChangeScreen(navController: NavHostController) {
                 val episodes = handleResponse(episodesApi.list())
                 val episodeId = episodes.firstOrNull()?.id
                 if (episodeId == null) {
-                    // 没有病程时先创建（起病时间取第 4 题）
+                    // 没有病程时先创建（起病时间取第 4 题；快速选项也写进起病时间）
                     val created = handleResponse(
                         episodesApi.create(
-                            mapOf(
-                                "title" to "我的腰痛病程",
-                                "onset_date" to (onsetDateOf(onset)),
+                            CreateEpisodeRequest(
+                                title = "我的腰痛病程",
+                                onsetDate = onsetDateOf(onset),
                             ),
                         ),
                     )
                     writeEvents(episodesApi, created.id, change, side, onset, selectedMatchTexts())
                 } else {
+                    // 病程已存在：把第 4 题答案同步为起病时间
+                    val answer = onsetDateOf(onset)
+                    handleResponse(
+                        episodesApi.update(
+                            episodeId,
+                            UpdateEpisodeRequest(
+                                onsetDate = answer,
+                                onsetCertainty = if (answer != null) "尚未确认" else "尚未确认",
+                            ),
+                        ),
+                    )
                     writeEvents(episodesApi, episodeId, change, side, onset, selectedMatchTexts())
                 }
                 // 提交一页分析（命中红旗走就医提示分支）
                 try {
                     handleResponse(
-                        com.yaoyouju.android.core.net.AnalysesApi::class.let {
-                            NetworkModule.api<com.yaoyouju.android.core.net.AnalysesApi>()
-                        }.create(
-                            mapOf("episode_id" to (episodeId ?: "")),
+                        NetworkModule.api<com.yaoyouju.android.core.net.AnalysesApi>().create(
+                            CreateAnalysisRequest(episodeId = episodeId ?: ""),
                         ),
                     )
                     toastText = "已记录，正在生成一页分析"
@@ -181,7 +164,14 @@ fun ChangeScreen(navController: NavHostController) {
                     popUpTo(Routes.HOME) { inclusive = true }
                 }
             } catch (e: Exception) {
-                toastText = e.message ?: "提交失败，请稍后重试"
+                val signal = e as? SafetySignalException
+                if (signal != null) {
+                    navController.navigate(
+                        Routes.EMERGENCY + "?signals=" + signal.labels + "&stop=" + if (signal.stop) "1" else "0",
+                    )
+                } else {
+                    toastText = e.message ?: "提交失败，请稍后重试"
+                }
             } finally {
                 submitting = false
             }
@@ -246,7 +236,6 @@ fun ChangeScreen(navController: NavHostController) {
             Spacer(modifier = Modifier.height(24.dp))
             QuestionTitle(index = 1, text = "和上次相比，腰痛的变化是？")
             ChipRow(options = changeOptions, selected = change, onSelect = { change = it })
-            }
 
             // 第 2 题（多选，命中红旗立即就医提示）
             Spacer(modifier = Modifier.height(24.dp))
@@ -355,6 +344,7 @@ fun ChangeScreen(navController: NavHostController) {
             )
         }
     }
+    }
 }
 
 /** 单选芯片行（自绘，保证长文案可换行） */
@@ -459,51 +449,32 @@ private suspend fun writeEvents(
     onset: String?,
     matchTexts: List<String>,
 ) {
-    val events = mutableListOf<Map<String, Any>>()
-    events.add(
-        mapOf(
-            "event_type" to "症状",
-            "label" to "症状变化",
-            "detail" to (change ?: "尚未确认"),
-            "verify_status" to "尚未确认",
-            "source_type" to "自述",
-        ),
-    )
-    events.add(
-        mapOf(
-            "event_type" to "症状",
-            "label" to "涉及侧别",
-            "detail" to (side ?: "尚未确认"),
-            "verify_status" to "尚未确认",
-            "source_type" to "自述",
-        ),
-    )
-    events.add(
-        mapOf(
-            "event_type" to "症状",
-            "label" to "大约开始时间",
-            "detail" to (onset ?: "尚未确认"),
-            "verify_status" to "尚未确认",
-            "source_type" to "自述",
-        ),
-    )
+    val now = java.time.Instant.now().toString()
+    val lines = mutableListOf<String>()
+    lines.add("1. 与上次记录相比，最近腰痛或腿部症状有变化吗？${change ?: "尚未确认"}")
+    lines.add("2. 疼痛或麻木主要涉及哪一侧？${side ?: "尚未确认"}")
+    lines.add("3. 这次症状大约从什么时候开始？${onset ?: "尚未确认"}")
     if (matchTexts.isNotEmpty()) {
-        events.add(
-            mapOf(
-                "event_type" to "症状",
-                "label" to "需要医生及时评估的情况",
-                "detail" to matchTexts.joinToString("、"),
-                "verify_status" to "尚未确认",
-                "source_type" to "自述",
-            ),
-        )
+        lines.add("需要医生及时评估：${matchTexts.joinToString("、")}")
     }
-    events.forEach { event ->
-        handleResponse(
-            episodesApi.update(
-                episodeId,
-                mapOf("events" to events),
+    lines.add("未回答的问题记录为「尚未确认」，不当作「没有」。")
+    val event = handleResponse(
+        episodesApi.addEvent(
+            episodeId,
+            CreateCareEventRequest(
+                eventType = "症状",
+                occurredAt = now,
+                sourceType = "自述",
+                rawText = lines.joinToString("\n"),
+                verifyStatus = "尚未确认",
             ),
-        )
+        ),
+    )
+    // 命中红旗：立即跳就医提示（high 级停个性化分析）
+    val notice = event.safetyNotice
+    if (notice != null && notice.matched.isNotEmpty()) {
+        val labels = notice.matched.joinToString("、") { it.label }
+        val stop = notice.matched.any { it.severity == "high" }
+        throw com.yaoyouju.android.core.net.SafetySignalException(labels, stop)
     }
 }

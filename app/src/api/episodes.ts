@@ -33,12 +33,23 @@ export interface SymptomLogView {
   sleep_impact_display: string
   top_worry: string
   leg_change: string
+  /** 命中红旗时的就医提示（未命中为 null） */
+  safety_notice?: SafetyNotice | null
 }
 
 export interface CareEventReport {
   id: string
   report_date: string | null
   extracted_terms: unknown
+}
+
+/** 命中红旗时服务端返回的就医提示（与 /analyses、问与解释同构） */
+export interface SafetyNotice {
+  title: string
+  headline: string
+  body: string
+  matched: { rule_code: string; label: string; severity: string; action: string; advice: string; excerpt: string }[]
+  rule_set_version: string
 }
 
 export interface CareEventView {
@@ -53,6 +64,8 @@ export interface CareEventView {
   verify_status: string
   symptom_log: SymptomLogView | null
   report: CareEventReport | null
+  /** 命中红旗时的就医提示（未命中为 null） */
+  safety_notice?: SafetyNotice | null
 }
 
 export interface EpisodeListItem {
@@ -168,6 +181,18 @@ export function logToday(
   return request<SymptomLogView>({
     url: `/episodes/${encodeURIComponent(episodeId)}/today-logs`,
     method: 'POST',
+    data: { ...input },
+  })
+}
+
+/** 更新病程（标题 / 起病日期 / 确定度 / 状态） */
+export function updateEpisode(
+  episodeId: string,
+  input: { title?: string; onset_date?: string | null; onset_certainty?: string; status?: string },
+): Promise<EpisodeDetail> {
+  return request<EpisodeDetail>({
+    url: `/episodes/${encodeURIComponent(episodeId)}`,
+    method: 'PATCH',
     data: { ...input },
   })
 }

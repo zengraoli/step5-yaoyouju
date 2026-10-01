@@ -170,14 +170,23 @@ fun YaoyoujuApp(
         }
     }
 
-    // deep link 打开对应页面（yaoyouju://A07）。
+    // deep link 打开对应页面（yaoyoujuapp://A07）。
     // 必须在图设置完成之后再跳转：组合期直接 navigate 会抛
     // "Navigation graph has not been set for NavController"（验收反馈第 19 条）。
+    // 注意：带查询参数的路由要补全参数后再跳转，否则 getBackStackEntry 找不到目标。
     LaunchedEffect(deepLinkRoute) {
         val target = deepLinkRoute ?: return@LaunchedEffect
-        val exists = runCatching { navController.getBackStackEntry(target) }.isSuccess
-        if (exists) {
-            navController.navigate(target) { launchSingleTop = true }
-        }
+        val full = DEEP_LINK_ROUTES[target] ?: target
+        navController.navigate(full) { launchSingleTop = true }
     }
 }
+
+/** deep link 路由名 → 完整路由（带默认参数） */
+private val DEEP_LINK_ROUTES: Map<String, String> = mapOf(
+    Routes.EMERGENCY to "${Routes.EMERGENCY}?signals=&stop=false",
+    Routes.ANALYSIS to "${Routes.ANALYSIS}?taskId=&analysisId=",
+    Routes.REPORT_DIFF to "${Routes.REPORT_DIFF}?analysisId=&explainIndex=0",
+    Routes.CONTENT_DETAIL to "${Routes.CONTENT_DETAIL}?contentId=",
+    Routes.FEEDBACK to "${Routes.FEEDBACK}?analysisId=",
+    Routes.FALLBACK to "${Routes.FALLBACK}?taskId=",
+)

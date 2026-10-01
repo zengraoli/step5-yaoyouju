@@ -38,7 +38,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.yaoyouju.android.core.net.CreateCareEventRequest
 import com.yaoyouju.android.core.net.EpisodesApi
+import com.yaoyouju.android.core.net.LogTodayRequest
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.handleResponse
 import com.yaoyouju.android.ui.components.AppButton
@@ -77,6 +79,12 @@ fun TodayScreen(navController: NavHostController) {
     var saving by remember { mutableStateOf(false) }
     var alreadyRecorded by remember { mutableStateOf(false) }
     var toastText by remember { mutableStateOf("") }
+    // 命中红旗：立即跳转就医提示（产品红线：不被任何流程阻断）
+    var showEmergency by remember { mutableStateOf(false) }
+    var safetySignals by remember { mutableStateOf("") }
+    var safetyStop by remember { mutableStateOf(false) }
+    var safetyNoticeTitle by remember { mutableStateOf("") }
+    var safetyBody by remember { mutableStateOf("") }
 
     // 表单字段（全部可空：缺失显示尚未确认，不预填昨日答案）
     var sitMinutes by remember { mutableStateOf("") }
@@ -98,7 +106,7 @@ fun TodayScreen(navController: NavHostController) {
             val episode = episodes.firstOrNull()
             if (episode != null) {
                 val today = handleResponse(episodesApi.today(episode.id))
-                alreadyRecorded = today.recorded
+                alreadyRecorded = today.logged
                 // 不预填昨日答案：表单保持为空（缺失即尚未确认）
             }
         } catch (e: Exception) {
@@ -118,48 +126,54 @@ fun TodayScreen(navController: NavHostController) {
                     toastText = "还没有病程，请先记录当前关键变化"
                     return@launch
                 }
-                val body = mutableMapOf<String, Any?>(
-                    "skipped" to skipped,
-                    "sit_minutes" to sitMinutes.toIntOrNull(),
-                    "planned_activity_done" to plannedActivity.ifBlank { null },
-                    "sleep_impact" to sleepImpact.toIntOrNull(),
-                    "leg_change" to legChange.ifBlank { null },
-                    "top_worry" to topWorry.ifBlank { null },
+                val body = LogTodayRequest(
+                    skipped = skipped,
+                    sitMinutes = sitMinutes.toIntOrNull(),
+                    plannedActivityDone = plannedActivity.ifBlank { null },
+                    sleepImpact = sleepImpact.toIntOrNull(),
+                    legChange = legChange.ifBlank { null },
+                    topWorry = topWorry.ifBlank { null },
                 )
-                handleResponse(episodesApi.saveTodayLog(episode.id, body))
+                val log = handleResponse(episodesApi.saveTodayLog(episode.id, body))
+                // 命中红旗：记录仍然保存，但立刻给出就医提示（产品红线）
+                val notice = log.safetyNotice
+                if (notice != null && notice.matched.isNotEmpty()) {
+                    val labels = notice.matched.joinToString("、") { it.label }
+                    val stop = notice.matched.any { it.severity == "high" }
+                    toastText = "${notice.headline}：$labels"
+                    safetySignals = labels
+                    safetyStop = stop
+                    safetyNoticeTitle = notice.title
+                    safetyBody = notice.body
+                    showEmergency = true
+                    return@launch
+                }
                 // 「与昨天相比」与「今天做了什么」作为自述事件保存
+                val occurredAt = java.time.Instant.now().toString()
                 if (compareYesterday.isNotBlank()) {
                     handleResponse(
-                        episodesApi.update(
+                        episodesApi.addEvent(
                             episode.id,
-                            mapOf(
-                                "events" to listOf(
-                                    mapOf(
-                                        "event_type" to "症状",
-                                        "label" to "与昨天相比",
-                                        "detail" to compareYesterday,
-                                        "verify_status" to "尚未确认",
-                                        "source_type" to "自述",
-                                    ),
-                                ),
+                            CreateCareEventRequest(
+                                eventType = "症状",
+                                occurredAt = occurredAt,
+                                sourceType = "自述",
+                                rawText = "与昨天相比：$compareYesterday",
+                                verifyStatus = "尚未确认",
                             ),
                         ),
                     )
                 }
                 if (didToday.isNotBlank()) {
                     handleResponse(
-                        episodesApi.update(
+                        episodesApi.addEvent(
                             episode.id,
-                            mapOf(
-                                "events" to listOf(
-                                    mapOf(
-                                        "event_type" to "行动",
-                                        "label" to "今天做了什么",
-                                        "detail" to didToday,
-                                        "verify_status" to "尚未确认",
-                                        "source_type" to "自述",
-                                    ),
-                                ),
+                            CreateCareEventRequest(
+                                eventType = "行动",
+                                occurredAt = occurredAt,
+                                sourceType = "自述",
+                                rawText = "今天做了：$didToday",
+                                verifyStatus = "尚未确认",
                             ),
                         ),
                     )
@@ -347,6 +361,11 @@ fun TodayScreen(navController: NavHostController) {
 
             Spacer(modifier = Modifier.height(40.dp))
         }
+    }
+
+    if (showEmergency) {
+        EmergencyScreen(navController = navController, signals = safetySignals, stop = safetyStop)
+        return
     }
 
     if (toastText.isNotBlank()) {

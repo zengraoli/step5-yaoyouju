@@ -6,26 +6,26 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * T43：deep link 解析（yaoyouju://A07 → analysis 路由）。
+ * T43：deep link 解析（yaoyoujuapp://A07 → analysis 路由）。
  */
 class DeepLinksTest {
 
     @Test
     fun `解析页面编号到路由`() {
-        val target = DeepLinks.parse("yaoyouju://A07")
+        val target = DeepLinks.parse("yaoyoujuapp://A07")
         assertEquals("A07", target?.code)
         assertEquals("analysis", target?.route)
     }
 
     @Test
     fun `小写编号同样可用`() {
-        val target = DeepLinks.parse("yaoyouju://a10")
+        val target = DeepLinks.parse("yaoyoujuapp://a10")
         assertEquals("timeline", target?.route)
     }
 
     @Test
     fun `带查询参数时透传`() {
-        val target = DeepLinks.parse("yaoyouju://A08?index=0")
+        val target = DeepLinks.parse("yaoyoujuapp://A08?index=0")
         assertEquals("report_diff", target?.route)
         assertEquals("0", target?.param("index"))
         assertNull(target?.param("missing"))
@@ -33,8 +33,8 @@ class DeepLinksTest {
 
     @Test
     fun `未知编号返回 null`() {
-        assertNull(DeepLinks.parse("yaoyouju://A99"))
-        assertNull(DeepLinks.parse("yaoyouju://"))
+        assertNull(DeepLinks.parse("yaoyoujuapp://A99"))
+        assertNull(DeepLinks.parse("yaoyoujuapp://"))
         assertNull(DeepLinks.parse(null))
         assertNull(DeepLinks.parse("https://example.com/A07"))
     }
@@ -49,8 +49,8 @@ class DeepLinksTest {
 
     @Test
     fun `路由与 Routes 表一致`() {
-        assertEquals("login", DeepLinks.parse("yaoyouju://A01")?.route)
-        assertEquals("emergency", DeepLinks.parse("yaoyouju://A03")?.route)
-        assertEquals("fallback", DeepLinks.parse("yaoyouju://A18")?.route)
+        assertEquals("login", DeepLinks.parse("yaoyoujuapp://A01")?.route)
+        assertEquals("emergency", DeepLinks.parse("yaoyoujuapp://A03")?.route)
+        assertEquals("fallback", DeepLinks.parse("yaoyoujuapp://A18")?.route)
     }
 }

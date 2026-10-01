@@ -33,6 +33,7 @@ import { listEpisodes } from '../../api/episodes'
 import { getStructured } from '../../api/reports'
 import { safetyNoticeFromError } from '../../api/analyses'
 import { beijingDate, getStatusBarHeight } from '../../utils/system'
+import { addFollowupQuestion } from '../../api/followup'
 
 /** 建议问题（按设计稿的示例问题，用户点击即提问） */
 const SUGGESTIONS = ['复诊时该怎么描述？', '哪些变化要提前就医？', '保守治疗一般多久？']
@@ -184,15 +185,26 @@ async function onSend(text?: string) {
   }
 }
 
-/** 一键加入复诊问题清单 */
-function onAddFollowup(question: string) {
+/** 一键加入复诊问题清单（写入服务端，复诊摘要生成时自动带入） */
+async function onAddFollowup(question: string) {
   if (!question || addedQuestions.value.includes(question)) {
     toast('该问题已在复诊问题清单中')
     return
   }
-  addedQuestions.value = [...addedQuestions.value, question]
-  uni.setStorageSync(QUESTIONS_STORAGE_KEY, addedQuestions.value)
-  toast('已加入复诊问题清单')
+  try {
+    const episodes = await listEpisodes()
+    const active = episodes.find((e) => e.status === '进行中') ?? episodes[0] ?? null
+    if (!active) {
+      toast('还没有病程记录')
+      return
+    }
+    await addFollowupQuestion(active.id, question)
+    addedQuestions.value = [...addedQuestions.value, question]
+    uni.setStorageSync(QUESTIONS_STORAGE_KEY, addedQuestions.value)
+    toast('已加入复诊问题清单，生成复诊摘要即可看到')
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加入复诊问题失败')
+  }
 }
 
 /** 引用标签（来源说明） */

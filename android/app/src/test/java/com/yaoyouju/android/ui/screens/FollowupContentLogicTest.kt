@@ -2,7 +2,7 @@ package com.yaoyouju.android.ui.screens
 
 import com.yaoyouju.android.core.net.ContentCurrentVersion
 import com.yaoyouju.android.core.net.ContentDetail
-import com.yaoyouju.android.core.net.ContentListItem2
+import com.yaoyouju.android.core.net.ContentListItem
 import com.yaoyouju.android.core.net.FollowupItem
 import com.yaoyouju.android.core.net.FollowupSection
 import com.yaoyouju.android.core.net.FollowupSummaryView
@@ -29,16 +29,16 @@ class FollowupContentLogicTest {
                     key = "known",
                     title = "1. 当前确认的信息与来源",
                     items = listOf(
-                        FollowupItem(text = "腰椎 MRI 显示 L4/5 椎间盘突出", verifyStatus = "已确认", sourceType = "报告"),
-                        FollowupItem(text = "症状加重约 2 周", verifyStatus = "尚未确认", sourceType = "自述"),
+                        FollowupItem(text = "腰椎 MRI 显示 L4/5 椎间盘突出", verifyStatus = "已确认", source = "报告原文"),
+                        FollowupItem(text = "症状加重约 2 周", verifyStatus = "尚未确认", source = "自述"),
                     ),
                 ),
                 FollowupSection(
                     key = "questions",
                     title = "6. 想请医生确认的问题",
                     items = listOf(
-                        FollowupItem(text = "放射痛具体到哪个部位？"),
-                        FollowupItem(text = "是否需要复查影像？"),
+                        FollowupItem(text = "放射痛具体到哪个部位？", source = "自述"),
+                        FollowupItem(text = "是否需要复查影像？", source = "自述"),
                     ),
                 ),
             ),
@@ -59,9 +59,9 @@ class FollowupContentLogicTest {
     @Test
     fun `区分来源与核实状态`() {
         val known = sampleSummary().content.sections.first { it.key == "known" }
-        assertEquals("报告", known.items[0].sourceType)
+        assertEquals("报告原文", known.items[0].source)
         assertEquals("已确认", known.items[0].verifyStatus)
-        assertEquals("自述", known.items[1].sourceType)
+        assertEquals("自述", known.items[1].source)
         assertEquals("尚未确认", known.items[1].verifyStatus)
     }
 
@@ -70,7 +70,7 @@ class FollowupContentLogicTest {
         val questions = sampleSummary().content.sections.first { it.key == "questions" }
         questions.items.forEach { item ->
             assertNull(item.verifyStatus)
-            assertNull(item.sourceType)
+            assertNull(item.from)
         }
     }
 
@@ -98,7 +98,7 @@ class FollowupContentLogicTest {
 
     // ---------- A13 内容库 ----------
 
-    private fun sampleContent() = ContentListItem2(
+    private fun sampleContent() = ContentListItem(
         id = "c1",
         type = "视频",
         title = "腰突为什么会腿麻",

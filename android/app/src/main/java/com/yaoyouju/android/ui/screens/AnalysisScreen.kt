@@ -408,20 +408,16 @@ fun AnalysisScreen(
                                 val episodeId = episodes.firstOrNull()?.id
                                 if (episodeId != null) {
                                     handleResponse(
-                                        episodesApi.update(
-                                            episodeId,
-                                            mapOf(
-                                                "events" to listOf(
-                                                    mapOf(
-                                                        "event_type" to "行动",
-                                                        "label" to "保存一页分析",
-                                                        "detail" to "系统生成版本 v${sections.meta.version}",
-                                                        "verify_status" to "尚未确认",
-                                                        "source_type" to "系统生成",
-                                                    ),
+                                            episodesApi.addEvent(
+                                                episodeId,
+                                                com.yaoyouju.android.core.net.CreateCareEventRequest(
+                                                    eventType = "行动",
+                                                    occurredAt = java.time.Instant.now().toString(),
+                                                    sourceType = "自述",
+                                                    rawText = "【系统生成 v${sections.meta.version}】保存了一页分析",
+                                                    verifyStatus = "尚未确认",
                                                 ),
-                                            ),
-                                        ),
+                                            )
                                     )
                                 }
                                 toastText = "已保存到病程"

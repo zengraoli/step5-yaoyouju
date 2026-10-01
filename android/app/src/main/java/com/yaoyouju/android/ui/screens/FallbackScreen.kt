@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.AnalysesApi
 import com.yaoyouju.android.core.net.EpisodesApi
-import com.yaoyouju.android.core.net.FollowupApi2
+import com.yaoyouju.android.core.net.FollowupApi
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.handleResponse
 import com.yaoyouju.android.ui.components.AppButton
@@ -79,7 +79,7 @@ fun FallbackScreen(
 ) {
     val analysesApi: AnalysesApi = NetworkModule.api()
     val episodesApi: EpisodesApi = NetworkModule.api()
-    val followupApi: FollowupApi2 = NetworkModule.api()
+    val followupApi: FollowupApi = NetworkModule.api()
     val scope = rememberCoroutineScope()
 
     var reason by remember { mutableStateOf("") }

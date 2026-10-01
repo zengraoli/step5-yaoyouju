@@ -19,6 +19,8 @@ import TabBar from '../../components/TabBar.vue'
 import { useAuthStore } from '../../stores/auth'
 import {
   cancelDelete,
+  grantConsent,
+  logout,
   confirmDelete,
   exportMyData,
   listConsents,
@@ -28,10 +30,10 @@ import {
   type ConsentItem,
   type DeletionStatus,
 } from '../../api/auth'
-import { getStatusBarHeight } from '../../utils/system'
+import { beijingDateTime, getStatusBarHeight } from '../../utils/system'
 
 /** 版本信息（按设计稿） */
-const VERSION_INFO = 'App v0.1.0 · 规则集 safety-rules-v2.0 · 版本号见分析页'
+const VERSION_INFO = 'App v0.1.0 · 规则集版本见「一页分析」的来源信息 · 内容库版本见分析页'
 
 const auth = useAuthStore()
 const statusBarHeight = ref(0)
@@ -72,6 +74,9 @@ const healthConsent = computed<ConsentItem | undefined>(() =>
   consents.value.find((c) => c.scope === '健康信息处理'),
 )
 
+/** 是否已同意健康信息处理（撤回后显示「重新同意」入口） */
+const healthGranted = computed<boolean>(() => healthConsent.value?.granted === true)
+
 const consentSummary = computed<string>(() => {
   const parts: string[] = []
   const health = healthConsent.value
@@ -109,6 +114,25 @@ async function onRevokeHealth() {
         toast('已撤回同意，个性化分析已停止')
       } catch (e) {
         toast(e instanceof Error ? e.message : '撤回失败，请稍后重试')
+      }
+    },
+  })
+}
+
+/** 重新同意（撤回后可在此再次开启，不必退出登录） */
+async function onGrantHealth() {
+  uni.showModal({
+    title: '重新同意处理健康信息',
+    content: '同意后恢复个性化分析与问答；你可以随时再撤回。',
+    confirmText: '同意',
+    success: async (res) => {
+      if (!res.confirm) return
+      try {
+        await grantConsent('健康信息处理')
+        await load()
+        toast('已重新同意，个性化分析已恢复')
+      } catch (e) {
+        toast(e instanceof Error ? e.message : '同意失败，请稍后重试')
       }
     },
   })
@@ -161,44 +185,86 @@ function onDeleteAccount() {
     return
   }
   if (deleteStep.value === 'requested') {
+    // 手机号 + 验证码都要用户自己输入（演示验证码固定 123456，但不预填、不用假输入框）
     uni.showModal({
-      title: '填写删除信息',
-      content: '演示环境验证码固定 123456',
+      title: '申请删除账户',
+      content: '请输入本账号绑定的手机号',
       editable: true,
-      placeholderText: '请输入 11 位手机号',
-      success: async (res) => {
-        if (!res.confirm) {
+      placeholderText: '11 位手机号',
+      success: async (r1) => {
+        if (!r1.confirm) {
           deleteStep.value = 'idle'
           return
         }
-        deletePhone.value = (res.content || '').trim()
-        try {
-          deletion.value = await requestDelete(deletePhone.value, deleteCode.value)
-          deleteStep.value = 'ready'
-          toast('删除申请已提交，24 小时冷静期内可取消')
-          await load()
-        } catch (e) {
-          toast(e instanceof Error ? e.message : '提交删除申请失败')
+        const phone = (r1.content || '').trim()
+        if (!/^1\d{10}$/.test(phone)) {
+          toast('请输入正确的 11 位手机号')
+          return
         }
+        uni.showModal({
+          title: '短信验证码',
+          content: '演示环境验证码固定 123456',
+          editable: true,
+          placeholderText: '6 位验证码',
+          success: async (r2) => {
+            if (!r2.confirm) {
+              deleteStep.value = 'idle'
+              return
+            }
+            const code = (r2.content || '').trim()
+            if (!/^\d{6}$/.test(code)) {
+              toast('请输入 6 位验证码')
+              return
+            }
+            deletePhone.value = phone
+            deleteCode.value = code
+            try {
+              deletion.value = await requestDelete(phone, code)
+              deleteStep.value = 'ready'
+              toast('删除申请已提交，24 小时冷静期内可取消')
+              await load()
+            } catch (e) {
+              deleteStep.value = 'idle'
+              toast(e instanceof Error ? e.message : '提交删除申请失败')
+            }
+          },
+        })
       },
     })
     return
   }
   uni.showModal({
     title: '确认删除',
-    content: '确认后不可恢复，将清除全部个人数据。',
-    confirmText: '删除',
+    content: deletion.value?.can_confirm
+      ? '冷静期已结束。确认后不可恢复，将清除全部个人数据。'
+      : `冷静期至 ${beijingDateTime(deletion.value?.effective_at ?? '')}（北京时间），现在还不能确认删除；可以先取消删除。`,
+    confirmText: deletion.value?.can_confirm ? '删除' : '知道了',
     confirmColor: '#D93B3B',
     success: async (res) => {
       if (!res.confirm) return
-      try {
-        await confirmDelete(deletePhone.value, deleteCode.value)
-        toast('账户与数据已删除')
-        auth.logout()
-        uni.reLaunch({ url: '/pages/login/login' })
-      } catch (e) {
-        toast(e instanceof Error ? e.message : '删除失败，请确认冷静期是否结束')
-      }
+      if (!deletion.value?.can_confirm) return
+      uni.showModal({
+        title: '输入短信验证码',
+        content: '演示环境验证码固定 123456',
+        editable: true,
+        placeholderText: '6 位验证码',
+        success: async (r) => {
+          if (!r.confirm) return
+          const code = (r.content || '').trim()
+          if (!/^\d{6}$/.test(code)) {
+            toast('请输入 6 位验证码')
+            return
+          }
+          try {
+            await confirmDelete(deletePhone.value, code)
+            toast('账户与数据已删除')
+            auth.logout()
+            uni.reLaunch({ url: '/pages/login/login' })
+          } catch (e) {
+            toast(e instanceof Error ? e.message : '删除失败，请确认冷静期是否结束')
+          }
+        },
+      })
     },
   })
 }
@@ -239,7 +305,12 @@ function onConsentRecords() {
 }
 
 async function onLogout() {
-  await auth.logout()
+  try {
+    await logout()
+  } catch {
+    // 网络异常也允许本地退出（服务端令牌到期自然失效）
+  }
+  auth.logout()
   uni.reLaunch({ url: '/pages/login/login' })
 }
 
@@ -294,13 +365,24 @@ function onSettings() {
           <AppIcon name="arrow-right" :size="16" />
         </view>
 
-        <view class="row" hover-class="row--hover" :hover-stay-time="80" @click="onRevokeHealth">
+        <view v-if="healthGranted" class="row" hover-class="row--hover" :hover-stay-time="80" @click="onRevokeHealth">
           <view class="row__icon row__icon--close">
             <AppIcon name="close" :size="20" />
           </view>
           <view class="row__body">
             <text class="row__title">撤回“处理健康信息”的同意</text>
             <text class="row__desc">撤回后停止个性化分析，已审核科普与已导出摘要仍可用</text>
+          </view>
+          <AppIcon name="arrow-right" :size="16" />
+        </view>
+
+        <view v-else class="row" hover-class="row--hover" :hover-stay-time="80" @click="onGrantHealth">
+          <view class="row__icon row__icon--shield">
+            <AppIcon name="shield" :size="20" />
+          </view>
+          <view class="row__body">
+            <text class="row__title">重新同意“处理健康信息”</text>
+            <text class="row__desc">同意后才能继续个性化分析与问答；已录入的数据仍可只读查看</text>
           </view>
           <AppIcon name="arrow-right" :size="16" />
         </view>

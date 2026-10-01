@@ -24,7 +24,7 @@ import AppChip from '../../components/AppChip.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import AppNotice from '../../components/AppNotice.vue'
 import { useAuthStore } from '../../stores/auth'
-import { addCareEvent, createEpisode, listEpisodes } from '../../api/episodes'
+import { addCareEvent, createEpisode, listEpisodes, updateEpisode } from '../../api/episodes'
 import {
   RED_FLAG_NONE_KEY,
   RED_FLAG_OPTIONS,
@@ -129,15 +129,40 @@ function toggleNote(key: NoteKey) {
 
 /* ---------- 提交 / 跳过 ---------- */
 
+/**
+ * 第 4 题答案 → 起病日期 / 确定度。
+ * 选了具体日期 = 已确认；选快速选项 = 按选项推算一个大致日期，确定度仍是「尚未确认」
+ * （不把推算日期当成用户确认的确切日期）；记不清 = 不起病日期（缺失不默认阴性）。
+ */
+function onsetAnswer(): { onset_date: string | null; onset_certainty: string } {
+  if (onsetDate.value) return { onset_date: onsetDate.value, onset_certainty: '已确认' }
+  const approx: Record<string, number> = { 约1周内: 7, 约1个月内: 30, 超过3个月: 100 }
+  const days = approx[onsetChip.value]
+  if (!days) return { onset_date: null, onset_certainty: '尚未确认' }
+  const at = new Date(Date.now() - days * 24 * 3600 * 1000 + 8 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10)
+  return { onset_date: at, onset_certainty: '尚未确认' }
+}
+
 /** 取进行中的病程；没有则按第 4 题答案创建（缺失不默认阴性） */
 async function ensureEpisode(): Promise<string> {
   const list = await listEpisodes()
   const active = list.find((e) => e.status === '进行中') ?? list[0] ?? null
-  if (active) return active.id
+  const answer = onsetAnswer()
+  if (active) {
+    // 病程已存在：把第 4 题的答案同步为起病时间（快速选项也要写进去）
+    const sameDate = (active.onset_date ?? null) === answer.onset_date
+    const sameCertainty = (active.onset_certainty ?? '尚未确认') === answer.onset_certainty
+    if (!sameDate || !sameCertainty) {
+      await updateEpisode(active.id, answer)
+    }
+    return active.id
+  }
   const created = await createEpisode({
     title: '我的腰痛病程',
-    onset_date: onsetDate.value || null,
-    onset_certainty: onsetDate.value ? '已确认' : '尚未确认',
+    onset_date: answer.onset_date,
+    onset_certainty: answer.onset_certainty,
   })
   return created.id
 }

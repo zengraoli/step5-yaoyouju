@@ -25,17 +25,36 @@ import AppNotice from '../../components/AppNotice.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import TabBar from '../../components/TabBar.vue'
 import {
+  createAnalysis,
   getAnalysisTask,
   type AnalysisView,
   type AnalysisTaskView,
 } from '../../api/analyses'
 import { addCareEvent } from '../../api/episodes'
+import { addFollowupQuestion } from '../../api/followup'
 import type { HelpType } from '../../api/feedback'
 import { submitHelpFeedback } from '../../api/feedback'
 import { beijingDate, getStatusBarHeight } from '../../utils/system'
+import { apiErrorData } from '../../api/request'
 
-/** 本地存储键：A07 勾选的复诊问题（供复诊摘要使用） */
-const QUESTIONS_STORAGE_KEY = 'yyj_followup_questions'
+/** 从错误里取就医提示（命中红旗时服务端在 data 里返回） */
+function safetyNoticeFromError(e: unknown): {
+  headline: string
+  body: string
+  matched: { label: string; severity: string }[]
+  rule_set_version: string
+} | null {
+  const data = apiErrorData(e) as
+    | { matched?: { label?: string; severity?: string }[]; headline?: string; body?: string; rule_set_version?: string }
+    | undefined
+  if (!data?.matched || !Array.isArray(data.matched) || data.matched.length === 0) return null
+  return {
+    headline: data.headline ?? '需要及时寻求专业帮助',
+    body: data.body ?? '你提交的内容包含需要就医的信号。',
+    matched: data.matched.map((m) => ({ label: String(m.label ?? ''), severity: String(m.severity ?? '') })),
+    rule_set_version: data.rule_set_version ?? '',
+  }
+}
 
 /** 轮询间隔（毫秒） */
 const POLL_INTERVAL = 2000
@@ -128,6 +147,7 @@ function onOpenFallback() {
 }
 
 /** 重试：重新提交一次分析（当前 episode） */
+const regenerating = ref(false)
 async function onRetry() {
   if (!analysis.value && task.value?.status === 'failed') {
     // 失败后重新生成：回到核对信息页走完整流程（安全规则重新校验）
@@ -195,16 +215,66 @@ function onToggleQuestion(index: number) {
     : [...checkedQuestions.value, index]
 }
 
-function onAddQuestions() {
+async function onAddQuestions() {
   const items = nextItems.value
   const selected = checkedQuestions.value.map((i) => items[i]).filter(Boolean)
-  uni.setStorageSync(QUESTIONS_STORAGE_KEY, selected.map((s) => s.text))
-  toast(`已加入复诊问题清单（已选 ${selected.length} 条）`)
+  if (selected.length === 0) {
+    toast('请先勾选要加入的问题')
+    return
+  }
+  const targetEpisode = analysis.value?.episode_id ?? ''
+  if (!targetEpisode) {
+    toast('还没有病程记录')
+    return
+  }
+  try {
+    for (const item of selected) {
+      await addFollowupQuestion(targetEpisode, item.text)
+    }
+    toast(`已加入复诊问题清单（${selected.length} 条），生成复诊摘要即可看到`)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加入复诊问题失败')
+  }
 }
 
 /* ---------- 保存到病程 / 生成复诊摘要 ---------- */
 
 /** 保存到病程：写入行动事件，原文明确标注「系统生成 + 版本号」，不标为事实来源 */
+/** 重新生成一页分析（重新提交一次分析任务） */
+async function onRegenerate() {
+  if (regenerating.value) return
+  const targetEpisode = analysis.value?.episode_id ?? ''
+  if (!targetEpisode) {
+    toast('还没有病程记录')
+    return
+  }
+  regenerating.value = true
+  try {
+    const result = await createAnalysis({ episode_id: targetEpisode })
+    if (result.status === 'queued' && result.task_id) {
+      taskId.value = result.task_id
+      analysis.value = null
+      void poll()
+      if (timer) clearInterval(timer)
+      timer = setInterval(() => void poll(), POLL_INTERVAL)
+      toast('已重新提交，正在生成新的一页分析')
+    }
+  } catch (e) {
+    const notice = safetyNoticeFromError(e)
+    if (notice) {
+      const labels = notice.matched.map((m) => m.label).join('、')
+      const stop = notice.matched.some((m) => m.severity === 'high') ? '1' : '0'
+      uni.navigateTo({
+        url: `/pages/emergency/notice?signals=${encodeURIComponent(labels)}&stop=${stop}&rule=${encodeURIComponent(notice.rule_set_version ?? '')}`,
+      })
+    } else {
+      toast(e instanceof Error ? e.message : '生成分析失败')
+    }
+  } finally {
+    regenerating.value = false
+  }
+}
+
 async function onSaveToEpisode() {
   if (!analysis.value || saving.value) return
   saving.value = true
@@ -451,9 +521,10 @@ function onBack() {
         </view>
       </AppCard>
 
-      <!-- 操作：保存到病程 / 生成复诊摘要 -->
+      <!-- 操作：保存到病程 / 重新生成 / 生成复诊摘要 -->
       <view class="actions-row">
         <AppButton type="secondary" :loading="saving" @click="onSaveToEpisode">保存到病程</AppButton>
+        <AppButton type="soft" :loading="regenerating" @click="onRegenerate">重新生成</AppButton>
         <AppButton type="primary" @click="onGenerateFollowup">生成复诊摘要</AppButton>
       </view>
 

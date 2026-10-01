@@ -2,89 +2,70 @@ package com.yaoyouju.android.ui.screens
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * T45：A02 关键变化确认与 A03 就医提示的纯逻辑单元测试。
- * 红旗规则与 server 安全规则集（RF-xx）保持一致。
+ * A02 关键变化确认 / A03 就医提示的单元测试。
+ * 直接验证产品源码 RedFlagOptions（不复制一份实现），与服务端 RF-xx 规则一致。
  */
 class RedFlagLogicTest {
-
-    private data class RedFlagOption(
-        val key: String,
-        val label: String,
-        val signal: String,
-        val match: String,
-        val severity: String,
-    )
-
-    private val options = listOf(
-        RedFlagOption("bowel", "大小便控制异常", "大小便控制变化", "大小便控制变化", "high"),
-        RedFlagOption("saddle", "会阴区或鞍区麻木", "会阴部麻木", "会阴部麻木", "high"),
-        RedFlagOption("legs", "双腿进行性无力", "双腿进行性无力", "双腿进行性无力", "high"),
-        RedFlagOption("fever", "发热、夜间痛持续不缓解或体重明显下降", "伴发热", "腰痛伴发热", "medium"),
-    )
-
-    private fun hasHighSeverity(keys: Set<String>): Boolean =
-        options.any { keys.contains(it.key) && it.severity == "high" }
-
-    private fun signalsOf(keys: Set<String>): List<String> =
-        options.filter { keys.contains(it.key) }.map { it.signal }
-
-    private fun matchTextsOf(keys: Set<String>): List<String> =
-        options.filter { keys.contains(it.key) }.map { it.match }
 
     // ---------- 红旗判定 ----------
 
     @Test
     fun `三个高危选项均触发停止分析`() {
-        assertTrue(hasHighSeverity(setOf("bowel")))
-        assertTrue(hasHighSeverity(setOf("saddle")))
-        assertTrue(hasHighSeverity(setOf("legs")))
+        assertTrue(RedFlagOptions.hasHighSeverity(setOf("bowel")))
+        assertTrue(RedFlagOptions.hasHighSeverity(setOf("saddle")))
+        assertTrue(RedFlagOptions.hasHighSeverity(setOf("legs")))
     }
 
     @Test
     fun `发热为中危不停止分析`() {
-        assertFalse(hasHighSeverity(setOf("fever")))
+        assertFalse(RedFlagOptions.hasHighSeverity(setOf("fever")))
     }
 
     @Test
     fun `未选红旗不触发`() {
-        assertFalse(hasHighSeverity(emptySet()))
-        assertFalse(hasHighSeverity(setOf("none")))
-        assertFalse(hasHighSeverity(setOf("unsure")))
+        assertFalse(RedFlagOptions.hasHighSeverity(emptySet()))
+        assertFalse(RedFlagOptions.hasHighSeverity(setOf(RedFlagOptions.NONE_KEY)))
+        assertFalse(RedFlagOptions.hasHighSeverity(setOf(RedFlagOptions.UNSURE_KEY)))
     }
 
     @Test
     fun `混合选择含高危即触发`() {
-        assertTrue(hasHighSeverity(setOf("fever", "saddle")))
+        assertTrue(RedFlagOptions.hasHighSeverity(setOf("fever", "saddle")))
     }
 
     // ---------- 信号名（A03 展示） ----------
 
     @Test
     fun `信号名与服务端规则一致`() {
-        assertEquals(listOf("大小便控制变化"), signalsOf(setOf("bowel")))
-        assertEquals(listOf("会阴部麻木"), signalsOf(setOf("saddle")))
-        assertEquals(listOf("双腿进行性无力"), signalsOf(setOf("legs")))
-        assertEquals(listOf("伴发热"), signalsOf(setOf("fever")))
+        assertEquals(listOf("大小便控制变化"), RedFlagOptions.signalsOf(setOf("bowel")))
+        assertEquals(listOf("会阴部麻木"), RedFlagOptions.signalsOf(setOf("saddle")))
+        assertEquals(listOf("双腿进行性无力"), RedFlagOptions.signalsOf(setOf("legs")))
+        assertEquals(listOf("伴发热"), RedFlagOptions.signalsOf(setOf("fever")))
     }
 
     @Test
     fun `多选信号按选项顺序`() {
         assertEquals(
             listOf("大小便控制变化", "会阴部麻木", "双腿进行性无力", "伴发热"),
-            signalsOf(setOf("fever", "legs", "saddle", "bowel")),
+            RedFlagOptions.signalsOf(setOf("fever", "legs", "saddle", "bowel")),
         )
     }
 
-    // ---------- 触发文本（写入病程摘要） ----------
+    // ---------- 触发文本（写入病程摘要，服务端同套规则校验） ----------
 
     @Test
     fun `触发文本可被服务端规则匹配`() {
-        assertEquals(listOf("会阴部麻木"), matchTextsOf(setOf("saddle")))
-        assertEquals(listOf("腰痛伴发热"), matchTextsOf(setOf("fever")))
+        assertEquals(listOf("会阴部麻木"), RedFlagOptions.matchTextsOf(setOf("saddle")))
+        assertEquals(listOf("腰痛伴发热"), RedFlagOptions.matchTextsOf(setOf("fever")))
+        assertEquals(
+            listOf("大小便控制变化", "会阴部麻木", "双腿进行性无力", "腰痛伴发热"),
+            RedFlagOptions.matchTextsOf(setOf("bowel", "saddle", "legs", "fever")),
+        )
     }
 
     // ---------- 互斥规则 ----------
@@ -92,45 +73,52 @@ class RedFlagLogicTest {
     @Test
     fun `以上都没有与红旗选项互斥`() {
         var selected = setOf("saddle")
-        // 勾选「以上都没有」时清空红旗
-        selected = setOf("none")
-        assertTrue(selected.contains("none"))
+        selected = setOf(RedFlagOptions.NONE_KEY)
+        assertTrue(selected.contains(RedFlagOptions.NONE_KEY))
         assertFalse(selected.contains("saddle"))
-        assertFalse(hasHighSeverity(selected))
+        assertFalse(RedFlagOptions.hasHighSeverity(selected))
     }
 
     @Test
     fun `勾选红旗时清空以上都没有`() {
-        var selected = setOf("none")
+        var selected = setOf(RedFlagOptions.NONE_KEY)
         selected = selected.toMutableSet().apply {
-            remove("none")
-            remove("unsure")
+            remove(RedFlagOptions.NONE_KEY)
+            remove(RedFlagOptions.UNSURE_KEY)
             add("legs")
         }
         assertTrue(selected.contains("legs"))
-        assertFalse(selected.contains("none"))
-        assertTrue(hasHighSeverity(selected))
+        assertFalse(selected.contains(RedFlagOptions.NONE_KEY))
+        assertTrue(RedFlagOptions.hasHighSeverity(selected))
     }
 
     // ---------- A02 表单规则 ----------
 
     @Test
-    fun `尚未确认是显式选项不默认阴性`() {
-        val changeOptions = listOf("加重", "差不多", "减轻", "尚未确认")
-        assertTrue(changeOptions.contains("尚未确认"))
-        // 未选择时记为尚未确认，而不是默认阴性
-        val selected: String? = null
-        assertEquals("尚未确认", selected ?: "尚未确认")
+    fun `四道题全部有尚未确认选项`() {
+        assertTrue(RedFlagOptions.changeOptions.contains("尚未确认"))
+        assertTrue(RedFlagOptions.sideOptions.contains("尚未确认"))
+        assertTrue(RedFlagOptions.onsetOptions.contains("尚未确认"))
     }
 
     @Test
-    fun `四道题全部有尚未确认选项`() {
-        val changeOptions = listOf("加重", "差不多", "减轻", "尚未确认")
-        val sideOptions = listOf("左侧", "右侧", "双侧", "尚未确认")
-        val onsetOptions = listOf("记不清", "约1周内", "约1个月内", "超过3个月")
-        assertTrue(changeOptions.contains("尚未确认"))
-        assertTrue(sideOptions.contains("尚未确认"))
-        // 起病时间「记不清」等价于尚未确认
-        assertTrue(onsetOptions.contains("记不清"))
+    fun `起病时间快速选项写进起病日期`() {
+        val inWeek = RedFlagOptions.onsetDateOf("约1周内")
+        val inMonth = RedFlagOptions.onsetDateOf("约1个月内")
+        val in3Month = RedFlagOptions.onsetDateOf("约3个月内")
+        assertTrue(inWeek != null && Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(inWeek))
+        assertTrue(inMonth != null && Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(inMonth))
+        assertTrue(in3Month != null && Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(in3Month))
+        // 快速选项给出的是大致日期：约1个月内比约1周内更早
+        assertTrue(inMonth!! < inWeek!!)
+        assertTrue(in3Month!! < inMonth!!)
+    }
+
+    @Test
+    fun `记不清与尚未确认不写起病日期`() {
+        assertNull(RedFlagOptions.onsetDateOf("记不清"))
+        assertNull(RedFlagOptions.onsetDateOf("尚未确认"))
+        assertNull(RedFlagOptions.onsetDateOf("更久 / 说不清"))
+        assertNull(RedFlagOptions.onsetDateOf(null))
     }
 }

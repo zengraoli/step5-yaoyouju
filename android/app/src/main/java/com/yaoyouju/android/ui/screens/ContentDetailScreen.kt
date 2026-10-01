@@ -36,8 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.ContentDetail
-import com.yaoyouju.android.core.net.ContentsApi2
+import com.yaoyouju.android.core.net.ContentsApi
 import com.yaoyouju.android.core.net.FeedbackApi
+import com.yaoyouju.android.core.net.ErrorReportRequest
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.handleResponse
 import com.yaoyouju.android.ui.components.AppButton
@@ -78,7 +79,7 @@ fun ContentDetailScreen(
     navController: NavHostController,
     contentId: String = "",
 ) {
-    val contentsApi: ContentsApi2 = NetworkModule.api()
+    val contentsApi: ContentsApi = NetworkModule.api()
     val feedbackApi: FeedbackApi = NetworkModule.api()
     val scope = rememberCoroutineScope()
 
@@ -398,11 +399,11 @@ fun ContentDetailScreen(
                                     try {
                                         handleResponse(
                                             feedbackApi.errorReport(
-                                                mapOf(
-                                                    "content_item_id" to d.id,
-                                                    "category" to "内容有误",
-                                                    "description" to "用户在 A15 提交的举报（自动附带内容版本 v" + (d.currentVersion?.version ?: 0) + "）",
-                                                    "severity" to "medium",
+                                                ErrorReportRequest(
+                                                    contentItemId = d.id,
+                                                    category = "内容有误",
+                                                    description = "用户在 A15 提交的举报（自动附带内容版本 v" + (d.currentVersion?.version ?: 0) + "）",
+                                                    severity = "medium",
                                                 ),
                                             ),
                                         )

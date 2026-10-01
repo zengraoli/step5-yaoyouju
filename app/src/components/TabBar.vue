@@ -39,13 +39,13 @@ const emit = defineEmits<{
   (e: 'change', key: TabKey): void
 }>()
 
-/** 按当前页面路由推断选中项 */
+/** 按当前页面路由推断选中项（H5 / App 的 route 形如 pages/qa/index） */
 function currentFromRoute(): TabKey | null {
   const pages = getCurrentPages()
   const last = pages[pages.length - 1] as unknown as { route?: string } | undefined
-  const route = last?.route ?? ''
-  const seg = route.replace(/^\//, '').split('/').slice(0, 2).join('/')
-  const found = TABS.find((t) => t.path.replace(/^\//, '') === seg)
+  const route = (last?.route ?? '').replace(/^\/+/, '')
+  const prefix = route.split('/').slice(0, 2).join('/')
+  const found = TABS.find((t) => t.path.replace(/^\/+/, '').split('/').slice(0, 2).join('/') === prefix)
   return found ? found.key : null
 }
 

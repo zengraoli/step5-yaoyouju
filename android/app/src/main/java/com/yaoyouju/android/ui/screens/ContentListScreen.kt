@@ -33,8 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import com.yaoyouju.android.core.net.ContentListItem2
-import com.yaoyouju.android.core.net.ContentsApi2
+import com.yaoyouju.android.core.net.ContentListItem
+import com.yaoyouju.android.core.net.ContentsApi
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.handleResponse
 import kotlinx.coroutines.launch
@@ -66,7 +66,7 @@ import com.yaoyouju.android.ui.theme.Text3
  */
 @Composable
 fun ContentListScreen(navController: NavHostController) {
-    val contentsApi: ContentsApi2 = NetworkModule.api()
+    val contentsApi: ContentsApi = NetworkModule.api()
 
     // 筛选标签（按设计稿）
     val filters = listOf(
@@ -78,7 +78,7 @@ fun ContentListScreen(navController: NavHostController) {
         "生活影响" to "图文",
     )
     var filter by remember { mutableStateOf(filters[0]) }
-    var items by remember { mutableStateOf<List<ContentListItem2>>(emptyList()) }
+    var items by remember { mutableStateOf<List<ContentListItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
     val scope = rememberCoroutineScope()
@@ -227,7 +227,7 @@ private fun FilterChip(
 /** 内容卡片 */
 @Composable
 private fun ContentCard(
-    item: ContentListItem2,
+    item: ContentListItem,
     onClick: () -> Unit,
 ) {
     AppCard(modifier = Modifier.clickable { onClick() }) {

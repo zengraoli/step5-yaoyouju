@@ -107,6 +107,7 @@
     {
       "path": "pages/qa/index",
       "style": {
+            "navigationStyle": "custom",
         "navigationBarTitleText": "问与解释",
         "enablePullDownRefresh": false
       }
@@ -114,6 +115,7 @@
     {
       "path": "pages/timeline/index",
       "style": {
+            "navigationStyle": "custom",
         "navigationBarTitleText": "病程",
         "enablePullDownRefresh": false
       }
@@ -121,6 +123,7 @@
     {
       "path": "pages/followup/index",
       "style": {
+            "navigationStyle": "custom",
         "navigationBarTitleText": "复诊准备",
         "enablePullDownRefresh": false
       }
@@ -128,6 +131,7 @@
     {
       "path": "pages/mine/index",
       "style": {
+            "navigationStyle": "custom",
         "navigationBarTitleText": "我的",
         "enablePullDownRefresh": false
       }

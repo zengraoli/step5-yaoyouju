@@ -35,10 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.AnalysisView
+import com.yaoyouju.android.core.net.CreateAnalysisRequest
 import com.yaoyouju.android.core.net.AnalysesApi
 import com.yaoyouju.android.core.net.ContentListItem
 import com.yaoyouju.android.core.net.ContentsApi
 import com.yaoyouju.android.core.net.CareEventView
+import com.yaoyouju.android.core.net.UpdateCareEventRequest
 import com.yaoyouju.android.core.net.EpisodeDetail
 import com.yaoyouju.android.core.net.EpisodeItem
 import com.yaoyouju.android.core.net.EpisodesApi
@@ -356,14 +358,14 @@ private fun PendingEventsCard(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = event.label,
+                            text = event.rawText ?: "${event.eventType}记录（无原文）",
                             fontSize = 14.sp,
                             color = Text1,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Text(
-                            text = "来源：" + (event.source ?: "尚未确认"),
+                            text = "来源：" + event.sourceType + " · " + event.verifyStatus,
                             fontSize = 11.sp,
                             color = Text3,
                         )
@@ -571,10 +573,10 @@ private fun loadHomeData(
                 return@launch
             }
             val episodeDetail: EpisodeDetail = handleResponse(episodesApi.detail(first.id))
-            val pending = episodeDetail?.events?.filter { it.verifyStatus == null || it.verifyStatus == "待确认" } ?: emptyList()
+            val pending = episodeDetail?.events?.filter { it.verifyStatus == "尚未确认" || it.verifyStatus == "有冲突" } ?: emptyList()
 
             val todayRecorded = try {
-                handleResponse(episodesApi.today(first.id)).recorded
+                handleResponse(episodesApi.today(first.id)).logged
             } catch (_: Exception) {
                 null
             }
@@ -594,7 +596,7 @@ private fun loadHomeData(
             }
 
             val recommendations = try {
-                handleResponse(contentsApi.list()).list.take(2)
+                handleResponse(contentsApi.list()).take(2)
             } catch (_: Exception) {
                 emptyList()
             }
@@ -630,7 +632,7 @@ private fun confirmEventInline(
                 episodesApi.updateEvent(
                     episodeId,
                     event.id,
-                    mapOf("verify_status" to "已确认"),
+                    UpdateCareEventRequest(verifyStatus = "已确认"),
                 ),
             )
             onDone()
@@ -650,7 +652,7 @@ private fun createAnalysisInline(
 ) {
     scope.launch {
         try {
-            handleResponse(analysesApi.create(mapOf("episode_id" to episodeId)))
+            handleResponse(analysesApi.create(CreateAnalysisRequest(episodeId = episodeId)))
             onDone()
         } catch (e: Exception) {
             onError(e.message ?: "分析任务提交失败，请稍后重试")

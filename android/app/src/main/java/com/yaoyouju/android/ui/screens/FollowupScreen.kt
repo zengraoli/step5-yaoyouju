@@ -37,7 +37,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.EpisodesApi
-import com.yaoyouju.android.core.net.FollowupApi2
+import com.yaoyouju.android.core.net.ExportFollowupRequest
+import com.yaoyouju.android.core.net.FollowupApi
 import com.yaoyouju.android.core.net.FollowupSection
 import com.yaoyouju.android.core.net.FollowupSummaryView
 import com.yaoyouju.android.core.net.NetworkModule
@@ -76,7 +77,7 @@ import kotlinx.coroutines.launch
 @Composable
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 fun FollowupScreen(navController: NavHostController) {
-    val followupApi: FollowupApi2 = NetworkModule.api()
+    val followupApi: FollowupApi = NetworkModule.api()
     val episodesApi: EpisodesApi = NetworkModule.api()
     val scope = rememberCoroutineScope()
 
@@ -146,9 +147,9 @@ fun FollowupScreen(navController: NavHostController) {
                     return@launch
                 }
                 val result = handleResponse(
-                    followupApi.export(episode.id, s.id, mapOf("format" to format)),
+                    followupApi.export(episode.id, s.id, ExportFollowupRequest(format)),
                 )
-                exportText = result.content
+                exportText = result.text
                 tab = tabs[1]
                 toastText = "已导出（$format），请自行决定是否分享给医生"
                 load()
@@ -434,7 +435,7 @@ private fun SectionCard(index: Int, section: FollowupSection) {
                         Text(text = item.text, fontSize = 13.sp, color = Text1)
                         // 来源与核实状态（问题段不标核实状态）
                         val meta = buildList {
-                            if (!item.sourceType.isNullOrBlank()) add("来源：" + item.sourceType)
+                            if (!item.source.isBlank()) add("来源：" + item.source)
                             if (section.key != "questions" && !item.verifyStatus.isNullOrBlank()) {
                                 add(item.verifyStatus)
                             }

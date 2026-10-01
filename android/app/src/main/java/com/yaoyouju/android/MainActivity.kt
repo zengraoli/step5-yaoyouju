@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    /** 解析 yaoyouju://<页面编号>，如 yaoyouju://A07 */
+    /** 解析 yaoyoujuapp://<页面编号>，如 yaoyoujuapp://A07 */
     private fun handleIntent(intent: Intent?) {
         val target = DeepLinks.parse(intent?.data?.toString())
         if (target != null) {

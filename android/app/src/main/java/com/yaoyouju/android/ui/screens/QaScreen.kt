@@ -37,6 +37,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.yaoyouju.android.core.net.AskRequest
+import com.yaoyouju.android.core.net.CreateQaSessionRequest
 import com.yaoyouju.android.core.net.EpisodesApi
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.QaApi
@@ -98,12 +100,12 @@ fun QaScreen(navController: NavHostController) {
                 val episodes = handleResponse(episodesApi.list())
                 val episode = episodes.firstOrNull()
                 if (episode != null) {
-                    val structured = handleResponse(reportsApi.structured(episode.id))
+                    val structured = handleResponse(episodesApi.structured(episode.id))
                     val reportDates = structured.items.mapNotNull { it.report?.reportDate }.distinct()
                     contextLabel = if (reportDates.isEmpty()) {
-                        "基于：当前情况（${episode.startDate ?: "尚未确认"}）"
+                        "基于：当前情况（${episode.onsetDate ?: "尚未确认"}）"
                     } else {
-                        "基于：当前情况（${episode.startDate ?: "尚未确认"}）+ 报告日期（${reportDates.joinToString("、")}）"
+                        "基于：当前情况（${episode.onsetDate ?: "尚未确认"}）+ 报告日期（${reportDates.joinToString("、")}）"
                     }
                 }
             } catch (_: Exception) {
@@ -127,9 +129,7 @@ fun QaScreen(navController: NavHostController) {
                     val episodes = handleResponse(episodesApi.list())
                     val episode = episodes.firstOrNull()
                     val session = handleResponse(
-                        qaApi.createSession(
-                            if (episode != null) mapOf("episode_id" to episode.id) else emptyMap(),
-                        ),
+                        qaApi.createSession(CreateQaSessionRequest(episode?.id)),
                     )
                     sessionId = session.id
                     messages = session.messages
@@ -161,7 +161,7 @@ fun QaScreen(navController: NavHostController) {
                 )
                 messages = messages + localUser
                 inputText = ""
-                val result = handleResponse(qaApi.ask(sessionId, mapOf("content" to question)))
+                val result = handleResponse(qaApi.ask(sessionId, AskRequest(question)))
                 // 拉取最新会话详情（含 assistant 回复与引用）
                 val detail = handleResponse(qaApi.session(result.sessionId))
                 messages = detail.messages

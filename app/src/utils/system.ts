@@ -94,3 +94,11 @@ export function parseCountToken(token: string): number {
   }
   return Number.NaN
 }
+
+/** UTC ISO8601 → 北京时间「YYYY-MM-DD HH:mm」 */
+export function beijingDateTime(iso?: string): string {
+  if (!iso) return ''
+  const time = new Date(iso).getTime()
+  if (Number.isNaN(time)) return ''
+  return new Date(time + 8 * 60 * 60 * 1000).toISOString().slice(0, 16).replace('T', ' ')
+}

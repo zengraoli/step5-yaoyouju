@@ -95,7 +95,7 @@ fun ReportDiffScreen(
                 analysis = handleResponse(analysesApi.detail(analysisId))
             }
             if (episodeId != null) {
-                val structured = handleResponse(reportsApi.structured(episodeId))
+                val structured = handleResponse(episodesApi.structured(episodeId))
                 items = structured.items
             }
         } catch (e: Exception) {
@@ -286,14 +286,12 @@ fun ReportDiffScreen(
                                         fontSize = 12.sp,
                                         color = Text2,
                                     )
-                                    if (term.position != null) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "原文位置：第 ${term.position + 1} 字",
-                                            fontSize = 11.sp,
-                                            color = Text3,
-                                        )
-                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "原文位置：第 ${term.start + 1} 字起",
+                                        fontSize = 11.sp,
+                                        color = Text3,
+                                    )
                                 }
                             }
                         }

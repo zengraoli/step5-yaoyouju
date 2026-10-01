@@ -153,13 +153,25 @@ async function onSave(updateCurrent = false) {
     const worryText = worry.value.trim()
 
     // 1) 结构化记录（缺失字段服务端记为「尚未确认」）
-    await logToday(episodeId.value, {
+    const log = await logToday(episodeId.value, {
       sit_minutes: sit,
       planned_activity_done: activity,
       sleep_impact: sleep,
       top_worry: worryText || null,
       leg_change: leg,
     })
+
+    // 命中红旗：记录仍然保存，但立刻给出就医提示（产品红线：不被任何流程阻断）
+    const notice = log?.safety_notice ?? null
+    if (notice) {
+      const labels = notice.matched.map((m) => m.label).join('、')
+      const stop = notice.matched.some((m) => m.severity === 'high') ? '1' : '0'
+      toast(`${notice.headline}：${labels}`)
+      uni.navigateTo({
+        url: `/pages/emergency/notice?signals=${encodeURIComponent(labels)}&stop=${stop}&rule=${encodeURIComponent(notice.rule_set_version ?? '')}`,
+      })
+      return
+    }
 
     // 2) 「与昨天相比」与「今天做了什么」：自述事件，保留来源
     const extra: string[] = []

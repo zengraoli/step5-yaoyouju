@@ -98,7 +98,7 @@ fun ReportVerifyScreen(navController: NavHostController) {
                 val episodes: List<com.yaoyouju.android.core.net.EpisodeItem> = handleResponse(episodesApi.list())
                 val episodeId = episodes.firstOrNull()?.id
                 if (episodeId != null) {
-                    val structured = handleResponse(reportsApi.structured(episodeId))
+                    val structured = handleResponse(episodesApi.structured(episodeId))
                     items = structured.items
                     summary = structured.summary
                 }
@@ -121,7 +121,7 @@ fun ReportVerifyScreen(navController: NavHostController) {
                     episodesApi.updateEvent(
                         episodeId,
                         eventId,
-                        mapOf("verify_status" to "已确认"),
+                        com.yaoyouju.android.core.net.UpdateCareEventRequest(verifyStatus = "已确认"),
                     ),
                 )
                 load()
@@ -138,7 +138,7 @@ fun ReportVerifyScreen(navController: NavHostController) {
                 val episodes: List<com.yaoyouju.android.core.net.EpisodeItem> = handleResponse(episodesApi.list())
                 val episodeId = episodes.firstOrNull()?.id ?: return@launch
                 try {
-                    handleResponse(analysesApi.create(mapOf("episode_id" to episodeId)))
+                    handleResponse(analysesApi.create(com.yaoyouju.android.core.net.CreateAnalysisRequest(episodeId = episodeId)))
                     navController.navigate(Routes.ANALYSIS)
                 } catch (e: Exception) {
                     val error = e as? ApiException
