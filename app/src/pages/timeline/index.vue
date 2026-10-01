@@ -203,7 +203,7 @@ function onRecordToday() {
             <AppIcon name="filter" :size="22" />
           </view>
           <view class="nav__action" hover-class="nav__action--hover" :hover-stay-time="80" @click="onAdd">
-            <AppIcon name="close" :size="22" />
+            <AppIcon name="plus" :size="22" />
           </view>
         </view>
       </view>
@@ -218,7 +218,6 @@ function onRecordToday() {
       <AppCard>
         <view class="episode-head">
           <text class="episode-head__title">本次发作</text>
-          <StatusTag status="confirmed" text="保守治疗中" />
         </view>
         <text class="episode-head__onset">{{ onsetLabel }}</text>
         <view class="stats">

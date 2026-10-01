@@ -96,7 +96,6 @@ const attached = computed<string>(() => {
   const parts = [`分析 v${analysis.value.version}`, `模型 ${meta.model_release ?? '未知'}`]
   const explain = analysis.value.sections.explain[0]
   if (explain) parts.push(`②-1 解释`)
-  parts.push('检索策略 R-4')
   return parts.join(' · ')
 })
 

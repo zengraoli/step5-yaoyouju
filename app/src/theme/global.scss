@@ -71,3 +71,46 @@ navigator {
 .gap-xl {
   height: $spacing-xl;
 }
+
+/* 自绘导航栏（原生标题栏去掉后统一）：返回箭头 / 标题 / 操作图标横向排布，不竖排 */
+.nav {
+  width: 100%;
+}
+
+.nav__bar {
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-md;
+}
+
+.nav__back,
+.nav__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88rpx;
+  height: 88rpx;
+  flex: none;
+}
+
+.nav__bar > .nav__title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: $font-size-page-title;
+  font-weight: $font-weight-medium;
+  color: $color-text-1;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav__actions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  flex: none;
+}

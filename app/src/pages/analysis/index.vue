@@ -511,7 +511,7 @@ function onBack() {
           <view class="video-card__body">
             <text class="video-card__title">{{ item.title }}</text>
             <view class="video-card__meta">
-              <StatusTag status="reviewed" text="已审核 v2" />
+              <StatusTag status="reviewed" text="已审核" />
               <text class="video-card__reason">推荐理由：{{ item.reason }}</text>
             </view>
           </view>
