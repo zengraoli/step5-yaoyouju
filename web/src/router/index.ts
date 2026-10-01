@@ -15,6 +15,12 @@ const routes: RouteRecordRaw[] = [
     meta: { public: true, title: '就医提示' },
   },
   {
+    path: '/onboarding',
+    name: 'onboarding',
+    component: () => import('@/views/onboarding/OnboardingView.vue'),
+    meta: { title: '当前关键变化确认' },
+  },
+  {
     path: '/',
     component: DefaultLayout,
     children: [

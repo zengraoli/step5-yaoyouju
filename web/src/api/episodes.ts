@@ -28,6 +28,20 @@ export interface CareEventView {
   verify_status: string
   symptom_log: SymptomLogView | null
   report: { id: string; report_date: string | null; extracted_terms: unknown } | null
+  /** 命中安全规则时返回的就医提示（未命中为 null） */
+  safety_notice: SafetyNoticeData | null
+}
+
+/** 就医提示内容（服务端 /analyses、/episodes/{id}/events 同构） */
+export interface SafetyNoticeData {
+  title: string
+  headline: string
+  body: string
+  matched: { rule_code: string; label: string; severity: string; action: string; advice: string; excerpt: string }[]
+  actions: { type: string; label: string }[]
+  bring_list: string[]
+  footer_note: string
+  rule_set_version: string
 }
 
 export interface EpisodeListItem {

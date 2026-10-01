@@ -15,8 +15,8 @@ import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import { useAuthStore } from '@/stores/auth'
-import { createEpisode, type CreateEpisodeInput } from '@/api/episodes'
-import { checkRedFlags, type SafetyNotice } from '@/api/safety'
+import { addCareEvent, createEpisode, type CareEventView, type CreateEpisodeInput } from '@/api/episodes'
+import type { SafetyNotice } from '@/api/safety'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -83,28 +83,23 @@ async function submit() {
       `3. 侧别？${answers.value.side || '尚未确认'}`,
       `4. 与上次相比？${answers.value.change || '尚未确认'}`,
     ].join('\n')
-    // 1. 先做红旗校验（不写库）：命中直接进入就医提示，不创建病程
-    const safety = await checkRedFlags({
-      symptom_change: text,
-      title: title.value.trim(),
-    })
-    if (safety.safety_flag !== 'none') {
-      notice.value = safety.notice ?? null
-      return
-    }
-    // 2. 建立病程
+    // 1. 建立病程
     const input: CreateEpisodeInput = { title: title.value.trim() }
     if (onset.value) input.onset_date = onset.value
     const ep = await createEpisode(input)
-    // 3. 写入本次确认的结构化摘要（作为第一条症状事件）
-    const { addCareEvent } = await import('@/api/episodes')
-    await addCareEvent(ep.id, {
+    // 2. 写入本次确认的结构化摘要；服务端同套安全规则识别红旗说法
+    //    （命中时事件仍保存，但返回 safety_notice，本页据此提示就医，不进入下一步）
+    const event: CareEventView = await addCareEvent(ep.id, {
       event_type: '症状',
       source_type: '自述',
       raw_text: text,
       occurred_at: onset.value || new Date().toISOString(),
       verify_status: '已确认',
     })
+    if (event.safety_notice) {
+      notice.value = event.safety_notice
+      return
+    }
     router.replace('/dashboard')
   } catch (e) {
     error.value = e instanceof Error ? e.message : '建立病程失败，请稍后重试'

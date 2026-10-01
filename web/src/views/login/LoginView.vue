@@ -423,4 +423,19 @@ async function onLogin() {
     padding: var(--spacing-xxl);
   }
 }
+
+/* 窄屏（390 宽）：隐藏左侧价值说明，单列不产生横向溢出 */
+@media (max-width: 720px) {
+  .login-page {
+    grid-template-columns: 1fr;
+  }
+
+  .login-aside {
+    display: none;
+  }
+
+  .login-main {
+    padding: var(--spacing-lg) var(--spacing-md);
+  }
+}
 </style>

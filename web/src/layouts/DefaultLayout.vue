@@ -7,6 +7,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import BrandLogo from '@/components/BrandLogo.vue'
 import { useAuthStore } from '@/stores/auth'
+import { logout } from '@/api/auth'
 
 const auth = useAuthStore()
 const route = useRoute()
@@ -22,7 +23,13 @@ const NAV_ITEMS = [
 
 const activeKey = computed(() => (route.meta.nav as string) ?? '')
 
-function onLogout() {
+/** 退出登录：先吊销服务端令牌，再清理本地登录态（旧令牌立即失效） */
+async function onLogout() {
+  try {
+    await logout()
+  } catch {
+    // 网络异常也允许本地退出
+  }
   auth.logout()
 }
 </script>

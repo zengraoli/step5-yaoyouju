@@ -213,7 +213,7 @@ const exportMeta = computed<string>(() =>
 
 const versionInfo = computed<string>(() => 'Web v0.1.0 · 规则集 safety-rules-v2.0 · 内容库版本见分析页')
 
-/** 退出登录：先吊销服务端令牌，再清理本地登录态 */
+/** 退出登录：先吊销服务端令牌，再清理本地登录态（旧令牌立即失效） */
 async function onLogout() {
   try {
     await logout()
