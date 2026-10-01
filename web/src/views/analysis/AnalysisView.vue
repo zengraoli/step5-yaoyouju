@@ -411,15 +411,24 @@ async function onSaveReport() {
   }
   savingReport.value = true
   try {
-    await createReport({
+    const result = (await createReport({
       episode_id: episodeId.value,
       report_date: reportDate.value || null,
       raw_text: reportText.value.trim(),
       source_type: '报告原文',
-    })
-    toast('报告已录入')
+    })) as { safety_notice?: { headline: string; matched?: { label: string; severity?: string }[] } | null }
     inputMode.value = false
     reportText.value = ''
+    // 录入即命中红旗（产品红线第 3 条）：立即跳就医提示，不必等点“生成”
+    if (result.safety_notice) {
+      const notice = result.safety_notice
+      const labels = (notice.matched ?? []).map((m) => m.label).join('、')
+      const stop = (notice.matched ?? []).some((m) => m.severity === 'high') ? '1' : '0'
+      toast((notice.headline || '检测到需要及时就医的信号') + '：' + labels)
+      router.push(`/emergency?signals=${encodeURIComponent(labels)}&stop=${stop}`)
+      return
+    }
+    toast('报告已录入')
     await init()
   } catch (e) {
     toast(e instanceof Error ? e.message : '保存失败，请稍后重试')
