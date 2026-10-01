@@ -323,7 +323,7 @@ async function submitInvite() {
               <StatusTag v-if="u.mfa === '已绑定'" status="confirmed" text="已绑定" />
               <StatusTag v-else status="unconfirmed" text="未绑定" />
             </td>
-            <td>{{ u.last_login === '—' ? '—' : u.last_login.slice(0, 16).replace('T', ' ') }}</td>
+            <td>{{ u.last_login ? String(u.last_login).slice(0, 16).replace('T', ' ') : '—' }}</td>
             <td>
               <StatusTag v-if="u.status === '正常'" status="confirmed" text="正常" />
               <StatusTag v-else status="offline" text="已停用" />

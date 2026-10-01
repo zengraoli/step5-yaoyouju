@@ -43,13 +43,13 @@ const routes: RouteRecordRaw[] = [
         path: 'contents',
         name: 'contents',
         component: () => import('@/views/contents/ContentsView.vue'),
-        meta: { nav: 'contents', title: '内容库', permission: 'content.review' },
+        meta: { nav: 'contents', title: '内容库', permission: 'content.view' },
       },
       {
         path: 'contents/:id',
         name: 'content-detail',
         component: () => import('@/views/contents/ContentDetailView.vue'),
-        meta: { nav: 'contents', title: '内容详情', permission: 'content.review' },
+        meta: { nav: 'contents', title: '内容详情', permission: 'content.view' },
       },
       {
         path: 'evidence',
@@ -126,10 +126,20 @@ router.beforeEach(async (to) => {
   }
   const required = to.meta.permission as string | undefined
   if (!required) return true
-  const auth = useAuthStore()
+  let auth = useAuthStore()
   if (!auth.admin) {
     try {
       await auth.fetchMe()
+    } catch {
+      auth.logout()
+      return { name: 'login', query: { redirect: to.fullPath } }
+    }
+  }
+  // fetchMe 失败时会静默返回 null：admin 仍为空时按无权限处理前先再取一次
+  if (!auth.admin) {
+    try {
+      await auth.fetchMe()
+      auth = useAuthStore()
     } catch {
       auth.logout()
       return { name: 'login', query: { redirect: to.fullPath } }
