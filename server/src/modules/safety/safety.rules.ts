@@ -20,7 +20,7 @@
  *    该范围内的症状不算使用者本人的症状（「孩子发烧了我请假在家照顾」「弟弟摔了一跤我自己腰痛」）。
  */
 
-export const RULE_SET_VERSION = 'safety-rules-v3.0';
+export const RULE_SET_VERSION = 'safety-rules-v4.0';
 
 /** 归一化：全角→半角、去空白、统一常见标点 */
 export function normalizeSafetyText(input: string): string {
@@ -74,13 +74,28 @@ export const NORMAL_AFTER_WORDS = [
 ];
 
 /** 与否定无关、但常被否定词误伤的短语（命中后先剔除再做否定识别） */
-const NOT_NEGATION_PHRASES = ['不小心', '不留神', '不知不觉', '无心', '无碍', '无聊'];
+const NOT_NEGATION_PHRASES = ['不小心', '不留神', '不知不觉', '无心', '无碍', '无聊', '尿不干净', '便不干净', '不干净'];
 
 /**
  * 「后随上下文」否定：这些词出现在症状之后时，说的是别的原因或没事
  * （「瘦了四五斤，我在刻意减肥」「低烧，医生说是感冒」「体重轻了一点，胃口很好」）。
  */
 const AFTER_CONTEXT_WORDS = ['感冒', '刻意减肥', '在减肥', '在减重', '胃口很好', '胃口好'];
+
+/**
+ * 「之前的上下文」豁免（出现在短语之前）：说的是梦、刻意减肥、他人 / 物体，不算本人红旗。
+ * 检查命中位置之前约 10 个字符。
+ */
+export const BEFORE_CONTEXT_EXCLUDE = [
+  '梦见', '梦到', '做梦', '梦里', '梦见了', '晚上梦', '昨天梦',
+  '刻意减肥', '在减肥', '主动减肥', '减肥减', '节食', '为了体检', '为了减肥', '想减肥', '控制体重',
+];
+/** 「之后上下文」豁免（出现在短语之后）：说的是别的原因 / 已经解释 / 没事 */
+export const AFTER_CONTEXT_EXCLUDE = [
+  '感冒', '刻意减肥', '在减肥', '在减重', '胃口很好', '胃口好',
+  '是减肥', '减肥成功', '一直在减', '一直很稳定', '一直稳定', '现在很稳定', '现在稳定', '稳定了',
+  '人没事', '人没有事', '没伤到人',
+];
 
 /** 症状之后紧跟「尚未确认 / 未确认」：用户明确表示还没有确认（不当作症状） */
 const UNCONFIRMED_AFTER = /^[：:，,]?(?:尚未|未|还未)确认/;
@@ -106,10 +121,10 @@ const POSITIVE_MARKERS = [
 
 /** 第三方称谓（叙述他人情况）：如「我老婆」「孩子」「弟弟…」 */
 const THIRD_PARTY_SUBJECT_SOURCE =
-  '我?(?:孩子|宝宝|小孩|儿子|女儿|老婆|老公|妻子|丈夫|我妈|我爸|爸爸妈妈|妈妈|爸爸|父母|弟弟|妹妹|哥哥|姐姐|家人|老人|同事|室友|父亲|母亲|老伴|邻居|同学|病人)';
+  '我?(?:孩子|宝宝|小孩|儿子|女儿|闺女|老婆|老公|妻子|丈夫|我妈|我爸|爸爸妈妈|妈妈|爸爸|父母|弟弟|妹妹|哥哥|姐姐|家人|老人|同事|室友|父亲|母亲|老伴|邻居|同学|病人)';
 
 /** 第三方叙述的结束标记（遇到这些词说明叙述回到使用者本人） */
-const THIRD_PARTY_STOP_TOKENS = ['我自己', '但是', '但', '可是', '不过', '然而', '而是', '却', '也', '还', '反而', '反倒'];
+const THIRD_PARTY_STOP_TOKENS = ['我自己', '但是', '但', '可是', '不过', '然而', '而是', '却', '也', '还', '反而', '反倒', '同房', '做爱', '性生活', '行房'];
 
 /** 第三方叙述最大长度（避免把本人的症状也吞掉） */
 const THIRD_PARTY_MAX_SPAN = 18;
@@ -231,7 +246,7 @@ function locallyNegated(text: string, first: CoreMatch, second: CoreMatch): bool
   const gap = text.slice(first.end, second.start);
   // 主体与症状之间的否定 = 否定整个短语（「无进行性无力」「没有明显麻木」）。
   // 「不受控制」「不由自主」里的「不」说的是控制失灵，不是否定症状。
-  const gapBody = gap.replace(/不受控制|不能自制|难以控制|无法自制|控制不住/g, '');
+  const gapBody = gap.replace(/不受控制|不能自制|难以控制|无法自制|控制不住|[尿便屎屁]不干净|不干净/g, '');
   if (gapBody && NEGATION_WORDS.some((w) => gapBody.includes(w))) return true;
   const after = text.slice(second.end, second.end + 8);
   return NORMAL_AFTER_WORDS.some((w) => after.startsWith(w));
@@ -257,6 +272,12 @@ export interface RedFlagRule {
   gap?: number;
   /** 不依赖主体的独立短语（如「发烧」「摔了一跤」） */
   standalone?: string[];
+  /** 命中之前的上下文豁免词（梦境 / 刻意减肥 / 情绪性，如 RF-10 的「心」表情绪性心疼） */
+  before_exclude?: string[];
+  /** 命中之后的上下文豁免词（已解释 / 人没事） */
+  after_exclude?: string[];
+  /** 第一人称自我否认短语（小句出现即判否，温度锚定除外，如「我没有发烧」） */
+  deny_self?: string[];
 }
 
 /** 疼痛 / 加重等常用片段（复用） */
@@ -289,10 +310,18 @@ const PERINEUM_SUBJECTS = [
   '肛周',
   '裆部',
   '胯下',
+  '会阴部位',
   '大腿根(?:部)?',
+  '大腿内侧',
+  '阴囊',
+  '屁眼',
+  '私密部位',
+  '私处一带',
   '蛋蛋',
   '菊花',
   '睾丸',
+  '坐垫下',
+  '会阴',
   '腰以下',
   '下半身',
   '半侧屁股',
@@ -327,6 +356,15 @@ const NUMBNESS_SYMPTOMS = [
   '像被[^。，,;；]{0,4}(?:麻|木)',
   '不敏感',
   '麻',
+  '木了',
+  '木的',
+  '全木',
+  '知觉都没',
+  '一点.{0,2}知觉',
+  '感觉都没(?:有|了)',
+  '失去知觉',
+  '完全没(?:有)?(?:感觉|知觉)',
+  '毫无知觉',
 ];
 
 /** 下肢无力 / 行走变化 */
@@ -351,6 +389,8 @@ const LEG_SUBJECTS = [
   '小腿',
   '膝盖',
   '脚踝',
+  '脚尖',
+  '脚趾',
   '腿',
   '脚',
   '腰以下',
@@ -417,6 +457,19 @@ const LEG_WEAKNESS_SYMPTOMS = [
   '手脚并用',
   '扶墙',
   '费劲',
+  '乏力',
+  '加重',
+  '越来越软',
+  '越来越没劲',
+  '跪',
+  '跪下去',
+  '要去跪',
+  '踮不起',
+  '踮不起来',
+  '越来越差',
+  '肌力.{0,4}(?:掉到|掉到|降到|下降|减弱)',
+  '上不了台阶',
+  '费劲得',
 ];
 
 /** 大小便控制变化 */
@@ -486,6 +539,17 @@ const BOWEL_SYMPTOMS = [
   '尿湿',
   '用力[^。，,;；]{0,6}(?:才能|才)(?:尿|排便|解)',
   '干燥[^。，,;；]{0,4}(?:加重|严重|厉害)',
+  '感觉不到[尿便排]',
+  '[尿便排][^。，,;；]{0,4}没(?:有)?感觉',
+  '使劲[^。，,;；]{0,8}(?:才)?(?:能)?尿',
+  '按着肚子.{0,4}(?:才)?(?:能)?尿',
+  '才尿得出',
+  '自己流',
+  '不自主地?流',
+  '尿到裤子',
+  '尿湿了裤子',
+  '漏便',
+  '遗尿',
 ];
 
 /**
@@ -504,6 +568,12 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
     subjects: PERINEUM_SUBJECTS,
     symptoms: NUMBNESS_SYMPTOMS,
     gap: 8,
+    standalone: [
+      '坐垫[^。，,;；]{0,16}(?:麻|木|没感觉|没知觉|知觉都没|无知觉)',
+      '一点(?:知觉|感觉)都没(?:有|了)',
+      '压着(?:的那块|那块|的地方)?[^。，,;；]{0,10}(?:没知觉|没感觉|发麻|发木|麻木)',
+      '会阴[^。，,;；]{0,6}(?:骑马|骑车|久坐).{0,8}(?:麻|木)',
+    ],
   },
   {
     code: 'RF-02',
@@ -525,6 +595,18 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '肌力(?:进行性|逐渐|越来越)?(?:下降|减弱|变差)',
       '(?:双|左|右)腿(?:麻木|发麻)(?:无力|没劲)',
       '走路[^。，,;；]{0,6}(?:越来越)?费劲',
+      '踮不起',
+      '踮不起来',
+      '跪下去',
+      '站一会儿就要跪',
+      '两条腿越来越软',
+      '双腿越来越软',
+      '越来越没(?:劲|力气)',
+      '下肢乏力(?:逐渐)?加重',
+      '越来越乏力',
+      '肌力[^。，,;；]{0,6}(?:掉到|掉到|降到|下降|减弱)[^。，,;；]{0,2}[0-9０-９]',
+      '[0-9０-９]级掉到[0-9０-９]级',
+      '(?:麻木|发麻|麻)[^。，,;；]{0,10}(?:上爬|往上爬|往上|一路|蔓延|扩展|延伸)',
     ],
   },
   {
@@ -547,7 +629,23 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '流出来',
       '排便要[^。，,;；]{0,4}(?:很大力|用力|费劲|使劲)',
       '大便干燥[^。，,;；]{0,6}(?:加重|严重|厉害)',
+      '遗尿',
+      '漏便',
+      '漏屎',
+      '肛门[^。，,;；]{0,4}(?:松|漏|失禁|憋不住)',
+      '拉在裤子',
+      '尿在裤子',
+      '屎尿?在裤子',
+      '膀胱[^。，,;；]{0,3}(?:憋胀|胀)',
+      '一(?:整天|天一夜|昼夜|整天整夜)?[没无][^。，,;；]{0,3}(?:小便|尿|排便|大便)',
+      '憋了(?:一整天|一天一夜|一晚上|半天)',
+      '穿纸尿裤',
+      '排尿[^。，,;；]{0,3}费劲',
+      '撒不出',
+      '尿[^。，,;；]{0,2}憋[^。，,;；]{0,2}憋不住',
     ],
+    deny_self: ['我说没有', '回答没有', '说没有', '并无大小便'],
+    after_exclude: ['喝水', '多喝水', '后好了', '就缓解', '便通畅', '后来就好了'],
   },
   {
     code: 'RF-04',
@@ -583,7 +681,19 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '晚上一直(?:痛|疼)',
       '疼(?:得|的)睡不着',
       '痛(?:得|的)睡不着',
+      '翻身都难',
+      '翻身困难',
+      '翻不了身',
+      '休息(?:也|后)?(?:不|没|难以)(?:缓解|改善)',
+      '休息也不缓解',
+      '只能坐着',
+      '根本(?:没法|不能)躺下',
+      '没法躺下',
+      '躺不下来',
+      '整夜都只能坐着',
+      '靠坐[^。，,;；]{0,4}(?:一晚|一夜|睡觉)',
     ],
+    before_exclude: ['心', '头'],
   },
   {
     code: 'RF-05',
@@ -595,9 +705,9 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '(?:体重|个子|身子)?(?:瘦|掉|降|减|轻|少)(?:了|下|少)?[0-9一二两三四五六七八九十]{1,4}(?:斤|公斤|千克|kg)',
       '不明原因(?:消瘦|体重下降|瘦)',
       '明显消瘦',
-      '消瘦',
+      '明显瘦',
       '体重(?:明显)?(?:下降|减轻|减少|掉了|掉得|瘦了)',
-      '体重[^。，,;；]{0,4}(?:掉|降|减|轻|少)',
+      '体重(?:(?![没无未否])[^。，,;；]){0,4}(?:掉|降|减|轻|少)',
       '瘦了一圈',
       '掉秤',
       '没(?:节食|减肥)[^。，,;；]{0,6}(?:瘦|轻|掉)',
@@ -605,6 +715,8 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '半年(?:内|里)?瘦(?:了|下来)',
       '裤子(?:腰围|腰)?[^。，,;；]{0,6}(?:大了|松了|胖了)',
     ],
+    before_exclude: ['减肥', '节食', '刻意', '为了体检', '控制体重'],
+    after_exclude: ['减肥', '节食', '稳定', '成功', '刻意减', '一直在减', '轻松', '开心', '达标'],
   },
   {
     code: 'RF-06',
@@ -619,7 +731,7 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '低烧',
       '低烧不退',
       '发烧',
-      '发热',
+      '发热(?!贴|宝宝|器|片|贴贴)',
       '高热',
       '烧到3[89]',
       '体温3[89]',
@@ -628,7 +740,21 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '反复(?:发烧|发热)',
       '打寒战',
       '畏寒发热',
+      '打摆子',
+      '打哆嗦',
+      '打寒颤',
+      '出虚汗',
+      '冒虚汗',
+      '虚汗',
+      '浑身发冷打摆子',
+      '三十八度',
+      '三十九度',
+      '体温[^。，,;；]{0,6}三十[八九]',
+      '还有点烧',
+      '有点(?:烧|发热|发烧)',
+      '夜间盗汗',
     ],
+    deny_self: ['没有发烧', '没发烧', '不发烧', '没有发热', '没发热', '不发热', '没有烧到', '未发热', '未发烧'],
   },
   {
     code: 'RF-07',
@@ -663,11 +789,20 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '化疗',
       '放疗',
       '治疗过',
+      '治疗中',
+      '在治疗',
+      '治疗',
+      '查出',
+      '确诊',
+      '腰痛',
+      '腰疼',
+      '腰背痛',
+      '背痛',
       '两年',
       '三年',
     ],
     gap: 8,
-    standalone: ['肿瘤(?:病|疾)史', '癌症(?:病|疾)史', '既往(?:有)?(?:癌|肿瘤)', '恶性肿瘤史'],
+    standalone: ['肿瘤(?:病|疾)史', '癌症(?:病|疾)史', '既往(?:有)?(?:癌|肿瘤)', '恶性肿瘤史', '(?:癌|瘤|白血病|骨髓瘤)[^。，,;；]{0,8}转移', '可能转移', '腰椎?转移', '骨转移'],
   },
   {
     code: 'RF-08',
@@ -694,7 +829,18 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '从(?:床|梯子|楼梯)[^。，,;；]{0,6}(?:摔|跌)',
       `外伤(?:后|之)?[，,]?疼(?:痛)?(?:持续)?${WORSE}`,
       '外伤(?:后|之)?腰痛',
+      '摔了腰',
+      '闪了腰',
+      '摔到腰',
+      '从楼梯[^。，,;；]{0,4}(?:摔|滚|跌|骨碌)',
+      '滚了下去',
+      '滚了下去',
+      '摔下楼梯',
+      '磕在[^。，,;；]{0,4}(?:地|石|台)',
+      '骑摩托[^。，,;；]{0,4}(?:摔|撞|磕)',
     ],
+    after_exclude: ['人没事', '人没有事', '没伤到人', '车凹', '小凹', '我没伤', '人没伤'],
+    before_exclude: ['梦见', '梦到', '做梦', '梦里'],
   },
   {
     code: 'RF-09',
@@ -759,7 +905,34 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '疼(?:得|的)[^。，,;；]{0,3}打滚',
       '痛(?:得|的)[^。，,;；]{0,3}打滚',
       '疼(?:得|的)[^。，,;；]{0,3}(?:出汗|汗)',
+      '钻心(?:地)?(?:痛|疼)',
+      '一(?:动|碰)就[^。，,;；]{0,3}(?:钻心|剧痛|疼|痛)',
+      '刀割一样',
+      '刀割',
+      '刀绞',
+      '像刀[^。，,;；]{0,2}一样',
+      '蜷成(?:一)?团',
+      '缩成一团',
+      '话都说不出来',
+      '话都说不清',
+      '叫了救护车',
+      '打了120',
+      '叫救护车',
+      '剧痛难忍',
+      '剧烈难忍',
+      '难忍',
+      '疼得动不了',
+      '痛得动不了',
+      '动弹不得',
+      '疼得[^。，,;；]{0,2}弓[^。，,;；]{0,2}(?:腰|着身)',
+      '从来没这么(?:痛|疼)',
+      '没这么(?:痛|疼)过',
+      '疼痛评分[0-9０-９]{1,2}分',
+      '[6-9０-９]分止痛药',
+      '止痛药(?:无效|不管用|止不住|没效果)',
+      '痛得[^。，,;；]{0,4}冒冷汗',
     ],
+    before_exclude: ['心', '头', '牙', '胃', '腹', '脑袋', '偏头'],
   },
 ];
 
@@ -778,11 +951,24 @@ export function matchesRedFlagRule(rule: RedFlagRule, rawText: string): boolean 
       if (insideThirdParty(spans, match.start, match.end)) continue;
       // 「不小心撞了一下」：说的是没出事，不算红旗
       if (text.slice(Math.max(0, match.start - 3), match.start) === '不小心') continue;
-      // 症状之后跟着「在减肥 / 感冒 / 胃口很好」等，说的是别的原因
-      const afterCtx = text.slice(match.end, match.end + 10);
-      if (AFTER_CONTEXT_WORDS.some((w) => afterCtx.includes(w))) continue;
+      // 之前上下文豁免：梦境 / 刻意减肥 / 情绪性心疼 / 他人 / 物体
+      const beforeCtx = text.slice(Math.max(0, match.start - 10), match.start);
+      if (BEFORE_CONTEXT_EXCLUDE.some((w) => beforeCtx.includes(w))) continue;
+      if ((rule.before_exclude ?? []).some((w) => beforeCtx.includes(w))) continue;
+      // 症状之后跟着「在减肥 / 感冒 / 胃口很好 / 减肥成功 / 人没事」等，说的是别的原因
+      const afterCtx = text.slice(match.end, match.end + 12);
+      if (AFTER_CONTEXT_EXCLUDE.some((w) => afterCtx.includes(w))) continue;
+      if ((rule.after_exclude ?? []).some((w) => afterCtx.includes(w))) continue;
       // 症状后面紧跟「尚未确认 / 未确认」：用户说的是还没确认，不算症状
       if (UNCONFIRMED_AFTER.test(text.slice(match.end))) continue;
+      // 第一人称自我否认（「我没有发烧」「我说没有」），向后跨 1~2 个小句查找，
+      // 但紧跟温度 / 度数的不算（「发烧到 39」）
+      if (rule.deny_self && !temperatureAnchored(text, match.end)) {
+        const winStart = startOfFragment(fragments, match.start);
+        const winEnd = Math.min(text.length, match.end + 16);
+        const frag = text.slice(winStart, winEnd);
+        if (rule.deny_self.some((d) => frag.includes(d))) continue;
+      }
       const prefix = masked.slice(0, match.start);
       if (STRICT_NEGATION.test(prefix) || STRICT_TRAILING.test(prefix)) continue;
       if (negatedBefore(fragments, masked, match.start)) continue;
@@ -813,6 +999,11 @@ export function matchesRedFlagRule(rule: RedFlagRule, rawText: string): boolean 
           const second = first === subject ? symptom : subject;
           if (negatedBefore(fragments, masked, first.start)) continue;
           if (locallyNegated(text, first, second)) continue;
+          // 症状之后出现第一人称自我否认（「我说没有」「我没有发烧」）→ 判否
+          if (rule.deny_self && !temperatureAnchored(text, second.end)) {
+            const win = text.slice(second.end, Math.min(text.length, second.end + 16));
+            if (rule.deny_self.some((d) => win.includes(d))) continue;
+          }
           // 症状紧跟「尚未确认 / 未确认」：尚未确认的项不算症状
           if (UNCONFIRMED_AFTER.test(text.slice(second.end))) continue;
           return true;
@@ -846,6 +1037,26 @@ function maskVocabulary(text: string, rule: RedFlagRule): string {
 
 function fragmentOf(fragments: Fragment[], at: number): Fragment | undefined {
   return fragments.find((f) => at >= f.start && at < f.end);
+}
+
+/** 命中位置所在小句的起始边界（找不到则 0） */
+function startOfFragment(fragments: Fragment[], at: number): number {
+  return fragmentOf(fragments, at)?.start ?? 0;
+}
+
+/** 命中位置所在小句的结束边界（找不到则文本末） */
+function endOfFragment(fragments: Fragment[], at: number): number {
+  const frag = fragmentOf(fragments, at);
+  return frag ? frag.end : at + 12;
+}
+
+/**
+ * 「温度锚定」：短语之后紧跟具体温度/度数（「发烧到 39」「三十八度」）时，
+ * 属于确切的发热主诉，自我否认豁免不适用（仍是红旗）。
+ */
+export function temperatureAnchored(text: string, pos: number): boolean {
+  const tail = text.slice(pos, pos + 10);
+  return /[0-9０-９]{1,3}\s*(?:度|℃)?|三十[八九]|三[89]度|[0-9]{2}\.5/.test(tail);
 }
 
 /** 取命中片段的原文上下文（用于前端高亮与说明） */

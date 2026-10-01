@@ -10,7 +10,7 @@
 const BASE = process.env.API_BASE_URL ?? 'http://127.0.0.1:3200'
 
 /** 应触发（45）——口语 / 错别字 / 语序变化，反馈里没出现过 */
-const RED = [
+export const RED = [
   '屁股沟里那块肉木木的，擦屁股都没感觉',
   '下面像打了麻药一样没知觉',
   '会阴那块热辣辣地发麻',
@@ -59,7 +59,7 @@ const RED = [
 ]
 
 /** 否定或日常说法（27）——不能误判 */
-const NEG = [
+export const NEG = [
   '屁股有点凉，不是麻',
   '腿上有点酸，走路正常',
   '昨天腿麻，今天好了',
@@ -90,7 +90,7 @@ const NEG = [
 ]
 
 /** 正常报告 / 门诊记录（20）——不能误判 */
-const NORMAL_REPORT = [
+export const NORMAL_REPORT = [
   '腰椎正侧位X线：生理曲度存在，椎体边缘略增生，椎间隙无狭窄。',
   'MRI提示：L3/4、L4/5椎间盘轻度退变，纤维环完整，脊髓形态信号正常。',
   'CT：腰椎诸骨骨质结构正常，未见骨折征象，椎管通畅。',
@@ -179,7 +179,11 @@ async function main() {
   process.exitCode = missed.length === 0 && falsePositives.length === 0 ? 0 : 1
 }
 
-main().catch((e) => {
-  console.error('用例执行失败:', e instanceof Error ? e.message : e)
-  process.exit(1)
-})
+import { fileURLToPath } from 'node:url'
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]
+if (isMain) {
+  main().catch((e) => {
+    console.error('用例执行失败:', e instanceof Error ? e.message : e)
+    process.exit(1)
+  })
+}

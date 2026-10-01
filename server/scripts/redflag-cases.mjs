@@ -11,7 +11,7 @@
 const BASE = process.env.API_BASE_URL ?? 'http://127.0.0.1:3200'
 
 /** 应触发的红旗说法（口语 / 书面语 / 错别字 / 语序变化） */
-const RED = [
+export const RED = [
   // 会阴 / 鞍区感觉
   '昨晚不小心尿裤子了自己都没感觉到',
   '屁股中间那块麻麻的没感觉',
@@ -94,7 +94,7 @@ const RED = [
 ]
 
 /** 否定或日常说法（不能误判为红旗） */
-const NEG = [
+export const NEG = [
   '会阴部感觉好多了，没再发麻',
   '不麻了，昨天麻今天没麻',
   '双腿完全有劲，能跑能跳',
@@ -135,7 +135,7 @@ const NEG = [
 ]
 
 /** 正常报告 / 门诊记录（不能误判） */
-const NORMAL_REPORT = [
+export const NORMAL_REPORT = [
   '腰椎 MRI 平扫：腰椎序列正常，生理曲度存在。L4/5 椎间盘轻度退变，相应水平椎管稍窄。结论：轻度腰椎退行性改变。',
   '影像所见：L3/4、L4/5 椎间盘信号减低，T2 加权像髓核信号减低，考虑椎间盘退变。硬膜囊前脂肪间隙清晰。',
   'X 线：腰椎生理曲度变直，椎体边缘轻度增生。',
@@ -227,7 +227,11 @@ async function main() {
   process.exitCode = fail > 0 ? 1 : 0
 }
 
-main().catch((e) => {
-  console.error('用例执行失败:', e instanceof Error ? e.message : e)
-  process.exit(1)
-})
+import { fileURLToPath } from 'node:url'
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]
+if (isMain) {
+  main().catch((e) => {
+    console.error('用例执行失败:', e instanceof Error ? e.message : e)
+    process.exit(1)
+  })
+}
