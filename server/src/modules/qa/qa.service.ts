@@ -211,7 +211,10 @@ export class QaService {
 
     // 2. 安全规则引擎：红旗优先（命中即就医提示，本轮不再生成解释；消息仍保存为系统提示）
     //    安全事件关联到本会话的病程：之后该病程提交分析必须被红旗拦截（验收反馈第 3 条）
-    const safety = this.safety.evaluateQuestion(question, userId, session.episode_id ?? undefined);
+    //    会话未关联病程（先开问答后建病程）时，退回关联该用户当前最近一个病程，
+    //    确保红旗仍然能拦住之后该病程的个性化分析（产品红线第 3 条：红旗不被流程顺序绕过）。
+    const episodeForSafety = session.episode_id ?? this.latestEpisodeId(session.user_id);
+    const safety = this.safety.evaluateQuestion(question, userId, episodeForSafety ?? undefined);
     if (safety.matched.length > 0) {
       const notice = this.buildNotice(safety);
       this.insertMessage(sessionId, 'assistant', notice.body, null, false, null);
@@ -418,6 +421,14 @@ ${QA_DISCLAIMER}`,        refused: false,
           .filter((e) => e.text.length > 0)
       : [];
     return { id: row.id, version: row.version, episode_id: row.episode_id, explain };
+  }
+
+  /** 该用户最近一个病程 ID（问答会话未关联病程时，用于关联红旗安全事件） */
+  private latestEpisodeId(userId: string): string | null {
+    const row = this.db.app
+      .prepare(`SELECT id FROM episode WHERE user_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1`)
+      .get(userId) as { id: string } | undefined;
+    return row?.id ?? null;
   }
 
   /** 关联 episode 的病程事件原文（回答的确定性上下文） */
