@@ -50,8 +50,16 @@ let pass = 0
 let fail = 0
 const check = (n, c, e) => { if (c) { pass++; console.log('  ✓', n) } else { fail++; console.log('  ✗', n, e ?? '') } }
 const dbCounts = () => {
+  try { return dbCountsInner() } catch { return null }
+}
+const dbCountsInner = () => {
   const db = new DatabaseSync(process.env.DB_DIR ? `${process.env.DB_DIR}/app.db` : '.tmpdb/app.db', { readOnly: true })
-  const ep = db.prepare('SELECT id FROM episode ORDER BY created_at DESC LIMIT 1').all()[0]
+  // 取最新注册用户的最近病程（模拟器上登录的就是这个用户）
+  const user = db.prepare('SELECT id FROM users ORDER BY created_at DESC LIMIT 1').all()[0]
+  const ep = user
+    ? db.prepare('SELECT id FROM episode WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').all()[0]
+    : undefined
+  if (!ep) { db.close(); return null }
   const r = ep
     ? db
         .prepare(
@@ -64,12 +72,38 @@ const dbCounts = () => {
         .get(ep.id, ep.id, ep.id, ep.id, ep.id)
     : null
   db.close()
-  return r
+  return r ?? null
 }
 
 async function main() {
+  // 先建病程（A02）：底部「病程」→ 记录当前关键变化
+  sh('input tap 395 1558')
+  await delay(3500)
+  for (let i = 0; i < 4; i += 1) {
+    if (dump().some((n) => (n.text || '').includes('记录当前关键变化'))) break
+    sh('input swipe 360 1300 360 700 400')
+    await delay(700)
+  }
+  await tapText('记录当前关键变化')
+  await delay(3000)
+  await tapText('加重', true)
+  await delay(400)
+  sh('input swipe 360 1300 360 700 400')
+  await delay(700)
+  await tapText('左侧', true)
+  await delay(400)
+  for (let i = 0; i < 5; i += 1) {
+    if (dump().some((n) => (n.text || '').includes('下一步'))) break
+    sh('input swipe 360 1300 360 600 400')
+    await delay(700)
+  }
+  await tapText('下一步')
+  await delay(2500)
+  await tapText('下一步：录入报告')
+  await delay(2500)
   const before = dbCounts()
   console.log('  写入前:', JSON.stringify(before))
+  check('建立病程写入 care_event', (before?.ev ?? 0) >= 1, JSON.stringify(before))
 
   // A05 录入报告（字段顺序：检查机构 / 报告原文 / 报告日期）
   await link('A05')
@@ -83,7 +117,7 @@ async function main() {
   sh('input tap 360 1330')
   await delay(4000)
   const afterReport = dbCounts()
-  check('录入报告后 report 表写入', afterReport.rp > before.rp, JSON.stringify(afterReport))
+  check('录入报告后 report 表写入', (afterReport?.rp ?? 0) > (before?.rp ?? 0), JSON.stringify(afterReport))
 
   // A07 生成一页分析（首页入口）
   await link('A07', 5000)
@@ -91,7 +125,7 @@ async function main() {
   if (gen) sh(`input tap ${gen.cx} ${gen.cy}`)
   await delay(14000)
   const afterAnalysis = dbCounts()
-  check('生成分析后 analysis 表写入', afterAnalysis.an > before.an, JSON.stringify(afterAnalysis))
+  check('生成分析后 analysis 表写入', (afterAnalysis?.an ?? 0) > (before?.an ?? 0), JSON.stringify(afterAnalysis))
 
   // A11 记录今天
   await link('A11')
@@ -111,7 +145,7 @@ async function main() {
   if (saveBtn) sh(`input tap ${saveBtn.cx} ${saveBtn.cy}`)
   await delay(4000)
   const afterToday = dbCounts()
-  check('记录今天后 symptom_log 写入', afterToday.lg > before.lg, JSON.stringify(afterToday))
+  check('记录今天后 symptom_log 写入', (afterToday?.lg ?? 0) > (before?.lg ?? 0), JSON.stringify(afterToday))
 
   // A12 复诊摘要
   await link('A12')
@@ -120,13 +154,13 @@ async function main() {
   if (genBtn) sh(`input tap ${genBtn.cx} ${genBtn.cy}`)
   await delay(4000)
   const afterFollowup = dbCounts()
-  check('复诊摘要生成后 followup_summary 写入', afterFollowup.fu > before.fu, JSON.stringify(afterFollowup))
+  check('复诊摘要生成后 followup_summary 写入', (afterFollowup?.fu ?? 0) > (before?.fu ?? 0), JSON.stringify(afterFollowup))
 
   console.log(`\nAndroid 写操作：${pass} 通过, ${fail} 失败`)
   process.exit(fail > 0 ? 1 : 0)
 }
 
 main().catch((e) => {
-  console.error('失败:', e instanceof Error ? e.message : e)
+  console.error('失败:', e instanceof Error ? e.stack : e)
   process.exit(1)
 })

@@ -14,3 +14,4 @@ server/data/
 .DS_Store
 server/.tmp/
 server/.tmpdb/
+server/.verifydb/
