@@ -2,6 +2,7 @@
 
 /** UTC ISO8601 → 北京时间日期 YYYY-MM-DD；不传参数返回今天 */
 export function beijingDate(iso?: string): string {
+  if (iso !== undefined && !iso) return ''
   const time = iso ? new Date(iso).getTime() : Date.now()
   if (Number.isNaN(time)) return ''
   return new Date(time + 8 * 60 * 60 * 1000).toISOString().slice(0, 10)

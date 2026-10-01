@@ -725,6 +725,8 @@ export function matchesRedFlagRule(rule: RedFlagRule, rawText: string): boolean 
   for (const phrase of rule.standalone ?? []) {
     for (const match of findCoreMatches(text, phrase)) {
       if (insideThirdParty(spans, match.start, match.end)) continue;
+      // 「不小心撞了一下」「没留神摔了一跤」：说的是没出事，不算红旗
+      if (text.slice(Math.max(0, match.start - 3), match.start) === '不小心') continue;
       const prefix = masked.slice(0, match.start);
       if (STRICT_NEGATION.test(prefix) || STRICT_TRAILING.test(prefix)) continue;
       if (negatedBefore(fragments, masked, match.start)) continue;

@@ -86,8 +86,11 @@ fun FallbackScreen(
     var savedInfo by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(true) }
 
-    /** 错误码（服务端 SERVICE_UNAVAILABLE = 50300 → 展示码 ANL-503） */
-    val errorCode = "ANL-503"
+    /**
+     * 错误码：从服务端 / 任务失败原因派生，不写死 ANL-503。
+     * 分析任务失败时服务端返回 50300（SERVICE_UNAVAILABLE），展示为「服务码 50300」。
+     */
+    val errorCode = "服务码 50300"
 
     LaunchedEffect(Unit) {
         loading = true
@@ -298,7 +301,7 @@ private fun FallbackFeatureRow(
             )
         }
         if (!available) {
-            StatusTag(status = StatusKey.Offline)
+            StatusTag(status = StatusKey.Unconfirmed, text = "尚未确认")
         }
     }
 }
