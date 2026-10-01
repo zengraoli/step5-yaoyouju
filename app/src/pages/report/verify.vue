@@ -148,7 +148,9 @@ async function onSideChoice(choice: string) {
   const item = symptomItem.value
   if (!item) return
   try {
-    const sideText = `侧别冲突确认：报告为「${reportSide.value}」，我的描述为「${selfSide.value}」，以「${choice}」为准`
+    // 写回病程用中文表述，不暴露内部取值（left / right / both）
+    const sideLabel = choice === 'left' ? '左侧' : choice === 'right' ? '右侧' : '两侧 / 不确定'
+    const sideText = `侧别冲突确认：报告写「${reportSide.value}」，我的描述是「${selfSide.value}」，以「${sideLabel}」为准`
     await addCareEvent(episodeId.value, {
       event_type: '症状',
       source_type: '自述',

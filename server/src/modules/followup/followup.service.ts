@@ -123,6 +123,11 @@ type SummaryRow = {
 /** 条目文字上限（避免粘贴超长文本撑爆摘要） */
 const MAX_ITEM_TEXT = 1000;
 
+/** 条目文字归一化（重新生成时判断「是不是同一条记录」） */
+function normText(text: string): string {
+  return text.replace(/\s+/g, '').replace(/（[^）]*）/g, '').trim();
+}
+
 @Injectable()
 export class FollowupService {
   private readonly logger = new Logger('Followup');
@@ -131,10 +136,33 @@ export class FollowupService {
 
   // ---------- 生成 / 预览 / 纠正 / 导出 ----------
 
-  /** 从该 episode 的 care_event 自动生成六段草稿（每次生成新的一份，可反复重新生成） */
+  /**
+   * 从该 episode 的 care_event 自动生成六段草稿（每次生成新的一份，可反复重新生成）。
+   * 上一份摘要被用户纠正过时，保留用户的纠正结果，只把新出现的记录并进去
+   * （验收反馈第 28 条：重新生成不能丢掉用户之前的纠正内容）。
+   */
   generate(userId: string, episodeId: string): FollowupSummaryView {
     this.ownedEpisode(userId, episodeId);
+    const previous = this.db.app
+      .prepare('SELECT * FROM followup_summary WHERE episode_id = ? ORDER BY rowid DESC LIMIT 1')
+      .get(episodeId) as SummaryRow | undefined;
     const content = this.buildContent(episodeId);
+    const carried = previous ? this.parseContent(previous.content) : null;
+    if (carried?.corrected === true) {
+      for (const section of content.sections) {
+        const kept = carried.sections.find((s) => s.key === section.key)?.items ?? [];
+        if (kept.length === 0) continue;
+        const keptEvents = new Set(kept.map((i) => i.care_event_id).filter(Boolean) as string[]);
+        const keptTexts = new Set(kept.map((i) => normText(i.text)));
+        const added = section.items.filter(
+          (i) => !(i.care_event_id && keptEvents.has(i.care_event_id)) && !keptTexts.has(normText(i.text)),
+        );
+        section.items = [...kept, ...added];
+      }
+      content.corrected = true;
+      content.corrected_at = carried.corrected_at ?? new Date().toISOString();
+      this.logger.log(`[followup] 重新生成时保留用户对病程 ${episodeId.slice(0, 8)}… 摘要的纠正结果`);
+    }
     const id = randomUUID();
     this.db.app
       .prepare(

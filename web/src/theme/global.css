@@ -39,3 +39,25 @@ button {
   background: var(--color-border);
   border-radius: var(--radius-pill);
 }
+
+/* 窄屏（手机 / 小窗口 390 宽）适配：收紧页边距，避免横向溢出 */
+@media (max-width: 480px) {
+  :root {
+    --spacing-page: 16px;
+    --spacing-xxl: 20px;
+    --spacing-xl: 16px;
+  }
+}
+
+/* 兜底：任何情况下不出现横向滚动条 */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+img,
+svg,
+video {
+  max-width: 100%;
+}

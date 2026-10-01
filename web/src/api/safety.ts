@@ -12,8 +12,12 @@ export interface EmergencyNotice {
   footer_note: string
 }
 
-export function getEmergencyNotice(): Promise<EmergencyNotice> {
-  return request<EmergencyNotice>({ url: '/safety/emergency-notice', auth: false })
+export function getEmergencyNotice(signals?: string[], stop = false): Promise<EmergencyNotice> {
+  const q = new URLSearchParams()
+  if (signals && signals.length > 0) q.set('signals', signals.join('、'))
+  if (stop) q.set('stop', '1')
+  const qs = q.toString()
+  return request<EmergencyNotice>({ url: `/safety/emergency-notice${qs ? `?${qs}` : ''}`, auth: false })
 }
 
 /** 命中规则（就医提示内容，与 /episodes/{id}/events 的 safety_notice 同构） */

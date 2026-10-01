@@ -287,10 +287,11 @@ async function onLogin() {
   align-items: center;
   justify-content: center;
   padding: var(--spacing-xxl);
+  min-width: 0;
 }
 
 .login-card {
-  width: 440px;
+  width: min(440px, 100%);
   max-width: 100%;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -436,6 +437,16 @@ async function onLogin() {
 
   .login-main {
     padding: var(--spacing-lg) var(--spacing-md);
+  }
+
+  .login-card {
+    padding: var(--spacing-xl);
+    border: none;
+    background: transparent;
+  }
+
+  .login-form__code-action {
+    bottom: 8px;
   }
 }
 </style>

@@ -3,15 +3,19 @@
  * 就医提示（R03，公开页，无需登录；内容来自 server 公开接口）
  * 网络异常时展示静态兜底内容（就医提示不被网络阻断）。
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import AppNotice from '@/components/AppNotice.vue'
 import { getEmergencyNotice } from '@/api/safety'
+import { getEpisode, listEpisodes } from '@/api/episodes'
+import { beijingDate } from '@/utils/date'
 
 interface EmergencyNotice {
   title: string
   headline: string
   body: string
   offline_note: string
+  matched?: { label: string }[]
   actions: { type: string; label: string }[]
   bring_list: string[]
   summary_action: { label: string }
@@ -27,7 +31,7 @@ const FALLBACK: EmergencyNotice = {
   actions: [
     { type: 'call', label: '拨打 120 / 前往急诊' },
     { type: 'hospital', label: '查找附近医院' },
-    { type: 'doctor', label: '联系我的主治医生（已保存）' },
+    { type: 'doctor', label: '联系我的主治医生' },
   ],
   bring_list: ['已录入的检查报告原文', '症状开始时间与最近变化记录', '正在使用的药物与既有医嘱'],
   summary_action: { label: '生成一页“就诊交接”摘要（仅整理已有信息）' },
@@ -35,14 +39,77 @@ const FALLBACK: EmergencyNotice = {
 }
 
 const notice = ref<EmergencyNotice>(FALLBACK)
+const route = useRoute()
+
+/** 命中的红旗信号（从问答 / 记录今天 / 建立病程跳转时带入） */
+const signals = computed<string[]>(() => {
+  const raw = String(route.query.signals ?? '')
+  return raw ? raw.split(/[、,，]/).filter((t) => t.length > 0) : []
+})
+const stopPersonal = computed(() => route.query.stop === '1')
+
+/** 就诊可带资料：按当前用户病程数据展示，没有就不打勾（不写死任何报告） */
+const bringItems = ref<{ key: string; label: string; detail: string; available: boolean }[]>([])
 
 onMounted(async () => {
   try {
-    notice.value = await getEmergencyNotice()
+    notice.value = await getEmergencyNotice(signals.value, stopPersonal.value)
   } catch {
     notice.value = FALLBACK
   }
+  await loadBringItems()
 })
+
+async function loadBringItems() {
+  const base = (notice.value.bring_list ?? FALLBACK.bring_list).map((label, i) => ({
+    key: String(i),
+    label,
+    detail: '',
+    available: false,
+  }))
+  try {
+    const episodes = await listEpisodes()
+    const active = episodes.find((e) => e.status === '进行中') ?? episodes[0] ?? null
+    if (!active) {
+      bringItems.value = base
+      return
+    }
+    const detail = await getEpisode(active.id)
+    const events = detail.events ?? []
+    const report = events.find((e) => e.event_type === '报告')
+    const symptomCount = events.filter((e) => e.event_type === '症状').length
+    const advice = events.find((e) => e.event_type === '医嘱')
+    bringItems.value = base.map((item, i) => {
+      if (i === 0 && report) {
+        const date = report.report?.report_date ?? detail.onset_date ?? ''
+        return { ...item, detail: date ? `（${date} 检查报告）` : '', available: true }
+      }
+      if (i === 1 && detail.onset_date && symptomCount > 0) {
+        return { ...item, detail: `（${detail.onset_date} 起，共 ${symptomCount} 条症状记录）`, available: true }
+      }
+      if (i === 2 && advice) {
+        return { ...item, detail: `（最近医嘱：${beijingDate(advice.occurred_at)}）`, available: true }
+      }
+      return item
+    })
+  } catch {
+    bringItems.value = base
+  }
+}
+
+/** 拨打 120（演示环境不真正拨号） */
+function onCall() {
+  toast('演示环境不会真正拨号，请用手机拨打 120 或前往急诊')
+}
+
+/** 查找附近医院（演示环境给出说明） */
+function onHospital() {
+  toast('演示环境未接入地图，请用手机地图搜索「附近的医院」')
+}
+
+function toast(title: string) {
+  window.alert(title)
+}
 </script>
 
 <template>
@@ -55,14 +122,25 @@ onMounted(async () => {
         <p class="emergency-card__offline">{{ notice.offline_note }}</p>
       </div>
       <div class="emergency-card__actions">
-        <a v-for="a in notice.actions" :key="a.type" class="emergency-action" :class="`emergency-action--${a.type}`" href="javascript:void(0)">
+        <button
+          v-for="a in notice.actions"
+          :key="a.type"
+          type="button"
+          class="emergency-action"
+          :class="`emergency-action--${a.type}`"
+          @click="a.type === 'call' ? onCall() : a.type === 'hospital' ? onHospital() : undefined"
+        >
           {{ a.label }}
-        </a>
+        </button>
       </div>
       <section class="emergency-card__section">
         <h3>就诊时可以带上</h3>
         <ul>
-          <li v-for="item in notice.bring_list" :key="item">{{ item }}</li>
+          <li v-for="item in bringItems" :key="item.key">
+            <span class="emergency-card__check" :class="{ 'is-available': item.available }">{{ item.available ? '✓' : '○' }}</span>
+            {{ item.label }}<span v-if="item.detail" class="emergency-card__detail">{{ item.detail }}</span>
+            <span v-if="!item.available" class="emergency-card__pending">（尚未确认）</span>
+          </li>
         </ul>
       </section>
       <AppNotice type="info">{{ notice.footer_note }}</AppNotice>

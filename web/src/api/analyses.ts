@@ -2,6 +2,15 @@ import { request } from '@/api/request'
 
 
 /** 一页分析（五段固定结构；每条解释都带来源） */
+/** 命中红旗时服务端返回的就医提示 */
+export interface SafetyNoticeData {
+  title: string
+  headline: string
+  body: string
+  matched: { rule_code: string; label: string; severity: string; action: string; advice: string; excerpt: string }[]
+  rule_set_version: string
+}
+
 export interface AnalysisView {
   id: string
   episode_id: string
@@ -41,8 +50,8 @@ export function createAnalysis(input: {
   report_text?: string
   question?: string
 }): Promise<
-  | { status: 'queued'; task_id: string; safety_notice: unknown }
-  | { status: 'fallback'; fallback: unknown; safety_notice: unknown }
+  | { status: 'queued'; task_id: string; safety_notice: SafetyNoticeData | null }
+  | { status: 'fallback'; fallback: unknown; safety_notice: SafetyNoticeData | null }
 > {
   return request({
     url: '/analyses',

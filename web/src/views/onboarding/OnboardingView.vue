@@ -57,9 +57,11 @@ const questions = [
 
 const answers = ref<Record<string, string>>({})
 
-/** 已选中的红旗选项（用于本地即时提示） */
+/** 已选中的红旗选项（本地即时提示：显示用户选中的选项文案，不是问题标题） */
 const flagged = computed<string[]>(() =>
-  questions.filter((q) => q.redflags.includes(answers.value[q.key])).map((q) => q.title),
+  questions
+    .flatMap((q) => q.redflags)
+    .filter((opt) => Object.values(answers.value).includes(opt)),
 )
 
 /** 本地先做一次兜底判断（服务端仍会再次校验） */
@@ -93,7 +95,9 @@ async function submit() {
       event_type: '症状',
       source_type: '自述',
       raw_text: text,
-      occurred_at: onset.value || new Date().toISOString(),
+      // 「确认」这件事发生在当下：起病日期单独存在 episode.onset_date，
+      // 不用起病日期冒充记录时间（工作台「上次记录」据此展示）
+      occurred_at: new Date().toISOString(),
       verify_status: '已确认',
     })
     if (event.safety_notice) {
@@ -144,7 +148,7 @@ async function submit() {
       </section>
 
       <AppNotice v-if="flagged.length > 0" type="error">
-        你刚才选择了：{{ flagged.join('、') }}。出现这类变化需要尽快就医，本轮不会生成个性化分析。
+        你选择了需要医生及时评估的变化：{{ flagged.join('、') }}。提交后本产品会先给出就医提示，本轮不生成个性化分析。
       </AppNotice>
 
       <AppNotice v-if="notice" type="error">
@@ -162,7 +166,12 @@ async function submit() {
           {{ submitting ? '提交中…' : '确认并建立病程' }}
         </AppButton>
         <AppButton @click="router.push('/dashboard')">先看看已审核科普，稍后再填</AppButton>
-        <AppButton v-if="notice" @click="router.push('/emergency')">查看就医提示</AppButton>
+        <AppButton
+          v-if="notice"
+          @click="router.push(`/emergency?signals=${encodeURIComponent(notice.matched.map((m) => m.label).join('、'))}&stop=${notice.matched.some((m) => m.severity === 'high') ? '1' : '0'}`)"
+        >
+          查看就医提示
+        </AppButton>
       </div>
       <p class="onboarding__note">
         命中红旗时本页会直接给出就医提示，不会因为没有登录或没有上传报告而被阻断。

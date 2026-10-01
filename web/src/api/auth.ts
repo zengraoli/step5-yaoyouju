@@ -31,6 +31,8 @@ export interface MeResult {
   real_name_masked: string | null
   created_at: string
   consents: ConsentItem[]
+  /** 当前删除申请（没有则为 null） */
+  deletion: DeletionStatus | null
 }
 
 /** 获取短信验证码（演示固定码 123456，手机号脱敏） */

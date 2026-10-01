@@ -17,7 +17,12 @@ export interface EmergencyNotice {
   footer_note: string
 }
 
-/** 就医提示内容（公开） */
-export function getEmergencyNotice(): Promise<EmergencyNotice> {
-  return request<EmergencyNotice>({ url: '/safety/emergency-notice', auth: false })
+/** 就医提示内容（公开；命中的信号名随请求带入，正文不写死任何症状） */
+export function getEmergencyNotice(signals?: string[], stop = false): Promise<EmergencyNotice> {
+  let url = '/safety/emergency-notice'
+  const q: string[] = []
+  if (signals && signals.length > 0) q.push(`signals=${encodeURIComponent(signals.join('、'))}`)
+  if (stop) q.push('stop=1')
+  if (q.length > 0) url += `?${q.join('&')}`
+  return request<EmergencyNotice>({ url, auth: false })
 }

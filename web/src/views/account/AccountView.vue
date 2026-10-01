@@ -71,6 +71,16 @@ async function load() {
     profile.value = meRes
     consents.value = consentRes ?? []
     feedbacks.value = feedbackRes ?? []
+    // 待执行的删除申请要能在刷新后继续看到（可取消）
+    const pending = meRes?.deletion ?? null
+    if (pending && (pending.status === '冷静期中' || pending.status === '已申请')) {
+      deletion.value = pending
+      deleteStep.value = 'ready'
+      deletePhone.value = profile.value?.phone_masked ?? deletePhone.value
+    } else if (!deletion.value || (pending && pending.status !== '冷静期中')) {
+      deletion.value = null
+      deleteStep.value = 'idle'
+    }
   } finally {
     loading.value = false
   }
@@ -211,7 +221,7 @@ const exportMeta = computed<string>(() =>
   lastExport.value ? `上次导出：${beijingDateTime(lastExport.value)}（本次会话）` : '还没有导出记录（导出后文件保存在本地）',
 )
 
-const versionInfo = computed<string>(() => 'Web v0.1.0 · 规则集 safety-rules-v2.0 · 内容库版本见分析页')
+const versionInfo = computed<string>(() => 'Web v0.1.0 · 规则集版本见「一页分析」的来源信息 · 内容库版本见分析页')
 
 /** 退出登录：先吊销服务端令牌，再清理本地登录态（旧令牌立即失效） */
 async function onLogout() {
@@ -334,7 +344,12 @@ async function onLogout() {
                   </label>
                 </template>
                 <p v-if="deletion && deleteStep === 'ready'" class="delete-box__meta">
-                  冷静期至 {{ beijingDateTime(deletion.effective_at) }}（北京时间）后可确认删除；期间可以取消。
+                  <template v-if="deletion.can_confirm">
+                    冷静期已结束（{{ beijingDateTime(deletion.effective_at) }}，北京时间），可以确认删除；期间也可以取消。
+                  </template>
+                  <template v-else>
+                    冷静期至 {{ beijingDateTime(deletion.effective_at) }}（北京时间）后可确认删除；期间可以取消。
+                  </template>
                 </p>
                 <div class="delete-box__actions">
                   <AppButton v-if="deleteStep !== 'ready'" type="danger" @click="onDeleteAccount">

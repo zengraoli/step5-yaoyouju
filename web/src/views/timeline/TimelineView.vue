@@ -272,7 +272,7 @@ const router = useRouter()
                   class="chart__bar"
                   :style="{ height: barHeight(bar.minutes) }"
                 />
-                <div v-else class="chart__bar chart__bar--empty" :title="'该日没有记录（尚未确认）'" />
+                <div v-else class="chart__gap" :title="'该日没有记录（尚未确认）'" />
               </div>
               <span class="chart__date">{{ bar.date.slice(5).replace('-', '/') }}</span>
             </div>
@@ -531,8 +531,15 @@ const router = useRouter()
   border-radius: var(--radius-tag) var(--radius-tag) 0 0;
 }
 
-.chart__bar--unconfirmed {
-  background: var(--color-warn);
+.chart__gap {
+  width: 70%;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: repeating-linear-gradient(
+    to right,
+    var(--color-border) 0 4px,
+    transparent 4px 8px
+  );
 }
 
 .chart__date {

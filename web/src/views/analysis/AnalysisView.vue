@@ -17,8 +17,7 @@
  * - POST /reports                                       录入报告（粘贴文字）
  * - POST /feedback / POST /feedback/error-report        帮助反馈 / 错误举报
  */
-import { computed, onMounted, ref } from 'vue'
-import { onBeforeUnmount } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
@@ -26,7 +25,13 @@ import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
-import { createAnalysis, getAnalysis, getLatestAnalysis, type AnalysisView } from '@/api/analyses'
+import {
+  createAnalysis,
+  getAnalysis,
+  getLatestAnalysis,
+  type AnalysisView,
+  type SafetyNoticeData,
+} from '@/api/analyses'
 import { getStructured, createReport, type StructuredItem } from '@/api/reports'
 import { listEpisodes } from '@/api/episodes'
 import { submitErrorReport, submitHelpFeedback } from '@/api/feedback'
@@ -49,6 +54,32 @@ const taskId = ref('')
 const taskStatus = ref<'queued' | 'completed' | 'failed' | ''>('')
 const taskReason = ref('')
 let timer: number | undefined
+
+/** 是否正在生成分析 */
+const generating = ref(false)
+/** 命中红旗 / 停止个性化时的就医提示（服务端返回） */
+const safetyNotice = ref<SafetyNoticeData | null>(null)
+
+/** 从错误里取就医提示（命中红旗时服务端在 data 里返回） */
+function safetyNoticeFromError(e: unknown): SafetyNoticeData | null {
+  const err = e as { data?: { matched?: { rule_code: string; label: string; severity: string }[]; headline?: string; body?: string } }
+  const matched = err?.data?.matched
+  if (!Array.isArray(matched) || matched.length === 0) return null
+  return {
+    title: '需要及时寻求专业帮助',
+    headline: err.data?.headline ?? '建议尽快就医',
+    body: err.data?.body ?? '你提交的内容包含需要就医的信号。',
+    matched: matched.map((m) => ({
+      rule_code: String(m.rule_code ?? ''),
+      label: String(m.label ?? ''),
+      severity: String(m.severity ?? ''),
+      action: '',
+      advice: '',
+      excerpt: '',
+    })),
+    rule_set_version: '',
+  }
+}
 
 /** 录入报告模式（/analysis?input=report） */
 const inputMode = ref(false)
@@ -118,6 +149,10 @@ async function pollTask() {
     if (task.status === 'completed' && task.analysis) {
       analysis.value = task.analysis as unknown as AnalysisView
       stopPolling()
+      if (episodeId.value) {
+        const structured = await getStructured(episodeId.value).catch(() => null)
+        items.value = structured?.items ?? []
+      }
     } else if (task.status === 'failed') {
       taskReason.value = task.reason ?? '分析失败'
       stopPolling()
@@ -227,11 +262,26 @@ function onToggleQuestion(i: number) {
     : [...checkedQuestions.value, i]
 }
 
-/** 加入复诊问题清单（本地存储，供复诊准备页使用） */
-function onAddQuestions() {
+/** 加入复诊问题清单（写入服务端，复诊摘要生成时自动带入） */
+async function onAddQuestions() {
   const selected = checkedQuestions.value.map((i) => nextItems.value[i]).filter(Boolean)
-  localStorage.setItem('yyj_web_followup_questions', JSON.stringify(selected.map((s) => s.text)))
-  toast(`已加入复诊问题清单（已选 ${selected.length} 条）`)
+  if (selected.length === 0) {
+    toast('请先勾选要加入的问题')
+    return
+  }
+  if (!episodeId.value) {
+    toast('还没有病程记录')
+    return
+  }
+  try {
+    const { addFollowupQuestion } = await import('@/api/followup')
+    for (const item of selected) {
+      await addFollowupQuestion(episodeId.value, item.text)
+    }
+    toast(`已加入复诊问题清单（${selected.length} 条），生成复诊摘要即可看到`)
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '加入复诊问题失败')
+  }
 }
 
 /** 保存到病程 */
@@ -307,7 +357,7 @@ async function onHelp(value: string) {
   }
 }
 
-/** 生成一页分析（空状态按钮） */
+/** 生成一页分析（空状态按钮 / 重新生成） */
 async function onGenerate() {
   if (!episodeId.value) {
     const list = await listEpisodes()
@@ -317,14 +367,40 @@ async function onGenerate() {
     toast('还没有病程记录')
     return
   }
+  generating.value = true
   try {
     const result = await createAnalysis({ episode_id: episodeId.value })
     if (result.status === 'queued') {
-      router.push(`/analysis?task_id=${encodeURIComponent(result.task_id)}`)
+      taskId.value = result.task_id
+      taskStatus.value = 'queued'
+      taskReason.value = ''
+      if (result.safety_notice) {
+        safetyNotice.value = result.safety_notice
+      }
+      await router.replace(`/analysis?task_id=${encodeURIComponent(result.task_id)}`)
+      startPolling()
+    } else if (result.status === 'fallback') {
+      safetyNotice.value = result.safety_notice ?? null
+      toast(result.safety_notice ? '已停止个性化分析' : '个性化分析当前未开启')
     }
   } catch (e) {
+    const notice = safetyNoticeFromError(e)
+    if (notice) {
+      safetyNotice.value = notice
+      const labels = notice.matched.map((m) => m.label)
+      router.push(`/emergency?signals=${encodeURIComponent(labels.join('、'))}&stop=${notice.matched.some((m) => m.severity === 'high') ? '1' : '0'}`)
+      return
+    }
     toast(e instanceof Error ? e.message : '生成分析失败')
+  } finally {
+    generating.value = false
   }
+}
+
+function startPolling() {
+  if (timer) window.clearInterval(timer)
+  timer = window.setInterval(() => void pollTask(), POLL_INTERVAL)
+  void pollTask()
 }
 
 /** 录入报告（粘贴文字） */
@@ -365,6 +441,9 @@ async function onSaveReport() {
         </p>
       </div>
       <div class="analysis-page__actions">
+        <AppButton type="soft" :disabled="generating" @click="onGenerate">
+          {{ analysis ? '重新生成一页分析' : '生成一页分析' }}
+        </AppButton>
         <AppButton type="soft" @click="onExport">导出</AppButton>
         <AppButton type="soft" @click="onShare">分享</AppButton>
         <AppButton type="secondary" @click="reportPanel = !reportPanel">报告错误</AppButton>
@@ -372,6 +451,10 @@ async function onSaveReport() {
     </header>
 
     <div v-if="loading" class="analysis-page__loading">正在加载…</div>
+    <AppCard v-else-if="taskStatus === 'queued'" class="analysis-page__pending">
+      <h2 class="analysis-page__pending-title">正在生成一页分析…</h2>
+      <p class="analysis-page__pending-desc">系统正在按固定五段整理，请稍候（约几秒）。</p>
+    </AppCard>
 
     <!-- 录入报告模式 -->
     <AppCard v-else-if="inputMode" class="report-input">

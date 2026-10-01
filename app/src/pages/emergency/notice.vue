@@ -36,7 +36,7 @@ const FALLBACK: EmergencyNotice = {
   actions: [
     { type: 'call', label: '拨打 120 / 前往急诊' },
     { type: 'hospital', label: '查找附近医院' },
-    { type: 'doctor', label: '联系我的主治医生（已保存）' },
+    { type: 'doctor', label: '联系我的主治医生' },
   ],
   bring_list: ['已录入的检查报告原文', '症状开始时间与最近变化记录', '正在使用的药物与既有医嘱'],
   summary_action: { label: '生成一页“就诊交接”摘要（仅整理已有信息）' },
@@ -101,7 +101,8 @@ function toast(title: string) {
 /** 提示内容：公开接口，失败时保留兜底内容（就医提示不被网络阻断） */
 async function loadNotice() {
   try {
-    notice.value = await getEmergencyNotice()
+    // 命中的信号名随请求带入：未命中时页面不写死任何症状（验收反馈第 7 条）
+    notice.value = await getEmergencyNotice(signals.value, stopPersonal.value)
   } catch {
     notice.value = FALLBACK
   }
@@ -213,16 +214,14 @@ function onDoctor() {
   toast('演示环境：主治医生联系方式已保存在就诊资料中')
 }
 
-/** 生成一页「就诊交接」摘要（仅整理已有信息）→ 复诊摘要页（T23 占位） */
+/** 生成一页「就诊交接」摘要（仅整理已有信息）→ 复诊准备页 */
 function onSummary() {
-  toast('就诊交接摘要仅整理已有信息，将在复诊准备中生成')
   uni.reLaunch({ url: '/pages/followup/index' })
 }
 
-/** 我已知晓：继续查看已审核科普与复诊摘要 */
+/** 我已知晓：进入已审核内容库（A13），可继续查看复诊摘要 */
 function onAcknowledged() {
-  toast('已审核科普库将在后续版本开放，先进入复诊摘要')
-  uni.reLaunch({ url: '/pages/followup/index' })
+  uni.reLaunch({ url: '/pages/content/index' })
 }
 
 function onBack() {

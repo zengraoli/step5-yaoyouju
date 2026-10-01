@@ -251,15 +251,16 @@ function onRecordToday() {
           <view v-for="(bar, i) in chart" :key="i" class="chart__col">
             <view class="chart__track">
               <view
+                v-if="bar.minutes !== null"
                 class="chart__bar"
-                :class="{ 'chart__bar--unconfirmed': bar.minutes === null }"
                 :style="{ height: barHeight(bar.minutes) }"
               />
+              <view v-else class="chart__gap" />
             </view>
             <text class="chart__date">{{ bar.date.slice(5).replace('-', '/') }}</text>
           </view>
         </view>
-        <text class="chart-note">图中变化只反映你的记录，不代表影像变化或病情恶化。</text>
+        <text class="chart-note">图中变化只反映你的记录，缺失日留空；不代表影像变化或病情恶化。</text>
       </AppCard>
 
       <!-- 记录今天入口 -->
@@ -426,9 +427,13 @@ function onRecordToday() {
   background-color: $color-primary;
   border-radius: $radius-tag $radius-tag 0 0;
 
-  &--unconfirmed {
-    background-color: $color-warn;
-  }
+}
+
+.chart__gap {
+  width: 70%;
+  height: 4rpx;
+  border-radius: $radius-pill;
+  background-color: $color-border;
 }
 
 .chart__date {
