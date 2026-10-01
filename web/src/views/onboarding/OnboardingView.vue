@@ -79,12 +79,18 @@ async function submit() {
   submitting.value = true
   error.value = ''
   try {
-    const text = [
-      `1. 腿部麻木或无力？${answers.value.leg || '尚未确认'}`,
-      `2. 大小便控制？${answers.value.bladder || '尚未确认'}`,
-      `3. 侧别？${answers.value.side || '尚未确认'}`,
-      `4. 与上次相比？${answers.value.change || '尚未确认'}`,
-    ].join('\n')
+    // 紧凑单行记录：不在病程 / 一页分析里堆放问卷原文；未回答的记为「尚未确认」
+    const parts = [
+      '关键变化确认（自述，尚未确认）：',
+      `下肢情况：${answers.value.leg || '尚未确认'}`,
+      `大小便控制：${answers.value.bladder || '尚未确认'}`,
+      `侧别：${answers.value.side || '尚未确认'}`,
+      `与上次相比：${answers.value.change || '尚未确认'}`,
+    ]
+    // 选中需要医生及时评估的选项时，把规范信号写进摘要，服务端同套规则据此提示就医
+    if (answers.value.leg === '有，而且在加重') parts.push('信号：双腿进行性无力')
+    if (answers.value.bladder === '有，控制困难或失禁') parts.push('信号：大小便控制变化')
+    const text = parts.join('；')
     // 1. 建立病程
     const input: CreateEpisodeInput = { title: title.value.trim() }
     if (onset.value) input.onset_date = onset.value

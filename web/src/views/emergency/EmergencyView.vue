@@ -9,6 +9,7 @@ import AppNotice from '@/components/AppNotice.vue'
 import { getEmergencyNotice } from '@/api/safety'
 import { getEpisode, listEpisodes } from '@/api/episodes'
 import { beijingDate } from '@/utils/date'
+import { STORAGE_KEYS } from '@/utils/constants'
 
 interface EmergencyNotice {
   title: string
@@ -67,6 +68,12 @@ async function loadBringItems() {
     detail: '',
     available: false,
   }))
+  // 未登录时不请求病程接口：就医提示不被登录阻断，也不产生 401 噪音
+  const token = localStorage.getItem(STORAGE_KEYS.token)
+  if (!token) {
+    bringItems.value = base
+    return
+  }
   try {
     const episodes = await listEpisodes()
     const active = episodes.find((e) => e.status === '进行中') ?? episodes[0] ?? null

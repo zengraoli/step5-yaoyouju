@@ -82,6 +82,9 @@ const NOT_NEGATION_PHRASES = ['不小心', '不留神', '不知不觉', '无心'
  */
 const AFTER_CONTEXT_WORDS = ['感冒', '刻意减肥', '在减肥', '在减重', '胃口很好', '胃口好'];
 
+/** 症状之后紧跟「尚未确认 / 未确认」：用户明确表示还没有确认（不当作症状） */
+const UNCONFIRMED_AFTER = /^[：:，,]?(?:尚未|未|还未)确认/;
+
 /** 肯定性词语（小句里有这些词时不做整句判否，只做局部否定识别） */
 const POSITIVE_MARKERS = [
   '有',
@@ -778,6 +781,8 @@ export function matchesRedFlagRule(rule: RedFlagRule, rawText: string): boolean 
       // 症状之后跟着「在减肥 / 感冒 / 胃口很好」等，说的是别的原因
       const afterCtx = text.slice(match.end, match.end + 10);
       if (AFTER_CONTEXT_WORDS.some((w) => afterCtx.includes(w))) continue;
+      // 症状后面紧跟「尚未确认 / 未确认」：用户说的是还没确认，不算症状
+      if (UNCONFIRMED_AFTER.test(text.slice(match.end))) continue;
       const prefix = masked.slice(0, match.start);
       if (STRICT_NEGATION.test(prefix) || STRICT_TRAILING.test(prefix)) continue;
       if (negatedBefore(fragments, masked, match.start)) continue;
@@ -808,6 +813,8 @@ export function matchesRedFlagRule(rule: RedFlagRule, rawText: string): boolean 
           const second = first === subject ? symptom : subject;
           if (negatedBefore(fragments, masked, first.start)) continue;
           if (locallyNegated(text, first, second)) continue;
+          // 症状紧跟「尚未确认 / 未确认」：尚未确认的项不算症状
+          if (UNCONFIRMED_AFTER.test(text.slice(second.end))) continue;
           return true;
         }
       }
