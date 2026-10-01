@@ -270,13 +270,13 @@ fun TodayScreen(navController: NavHostController) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 睡眠影响（0-10）
-            FormLabel(text = "睡眠受影响程度（0-10，可留空）")
+            // 睡眠影响（0-3，与服务端校验一致：0-3）
+            FormLabel(text = "睡眠受影响程度（0-3，可留空）")
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
                 value = sleepImpact,
                 onValueChange = { sleepImpact = it },
-                placeholder = { Text("如 4", color = Text3) },
+                placeholder = { Text("如 2", color = Text3) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
                 shape = RoundedCornerShape(10.dp),
