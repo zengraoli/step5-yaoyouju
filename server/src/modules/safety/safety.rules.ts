@@ -76,6 +76,12 @@ export const NORMAL_AFTER_WORDS = [
 /** 与否定无关、但常被否定词误伤的短语（命中后先剔除再做否定识别） */
 const NOT_NEGATION_PHRASES = ['不小心', '不留神', '不知不觉', '无心', '无碍', '无聊'];
 
+/**
+ * 「后随上下文」否定：这些词出现在症状之后时，说的是别的原因或没事
+ * （「瘦了四五斤，我在刻意减肥」「低烧，医生说是感冒」「体重轻了一点，胃口很好」）。
+ */
+const AFTER_CONTEXT_WORDS = ['感冒', '刻意减肥', '在减肥', '在减重', '胃口很好', '胃口好'];
+
 /** 肯定性词语（小句里有这些词时不做整句判否，只做局部否定识别） */
 const POSITIVE_MARKERS = [
   '有',
@@ -220,8 +226,10 @@ function locallyNegated(text: string, first: CoreMatch, second: CoreMatch): bool
   const before = text.slice(Math.max(0, first.start - 6), first.start);
   if (STRICT_NEGATION.test(before) || STRICT_TRAILING.test(before)) return true;
   const gap = text.slice(first.end, second.start);
-  // 主体与症状之间的否定 = 否定整个短语（「无进行性无力」「没有明显麻木」）
-  if (gap && NEGATION_WORDS.some((w) => gap.includes(w))) return true;
+  // 主体与症状之间的否定 = 否定整个短语（「无进行性无力」「没有明显麻木」）。
+  // 「不受控制」「不由自主」里的「不」说的是控制失灵，不是否定症状。
+  const gapBody = gap.replace(/不受控制|不能自制|难以控制|无法自制|控制不住/g, '');
+  if (gapBody && NEGATION_WORDS.some((w) => gapBody.includes(w))) return true;
   const after = text.slice(second.end, second.end + 8);
   return NORMAL_AFTER_WORDS.some((w) => after.startsWith(w));
 }
@@ -281,6 +289,10 @@ const PERINEUM_SUBJECTS = [
   '大腿根(?:部)?',
   '蛋蛋',
   '菊花',
+  '睾丸',
+  '腰以下',
+  '下半身',
+  '半侧屁股',
 ];
 
 /** 感觉异常表达 */
@@ -308,6 +320,8 @@ const NUMBNESS_SYMPTOMS = [
   '隔了一层布',
   '隔着一层布',
   '像隔了层东西',
+  '隔着一层',
+  '像被[^。，,;；]{0,4}(?:麻|木)',
   '不敏感',
   '麻',
 ];
@@ -332,8 +346,11 @@ const LEG_SUBJECTS = [
   '双脚',
   '大腿',
   '小腿',
+  '膝盖',
+  '脚踝',
   '腿',
   '脚',
+  '腰以下',
   '肌力',
 ];
 
@@ -390,6 +407,13 @@ const LEG_WEAKNESS_SYMPTOMS = [
   '跌倒',
   '肌肉萎缩',
   '萎缩',
+  '勾不上',
+  '勾不住',
+  '发软打弯',
+  '打弯发软',
+  '手脚并用',
+  '扶墙',
+  '费劲',
 ];
 
 /** 大小便控制变化 */
@@ -455,6 +479,10 @@ const BOWEL_SYMPTOMS = [
   '排便(?:困难|障碍)',
   '功能障碍',
   '障碍',
+  '流出来',
+  '尿湿',
+  '用力[^。，,;；]{0,6}(?:才能|才)(?:尿|排便|解)',
+  '干燥[^。，,;；]{0,4}(?:加重|严重|厉害)',
 ];
 
 /**
@@ -486,7 +514,9 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
     standalone: [
       '腿软',
       '走[0-9一二三四五六七八九十百]{1,6}米[^。，,;；]{0,6}(?:歇|停)',
-      '像(?:绑了沙袋|灌了铅|拖了沙袋)',
+      '扶墙',
+      '手脚并用',
+      '走路[^。，,;；]{0,4}(?:越来越)?费劲',
       '肌力(?:4|四)级',
       '(?:肌力|双下肢肌力)[^。，,;；]{0,4}比[^。，,;；]{0,6}(?:又|更)?差',
       '肌力(?:进行性|逐渐|越来越)?(?:下降|减弱|变差)',
@@ -510,6 +540,10 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '尿裤子',
       '憋不住(?:尿|大便|便|屎尿)',
       '屎尿都(?:兜不住|憋不住)',
+      '尿湿',
+      '流出来',
+      '排便要[^。，,;；]{0,4}(?:很大力|用力|费劲|使劲)',
+      '大便干燥[^。，,;；]{0,6}(?:加重|严重|厉害)',
     ],
   },
   {
@@ -534,6 +568,9 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '夜间比白天(?:还|更)(?:痛|疼)',
       '静息痛',
       '休息(?:时|的)?也(?:痛|疼)',
+      '躺下[^。，,;；]{0,6}(?:更痛|更疼|加重|更厉害)',
+      '[^。，,;；]{0,6}翻不了身',
+      '盗汗',
       '(?:夜里|晚上|夜间)[^。，,;；]{0,6}(?:更痛|更疼|厉害|加重)',
       '(?:夜里|晚上|夜间)一躺下[^。，,;；]{0,6}(?:痛|疼)',
       '(?:夜里|晚上|夜间)只能睡[0-9一二两三四五六七八九十]{1,3}(?:个)?小时',
@@ -559,6 +596,7 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '体重(?:明显)?(?:下降|减轻|减少|掉了|掉得|瘦了)',
       '体重[^。，,;；]{0,4}(?:掉|降|减|轻|少)',
       '瘦了一圈',
+      '掉秤',
       '没(?:节食|减肥)[^。，,;；]{0,6}(?:瘦|轻|掉)',
       '体重瘦(?:了|下来)',
       '半年(?:内|里)?瘦(?:了|下来)',
@@ -614,6 +652,8 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '史',
       '得过',
       '得了',
+      '做过',
+      '手术',
       '切除',
       '术后',
       '手术后',
@@ -641,6 +681,8 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '撞到',
       '车祸',
       '被车[撞碰]',
+      '被[^。，,;；]{0,4}[撞碰]',
+      '从[^。，,;；]{0,6}(?:摔|跌)(?:下|下来|下去)',
       '扭(?:到|伤)?腰',
       '闪(?:到)?腰',
       '搬重物',
@@ -708,6 +750,12 @@ export const RED_FLAG_RULES: RedFlagRule[] = [
       '疼到(?:哭|出汗|冒冷汗|冷汗|晕|休克|发抖)',
       '痛到(?:哭|出汗|冒冷汗|冷汗|晕|休克|发抖)',
       '疼(?:得|的)睡不着',
+      '满头大汗',
+      '想撞墙',
+      '像被[^。，,;；]{0,4}(?:撕|裂|锯|扎)',
+      '疼(?:得|的)[^。，,;；]{0,3}打滚',
+      '痛(?:得|的)[^。，,;；]{0,3}打滚',
+      '疼(?:得|的)[^。，,;；]{0,3}(?:出汗|汗)',
     ],
   },
 ];
@@ -725,8 +773,11 @@ export function matchesRedFlagRule(rule: RedFlagRule, rawText: string): boolean 
   for (const phrase of rule.standalone ?? []) {
     for (const match of findCoreMatches(text, phrase)) {
       if (insideThirdParty(spans, match.start, match.end)) continue;
-      // 「不小心撞了一下」「没留神摔了一跤」：说的是没出事，不算红旗
+      // 「不小心撞了一下」：说的是没出事，不算红旗
       if (text.slice(Math.max(0, match.start - 3), match.start) === '不小心') continue;
+      // 症状之后跟着「在减肥 / 感冒 / 胃口很好」等，说的是别的原因
+      const afterCtx = text.slice(match.end, match.end + 10);
+      if (AFTER_CONTEXT_WORDS.some((w) => afterCtx.includes(w))) continue;
       const prefix = masked.slice(0, match.start);
       if (STRICT_NEGATION.test(prefix) || STRICT_TRAILING.test(prefix)) continue;
       if (negatedBefore(fragments, masked, match.start)) continue;
