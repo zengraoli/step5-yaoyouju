@@ -319,9 +319,13 @@ async function main() {
     const { DatabaseSync } = await import('node:sqlite')
     const { createHash } = await import('node:crypto')
     const dbDir = process.env.DB_DIR ?? './data'
-    const src = path.join(dbDir, 'app.db')
     const tmp = path.join(os.tmpdir(), `yaoyouju-audit-${Date.now()}.db`)
-    fs.copyFileSync(src, tmp)
+    // 连 WAL 一起拷贝：审计记录可能还在 -wal 里（只拷 .db 会看不到表）
+    fs.copyFileSync(path.join(dbDir, 'app.db'), tmp)
+    for (const suffix of ['-wal', '-shm']) {
+      const extra = path.join(dbDir, `app.db${suffix}`)
+      if (fs.existsSync(extra)) fs.copyFileSync(extra, `${tmp}${suffix}`)
+    }
     const copy = new DatabaseSync(tmp)
     copy.exec('DROP TRIGGER IF EXISTS audit_log_no_update; DROP TRIGGER IF EXISTS audit_log_no_delete;')
     const rows = copy
