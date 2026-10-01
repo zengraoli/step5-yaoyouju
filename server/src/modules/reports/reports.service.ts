@@ -4,7 +4,8 @@ import { DbService } from '../../db/db.service';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { normalizeInstant } from '../../common/time.util';
 import { SwitchesService } from '../switches/switches.service';
-import { SOURCE_TYPES } from '../episodes/episodes.service';
+import { SOURCE_TYPES, SafetyNotice } from '../episodes/episodes.service';
+import { SafetyResult, SafetyService } from '../safety/safety.service';
 import { SAMPLE_REPORT_TEXT, extractTerms } from './term-dict';
 
 export interface ReportView {
@@ -17,6 +18,8 @@ export interface ReportView {
   source_type: string;
   verify_status: string;
   occurred_at: string;
+  /** 命中红旗时的就医提示（未命中为 null） */
+  safety_notice?: SafetyNotice | null;
 }
 
 /** 报告原文长度上限（避免超长文本拖垮术语抽取与检索） */
@@ -29,6 +32,7 @@ export class ReportsService {
   constructor(
     private readonly db: DbService,
     private readonly switches: SwitchesService,
+    private readonly safety: SafetyService,
   ) {}
 
   /**
@@ -61,6 +65,12 @@ export class ReportsService {
     const verify = input.verify_status ?? '尚未确认';
     const now = new Date().toISOString();
     const occurred = input.report_date ? normalizeInstant(input.report_date) : now;
+    // 安全规则引擎：报告原文命中红旗 → 立即返回就医提示（不阻断录入本身）
+    const safety = this.safety.checkRedFlags({
+      user_id: userId,
+      episode_id: ep.id as string,
+      texts: [text],
+    });
 
     let careEventId: string | undefined = input.care_event_id;
     if (careEventId) {
@@ -96,7 +106,7 @@ export class ReportsService {
         `local://reports/${id}`,
       );
     this.logger.log(`[report] 录入报告 ${id.slice(0, 8)}…（${text.length} 字，术语 ${extractTerms(text).length} 个）`);
-    return this.get(userId, id);
+    return { ...this.get(userId, id), safety_notice: this.safetyNoticeOf(safety) };
   }
 
   /** 拍照提取（模拟 OCR）：返回示例文本；受「拍照提取」开关控制 */
@@ -192,6 +202,34 @@ export class ReportsService {
       source_type: row.source_type as string,
       verify_status: (row.verify_status as string) ?? '尚未确认',
       occurred_at: row.occurred_at as string,
+    };
+  }
+
+  /** 命中红旗时返回的就医提示（未命中为 null） */
+  private safetyNoticeOf(result: SafetyResult): SafetyNotice | null {
+    if (result.matched.length === 0) return null;
+    const high = result.matched.find((m) => m.severity === 'high');
+    const labels = result.matched.map((m) => m.label);
+    return {
+      title: '需要及时寻求专业帮助',
+      headline: high ? '建议尽快就医' : '建议及时就医评估',
+      body: `你录入的报告内容包含${high ? '需要尽快' : '建议及时'}就医的信号：${labels.join('、')}。这类变化需要医生及时评估，本产品无法替你判断严重程度。`,
+      matched: result.matched.map((m) => ({
+        rule_code: m.rule_code,
+        label: m.label,
+        severity: m.severity,
+        action: m.action,
+        advice: m.advice,
+        excerpt: m.excerpt,
+      })),
+      actions: [
+        { type: 'call', label: '拨打 120 / 前往急诊' },
+        { type: 'hospital', label: '查找附近医院' },
+        { type: 'doctor', label: '联系我的主治医生（已保存）' },
+      ],
+      bring_list: ['已录入的检查报告原文', '症状开始时间与最近变化记录', '正在使用的药物与既有医嘱'],
+      footer_note: '此提示由临床审定规则触发，不是诊断结论；请以医生的评估为准。',
+      rule_set_version: result.rule_set_version,
     };
   }
 

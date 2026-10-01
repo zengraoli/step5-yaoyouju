@@ -93,10 +93,9 @@ class BatchOfflineDto {
   @IsArray()
   ids!: string[];
 
-  @ApiProperty({ description: '双人确认单 ID（另一方确认后带上即可生效）', required: false })
+  @ApiProperty({ description: '每条内容对应的双人确认单 ID（另一方确认后带上即可生效）', required: false })
   @IsOptional()
-  @IsString()
-  confirmation_id?: string;
+  confirmation_ids?: Record<string, string>;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -112,6 +111,7 @@ export class AdminContentsController {
   constructor(private readonly contents: ContentsService) {}
 
   @ApiOperation({ summary: '内容列表（筛选 + 状态统计 + 分页）' })
+  @RequirePermission('content.view')
   @Get()
   list(
     @CurrentAdmin() admin: AdminContext,
@@ -133,6 +133,7 @@ export class AdminContentsController {
   }
 
   @ApiOperation({ summary: '内容详情（版本链、审核记录、引用定位）' })
+  @RequirePermission('content.view')
   @Get(':id')
   detail(@CurrentAdmin() admin: AdminContext, @Param('id') id: string): ContentDetail {
     return this.contents.adminDetail(id);
@@ -197,6 +198,7 @@ export class AdminContentsController {
   }
 
   @ApiOperation({ summary: '引用定位预览（下线前查看受影响的页面）' })
+  @RequirePermission('content.view')
   @Get(':id/impact')
   impact(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
     return this.contents.impactPreview(id);
@@ -254,7 +256,7 @@ export class AdminContentsController {
     if (ids.length === 0) {
       throw new ApiException(ErrorCode.BAD_REQUEST, '请选择要下线的内容');
     }
-    return this.contents.batchTakeOffline(admin.id, admin, ids, dto.reason ?? '', dto.confirmation_id);
+    return this.contents.batchTakeOffline(admin.id, admin, ids, dto.reason ?? '', dto.confirmation_ids);
   }
 }
 

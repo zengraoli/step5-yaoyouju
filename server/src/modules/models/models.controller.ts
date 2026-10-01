@@ -125,9 +125,9 @@ export class ModelsController {
   rollback(@CurrentAdmin() admin: AdminContext, @Param('id') id: string, @Body() dto: RollbackReleaseDto) {
     const reasonText = (dto.reason ?? '').trim();
     if (!reasonText) throw new ApiException(ErrorCode.BAD_REQUEST, '回滚原因不能为空');
-    if (this.releases.isLastActive(id)) {
+    if (this.releases.isLastActive(id) && !this.releases.hasRollbackFallback(id)) {
       throw new ConflictException(
-        '这是唯一生效的发布，回滚后新分析会全部失败；请先把另一个通过门禁的发布提升为生效',
+        '这是唯一生效的发布，回滚后新分析会全部失败；请先把另一个通过门禁的发布提升为生效后再回滚',
       );
     }
     const gate = this.confirmations.prepare(

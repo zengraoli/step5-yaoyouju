@@ -26,6 +26,12 @@ class AdminLoginDto {
   totp!: string;
 }
 
+class BindMfaDto {
+  @ApiProperty({ description: '动态验证码（演示固定码 6 位数字）' })
+  @Matches(/^\d{6}$/, { message: '验证码为 6 位数字' })
+  totp!: string;
+}
+
 /**
  * 后台登录（T14，B01）：账号 + 口令 + TOTP。
  * - 无自助注册接口；
@@ -43,6 +49,16 @@ export class AdminAuthController {
   @Post('login')
   login(@Body() dto: AdminLoginDto): AdminLoginResult {
     return this.adminAuth.login(dto.name, dto.password, dto.totp);
+  }
+
+  /**
+   * 绑定动态验证码（MFA）：新邀请成员 / 重置 MFA 后的账号首次登录必须绑定后才能操作。
+   * 演示实现：演示固定码即完成绑定。
+   */
+  @ApiOperation({ summary: '绑定动态验证码（首次登录必做；演示固定码）' })
+  @Post('bind-mfa')
+  bindMfa(@CurrentAdmin() admin: AdminContext, @Body() dto: BindMfaDto) {
+    return this.adminAuth.bindMfa(admin.id, dto.totp);
   }
 
   /** 登出（吊销当前令牌，旧令牌立即失效；写审计） */

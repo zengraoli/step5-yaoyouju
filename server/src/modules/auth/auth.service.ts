@@ -6,6 +6,19 @@ import { FieldCrypto } from '../../db/crypto.service';
 import { DbService } from '../../db/db.service';
 import { TokenRevocationService } from '../../common/token-revocation.service';
 
+function safeEqualPhone(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** 删除账户相关提示统一用北京时间展示 */
+function beijingTime(iso: string): string {
+  const d = new Date(iso);
+  return new Date(d.getTime() + 8 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
+}
+
 export const CONSENT_SCOPES = ['健康信息处理', '分享', '产品改进'] as const;
 export type ConsentScope = (typeof CONSENT_SCOPES)[number];
 
@@ -29,6 +42,9 @@ export interface AccountExport {
   user: { id: string; created_at: string; phone_masked: string };
   consents: unknown[];
   episodes: unknown[];
+  analyses: unknown[];
+  followup_summaries: unknown[];
+  followup_questions: unknown[];
   qa_sessions: unknown[];
   feedback: unknown[];
   safety_events: unknown[];
@@ -274,19 +290,38 @@ export class AuthService {
            FROM qa_session s WHERE s.user_id = ? ORDER BY s.created_at ASC`,
         )
         .all(userId),
+      analyses: this.app
+        .prepare(
+          `SELECT a.id, a.version, a.safety_flag, a.created_at, a.sections, a.retrieval_snapshot
+           FROM analysis a JOIN episode e ON e.id = a.episode_id WHERE e.user_id = ? ORDER BY a.created_at ASC`,
+        )
+        .all(userId),
+      followup_summaries: this.app
+        .prepare(
+          `SELECT f.id, f.episode_id, f.content, f.export_format, f.exported_at
+           FROM followup_summary f JOIN episode e ON e.id = f.episode_id WHERE e.user_id = ? ORDER BY f.rowid ASC`,
+        )
+        .all(userId),
+      followup_questions: this.app
+        .prepare(
+          `SELECT q.id, q.episode_id, q.question, q.created_at
+           FROM followup_question q JOIN episode e ON e.id = q.episode_id WHERE e.user_id = ? ORDER BY q.created_at ASC`,
+        )
+        .all(userId),
       feedback: this.app
         .prepare('SELECT id, help_type, unsolved_question, is_error_report, category, description, status, created_at FROM feedback WHERE user_id = ?')
         .all(userId),
       safety_events: this.app
         .prepare('SELECT id, rule_code, severity, action_taken, created_at FROM safety_event WHERE user_id = ?')
         .all(userId),
-      note: '本文件为你的个人数据导出（演示实现），包含已录入的病程、报告、分析与问答记录。',
+      note: '本文件为你的个人数据导出（演示实现），包含已录入的病程、报告、分析、复诊摘要、复诊问题与问答记录。',
     };
   }
 
-  /** 申请删除账户：验证码二次确认 → 24 小时冷静期 */
+  /** 申请删除账户：验证码二次确认 → 24 小时冷静期（手机号必须是本人） */
   requestDeletion(userId: string, code: string, phone: string) {
     this.assertPhone(phone);
+    this.assertOwnPhone(userId, phone);
     this.assertNotLocked(`del:${phone}`);
     const demoCode = process.env.DEMO_SMS_CODE ?? '123456';
     if (code !== demoCode) {
@@ -315,6 +350,7 @@ export class AuthService {
   /** 冷静期结束后确认删除：硬删全部个人数据（不可恢复） */
   confirmDeletion(userId: string, code: string, phone: string): { deleted: boolean; removed: Record<string, number> } {
     this.assertPhone(phone);
+    this.assertOwnPhone(userId, phone);
     this.assertNotLocked(`del:${phone}`);
     const demoCode = process.env.DEMO_SMS_CODE ?? '123456';
     if (code !== demoCode) {
@@ -330,7 +366,7 @@ export class AuthService {
     if (new Date(req.effective_at).getTime() > Date.now()) {
       throw new ApiException(
         ErrorCode.CONFLICT,
-        `还在冷静期内（${new Date(req.effective_at).toISOString()} 之后才能确认删除），可以取消删除`,
+        `还在冷静期内（${beijingTime(req.effective_at)} 之后才能确认删除），可以取消删除`,
       );
     }
     this.attempts.delete(`del:${phone}`);
@@ -375,6 +411,8 @@ export class AuthService {
     const summary = [
       'DELETE FROM qa_message WHERE session_id IN (SELECT id FROM qa_session WHERE user_id = ?)',
       'DELETE FROM qa_session WHERE user_id = ?',
+      'DELETE FROM followup_question WHERE episode_id IN (SELECT id FROM episode WHERE user_id = ?)',
+      'DELETE FROM feedback_handling WHERE feedback_id IN (SELECT id FROM feedback WHERE user_id = ?)',
       'DELETE FROM analysis_citation WHERE analysis_id IN (SELECT id FROM analysis WHERE episode_id IN (SELECT id FROM episode WHERE user_id = ?))',
       'DELETE FROM analysis WHERE episode_id IN (SELECT id FROM episode WHERE user_id = ?)',
       'DELETE FROM analysis_task WHERE user_id = ?',
@@ -387,6 +425,7 @@ export class AuthService {
       'DELETE FROM case_submission WHERE user_id = ?',
       'DELETE FROM safety_event WHERE user_id = ?',
       'DELETE FROM consent WHERE user_id = ?',
+      'DELETE FROM deletion_request WHERE user_id = ?',
     ];
     const removed: Record<string, number> = {};
     this.app.exec('BEGIN IMMEDIATE');
@@ -406,6 +445,17 @@ export class AuthService {
       throw err;
     }
     return removed;
+  }
+
+  /** 手机号必须是当前登录用户本人（删除申请 / 确认删除都按本人核对） */
+  private assertOwnPhone(userId: string, phone: string): void {
+    const row = this.identity
+      .prepare('SELECT phone_enc FROM identity_profile WHERE user_id = ?')
+      .get(userId) as { phone_enc: string } | undefined;
+    const own = row ? this.crypto.decrypt(row.phone_enc) : '';
+    if (!safeEqualPhone(own, phone)) {
+      throw new ApiException(ErrorCode.FORBIDDEN, '手机号与当前登录账号不一致，请使用本账号绑定的手机号');
+    }
   }
 
   private assertScope(scope: string): void {

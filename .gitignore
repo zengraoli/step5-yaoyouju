@@ -12,3 +12,5 @@ server/data/
 !.env.example
 *.log
 .DS_Store
+server/.tmp/
+server/.tmpdb/

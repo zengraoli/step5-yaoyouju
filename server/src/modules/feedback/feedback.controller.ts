@@ -13,7 +13,7 @@ class CreateFeedbackDto {
 
   /** 帮助类型：看懂了 / 知道下一步 / 都不好 */
   @ApiProperty({ description: '帮助类型', enum: [...HELP_TYPES] })
-  @IsIn([...HELP_TYPES])
+  @IsIn([...HELP_TYPES], { message: `帮助类型必须是：${HELP_TYPES.join(' / ')}` })
   help_type!: string;
 
   /** 未解决的问题（可选） */
@@ -52,7 +52,7 @@ class CreateErrorReportDto {
   /** 严重度：high=可能造成健康风险/安全相关；medium=解释与报告不符/来源问题；low=其他（缺省按分类推断） */
   @ApiProperty({ description: '严重度', enum: [...SEVERITIES], required: false })
   @IsOptional()
-  @IsIn([...SEVERITIES])
+  @IsIn([...SEVERITIES], { message: `严重度必须是：${SEVERITIES.join(' / ')}` })
   severity?: string;
 }
 

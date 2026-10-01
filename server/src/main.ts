@@ -16,28 +16,48 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
     exposedHeaders: [REQUEST_ID_HEADER],
   });
-  // 请求 ID：每个请求生成唯一标识，写响应头并进入审计日志（验收反馈第 16 条）
+  // 请求 ID：由服务端生成（不信任客户端自带的 X-Request-Id，避免重复 / 伪造），
+  // 写响应头并进入审计日志（验收反馈第 16、32 条）
   app.use(
     (
       req: { headers: Record<string, unknown> },
       res: { setHeader(k: string, v: string): void },
       next: () => void,
     ) => {
-      const headerVal = req.headers['x-request-id'];
-      const inbound = typeof headerVal === 'string' && /^[\w-]{4,64}$/.test(headerVal) ? headerVal : null;
-      const requestId = inbound ?? newRequestId();
+      const requestId = newRequestId();
       res.setHeader(REQUEST_ID_HEADER, requestId);
       runWithRequestId(requestId, () => next());
     },
   );
-  // 请求体上限：超大请求体 / JSON 格式错误一律返回中文 400，而不是 500（验收反馈第 31 条）
+  // 请求体上限：超大请求体 / JSON 格式错误统一返回中文错误，而不是 500（验收反馈第 31 条）
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+  app.use(
+    (
+      err: { type?: string; status?: number; message?: string },
+      _req: unknown,
+      res: { status(code: number): { json(body: unknown): void } },
+      next: () => void,
+    ) => {
+      if (!err || typeof err !== 'object') return next();
+      if (err.type === 'entity.too.large') {
+        res.status(413).json({ code: 40000, data: null, message: '内容过长，请分段提交' });
+        return;
+      }
+      if (err.type === 'entity.parse.failed' || err.status === 400) {
+        res.status(400).json({ code: 40000, data: null, message: '请求内容不是合法的 JSON，请检查后重试' });
+        return;
+      }
+      next();
+    },
+  );
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       transform: true,
-      transformOptions: { enableImplicitConversion: true },
+      // 关闭隐式类型转换：标题传数字、数字传文本一律按中文校验错误返回，
+      // 而不是悄悄转换后落库（验收反馈第 27 条）
+      transformOptions: { enableImplicitConversion: false },
     }),
   );
   app.useGlobalInterceptors(new ResponseInterceptor());

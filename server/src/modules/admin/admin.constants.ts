@@ -203,6 +203,10 @@ export function permissionsOf(roleName: string): string[] {
 export function hasPermission(permissions: string[], required: string): boolean {
   if (permissions.includes(ALL_PERMISSIONS)) return true;
   if (permissions.includes(required)) return true;
+  // 内容查看：运营编辑（可建草稿）/ 临床审核（审定）/ 超级管理可读；
+  // 技术负责人与合规支持不能读内容数据（验收反馈第 14 条）
+  if (required === 'content.view' && permissions.includes('content.draft')) return true;
+  if (required === 'content.view' && permissions.includes('content.review')) return true;
   // 高危开关权限隐含非高危开关权限（技术负责人 / 超级管理可改全部开关）
   if (required === 'switch.manage_low' && permissions.includes('switch.manage')) return true;
   // 查看权限被管理权限隐含

@@ -21,6 +21,11 @@ export interface ConfirmationRule {
   requester_roles: string[];
   /** 可确认的角色 */
   confirmer_roles: string[];
+  /**
+   * 发起人与确认人是否必须为不同角色（默认 true）。
+   * 验收反馈第 9 条：撤回 / 下线不能由两名临床审核（或两名超级管理员）完成。
+   */
+  distinct_roles: boolean;
   /** 界面上对该动作的双人要求说明 */
   requirement: string;
 }
@@ -30,54 +35,63 @@ export const CONFIRMATION_RULES: Record<string, ConfirmationRule> = {
     label: '内容撤回',
     requester_roles: ['临床审核', '超级管理员'],
     confirmer_roles: ['超级管理员', '临床审核'],
+    distinct_roles: true,
     requirement: '临床审核 + 超级管理员（两人不能相同）',
   },
   'content.offline': {
     label: '一键下线 / 批量下线',
     requester_roles: ['临床审核', '超级管理员'],
     confirmer_roles: ['超级管理员', '临床审核'],
+    distinct_roles: true,
     requirement: '临床审核 + 超级管理员（两人不能相同）',
   },
   'switch.update': {
     label: '高危功能开关变更',
     requester_roles: ['技术负责人', '超级管理员'],
     confirmer_roles: ['超级管理员', '临床审核'],
-    requirement: '技术负责人 + 临床审核 / 超级管理员（两人不能相同）',
+    distinct_roles: true,
+    requirement: '技术负责人 + 临床审核 / 超级管理员（与发起人不同角色）',
   },
   'model.promote': {
     label: '模型发布提升 / 生效',
     requester_roles: ['技术负责人', '超级管理员'],
     confirmer_roles: ['超级管理员'],
+    distinct_roles: true,
     requirement: '技术负责人 + 超级管理员（两人不能相同）',
   },
   'model.rollback': {
     label: '模型发布回滚',
     requester_roles: ['技术负责人', '超级管理员'],
     confirmer_roles: ['超级管理员'],
+    distinct_roles: true,
     requirement: '技术负责人 + 超级管理员（两人不能相同）',
   },
   'dual_control.update': {
     label: '双人确认设置变更',
     requester_roles: ['合规支持', '超级管理员'],
     confirmer_roles: ['超级管理员'],
-    requirement: '合规支持 / 超级管理员发起 + 超级管理员确认',
+    distinct_roles: true,
+    requirement: '合规支持 / 超级管理员发起 + 另一角色确认',
   },
   'feedback.authorize': {
     label: '举报原文单条授权',
     requester_roles: ['临床审核'],
     confirmer_roles: ['超级管理员'],
+    distinct_roles: true,
     requirement: '临床审核发起 + 超级管理员审批（可撤回）',
   },
   'user.status': {
     label: '后台成员停用 / 启用',
     requester_roles: ['超级管理员'],
     confirmer_roles: ['超级管理员'],
+    distinct_roles: false,
     requirement: '超级管理员发起 + 另一名超级管理员确认',
   },
   'feedback.report_handling': {
     label: '举报临床复核处置',
     requester_roles: ['临床审核', '超级管理员'],
     confirmer_roles: ['超级管理员', '临床审核'],
+    distinct_roles: true,
     requirement: '临床审核 + 超级管理员（两人不能相同）',
   },
 };
@@ -95,6 +109,8 @@ export interface ConfirmationItem {
   status: ConfirmationStatus;
   requested_by: string;
   requested_by_name: string;
+  requested_by_role: string;
+  confirmed_by_role?: string | null;
   requested_at: string;
   confirmed_by: string | null;
   confirmed_by_name: string | null;
@@ -196,13 +212,26 @@ export class ConfirmationService {
       throw new ApiException(ErrorCode.CONFLICT, `该确认单已${row.status}，不能重复处理`);
     }
     const rule = this.rule(row.action);
+    const requester = this.adminById(row.requested_by);
     if (row.requested_by === admin.id) {
       throw new ApiException(ErrorCode.CONFLICT, '双人确认不能由同一个人完成，请换一位具备权限的账号确认');
+    }
+    if (!admin.mfa_enabled) {
+      throw new ApiException(
+        ErrorCode.FORBIDDEN,
+        '确认高风险操作前需先绑定动态验证码（MFA），请退出后在登录页完成绑定',
+      );
     }
     if (!rule.confirmer_roles.includes(admin.role.name)) {
       throw new ApiException(
         ErrorCode.FORBIDDEN,
         `「${rule.label}」的确认需要 ${rule.confirmer_roles.join(' / ')} 角色`,
+      );
+    }
+    if (rule.distinct_roles !== false && requester?.role.name === admin.role.name) {
+      throw new ApiException(
+        ErrorCode.CONFLICT,
+        `「${rule.label}」的双人确认需要两名不同角色的账号（${requester?.role.name ?? '发起人'} 不能确认自己的申请），${rule.requirement}`,
       );
     }
     if (!admin.permissions.includes('*') && !this.canPerform(admin, row.action)) {
@@ -290,8 +319,13 @@ export class ConfirmationService {
     confirmationId?: string | null,
   ): { proceed: boolean; confirmation: ConfirmationItem | null } {
     if (confirmationId) {
-      const claimed = this.claim(confirmationId, admin);
-      if (claimed.action !== action || claimed.target_id !== targetId) {
+      const row = this.require(confirmationId);
+      if (row.status === '待确认') {
+        this.claim(confirmationId, admin);
+      } else if (!(row.status === '已生效' && row.confirmed_by === admin.id)) {
+        throw new ApiException(ErrorCode.CONFLICT, `该确认单已${row.status}，不能重复处理`);
+      }
+      if (row.action !== action || row.target_id !== targetId) {
         throw new ApiException(ErrorCode.CONFLICT, '确认单与当前操作不匹配，请重新发起');
       }
       return { proceed: true, confirmation: this.byId(confirmationId) };
@@ -300,11 +334,30 @@ export class ConfirmationService {
     return { proceed: false, confirmation };
   }
 
+  /**
+   * 确认并执行业务（另一名具备权限的账号在待确认单列表里点「确认并执行」）。
+   * 领到执行权后由 executor 完成真正的业务变更，完成后标记 applied。
+   */
+  approveAndExecute(
+    id: string,
+    admin: AdminContext,
+    executor: { execute: (claimed: ClaimedConfirmation, admin: AdminContext) => unknown },
+  ): unknown {
+    const claimed = this.claim(id, admin);
+    const result = executor.execute(claimed, admin);
+    this.markApplied(id);
+    return result;
+  }
+
   /** 已生效确认单（用于界面回显） */
   byId(id: string): ConfirmationItem {
     return this.toItem(this.require(id));
   }
-  /** 确认单列表（默认只看待确认） */  list(status?: string): ConfirmationItem[] {
+  /**
+   * 确认单列表（默认只看待确认）。
+   * 每条附带 `can_confirm`：当前登录账号是否可以确认（供界面第二个人在另一台设备上直接确认）。
+   */
+  list(status?: string, viewer?: AdminContext): ConfirmationItem[] {
     const rows = (
       status && status !== '全部'
         ? this.db.app
@@ -314,7 +367,7 @@ export class ConfirmationService {
             .prepare('SELECT * FROM confirmation_request ORDER BY requested_at DESC, rowid DESC LIMIT 100')
             .all()
     ) as ConfirmationRow[];
-    return rows.map((r) => this.toItem(r));
+    return rows.map((r) => this.toItem(r, viewer));
   }
 
   /** 某个业务动作的确认要求说明（B10 卡片用） */
@@ -376,13 +429,25 @@ export class ConfirmationService {
       name: row?.name ?? '已注销账号',
       role: { id: row?.role_id ?? '', name: row?.role_name ?? '未知角色' },
       permissions: [],
+      mfa_enabled: true,
     };
   }
 
-  private toItem(row: ConfirmationRow): ConfirmationItem {
+  private toItem(row: ConfirmationRow, viewer?: AdminContext): ConfirmationItem {
     const rule = CONFIRMATION_RULES[row.action];
     const requester = this.adminById(row.requested_by);
     const confirmer = row.confirmed_by ? this.adminById(row.confirmed_by) : null;
+    const canConfirm =
+      viewer && row.status === '待确认'
+        ? row.requested_by !== viewer.id &&
+          (rule?.confirmer_roles ?? []).includes(viewer.role.name) &&
+          (rule?.distinct_roles === false || rule?.confirmer_roles !== undefined) &&
+          (rule?.distinct_roles !== false
+            ? requester.role.name !== viewer.role.name
+            : true) &&
+          viewer.mfa_enabled === true &&
+          (viewer.permissions.includes('*') || this.canPerform(viewer, row.action))
+        : false;
     return {
       id: row.id,
       action: row.action,
@@ -394,12 +459,14 @@ export class ConfirmationService {
       status: row.status as ConfirmationStatus,
       requested_by: row.requested_by,
       requested_by_name: requester.name,
+      requested_by_role: requester.role.name,
       requested_at: row.requested_at,
       confirmed_by: row.confirmed_by,
       confirmed_by_name: confirmer?.name ?? null,
       confirmed_at: row.confirmed_at,
       requirement: rule?.requirement ?? '',
       reject_reason: row.reject_reason,
+      ...(viewer ? { can_confirm: canConfirm } : {}),
     };
   }
 }

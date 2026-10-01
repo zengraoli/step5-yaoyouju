@@ -13,7 +13,7 @@ class AdminEvidenceDocBody {
   title!: string;
 
   @ApiProperty({ description: '来源类型：指南 / 研究 / 审核科普 / 其他' })
-  @IsIn(['指南', '研究', '审核科普', '其他'])
+  @IsIn(['指南', '研究', '审核科普', '其他'], { message: '来源类型必须是：指南 / 研究 / 审核科普 / 其他' })
   source_type!: string;
 
   @ApiProperty({ required: false })
@@ -45,7 +45,7 @@ class AdminEvidenceDocBody {
 class AdminEvidenceVerifiedBody {
   @ApiProperty({ description: '核实日期（YYYY-MM-DD，缺省今天）', required: false })
   @IsOptional()
-  @Matches(/^d{4}-d{2}-d{2}$/, { message: '日期格式应为 YYYY-MM-DD' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: '日期格式应为 YYYY-MM-DD' })
   verified_at?: string;
 }
 

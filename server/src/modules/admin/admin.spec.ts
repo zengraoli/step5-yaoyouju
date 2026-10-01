@@ -31,6 +31,7 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminAuditService, AuditLogItem, AuditExportRequest } from './admin-audit.service';
 import { DualControlService } from './dual-control.service';
 import { ConfirmationService } from './confirmation.service';
+import { AdminUsersService } from './admin-users.service';
 import { PermissionGuard } from './permission.guard';
 
 /**
@@ -72,6 +73,7 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
         AdminAuditService,
         DualControlService,
         ConfirmationService,
+        AdminUsersService,
         AuthService,
         ModelReleasesService,
         EvalService,

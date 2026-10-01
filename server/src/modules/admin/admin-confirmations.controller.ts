@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { ApiException, ErrorCode } from '../../common/api-error';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { RequirePermission } from './permission.decorator';
 import { AdminContext } from './admin-auth.service';
 import { CurrentAdmin } from '../../common/current-admin.decorator';
-import { ConfirmationService, CONFIRMATION_RULES } from './confirmation.service';
+import { ConfirmationService, CONFIRMATION_RULES, ClaimedConfirmation } from './confirmation.service';
+import { ConfirmationExecutor } from './confirmation.executor';
 import { Public } from '../../common/public.decorator';
 
 class RequestDto {
@@ -49,7 +51,10 @@ class RejectDto {
 @ApiTags('admin-confirmations')
 @Controller('admin/confirmations')
 export class AdminConfirmationsController {
-  constructor(private readonly confirmations: ConfirmationService) {}
+  constructor(
+    private readonly confirmations: ConfirmationService,
+    private readonly executor: ConfirmationExecutor,
+  ) {}
 
   @Public()
   @ApiOperation({ summary: '各动作的双人确认要求（B10 设置卡片）' })
@@ -58,22 +63,25 @@ export class AdminConfirmationsController {
     return { items: this.confirmations.requirements() };
   }
 
-  @ApiOperation({ summary: '确认单列表（默认待确认）' })
+  @ApiOperation({ summary: '确认单列表（默认待确认；标注当前账号能否确认）' })
   @Get()
-  list() {
-    return { items: this.confirmations.list() };
+  list(@CurrentAdmin() admin: AdminContext) {
+    return { items: this.confirmations.list(undefined, admin) };
   }
 
   @ApiOperation({ summary: '发起确认单（高风险动作必须双人确认后才能生效）' })
   @Post()
   request(@CurrentAdmin() admin: AdminContext, @Body() dto: RequestDto) {
     let payload: Record<string, unknown> = {};
-    if (dto.payload) {
+    if (dto.payload !== undefined) {
+      if (typeof dto.payload !== 'string') {
+        throw new ApiException(ErrorCode.BAD_REQUEST, '业务参数应为 JSON 字符串');
+      }
       try {
         const parsed = JSON.parse(dto.payload) as unknown;
         payload = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
       } catch {
-        throw new (class extends Error {})('payload 不是合法的 JSON');
+        throw new ApiException(ErrorCode.BAD_REQUEST, '业务参数不是合法的 JSON');
       }
     }
     return this.confirmations.request(
@@ -86,12 +94,15 @@ export class AdminConfirmationsController {
     );
   }
 
-  @ApiOperation({ summary: '确认并执行（不能与发起人是同一人）' })
+  /**
+   * 确认并执行：不能与发起人是同一人；确认后由服务端真正执行业务变更（不只是改单据状态）。
+   * 支持 action：内容撤回 / 一键下线 / 高危开关 / 模型提升与回滚 / 双人确认设置 /
+   * 单条授权审批 / 成员停用 / 举报处置确认。
+   */
+  @ApiOperation({ summary: '确认并真正执行业务变更（不能与发起人是同一人）' })
   @Post(':id/approve')
   approve(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
-    const claimed = this.confirmations.claim(id, admin);
-    // 业务执行由各模块的控制器路由完成（见 admin-contents / admin-safety / models / dual-control）
-    return { claimed, execute: claimed.action };
+    return this.confirmations.approveAndExecute(id, admin, this.executor);
   }
 
   @ApiOperation({ summary: '驳回确认单' })

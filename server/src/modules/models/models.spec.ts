@@ -446,6 +446,9 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
     // 生效后重复提升 → 40900
     const dup = await promote(active.id);
     expect(dup.body.code).toBe(40900);
+    // 被顶替下来的旧发布（已回滚）可以重新提升為生效（出问题时回得到上一版）
+    const again = await dualConfirmed('model.promote', (cid, t) => promote(old.id, cid, t));
+    expect(again.status).toBe('生效');
   });
 
   it('回滚：写审计与原因；已回滚后不能重复回滚或提升', async () => {

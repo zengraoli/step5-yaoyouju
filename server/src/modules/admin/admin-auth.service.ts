@@ -14,6 +14,8 @@ export interface AdminContext {
   name: string;
   role: { id: string; name: string };
   permissions: string[];
+  /** 是否已绑定 MFA（未绑定时只允许绑定 / 查询自身 / 退出，其他操作一律拒绝） */
+  mfa_enabled: boolean;
 }
 
 export interface AdminLoginResult {
@@ -177,7 +179,28 @@ export class AdminAuthService {
       name: row.name,
       role: { id: row.role_id, name: row.role_name },
       permissions: permissionsOf(row.role_name),
+      mfa_enabled: row.mfa_enabled === 1,
     };
+  }
+
+  /**
+   * 绑定动态验证码（MFA）：邀请成员 / 重置 MFA 后首次登录必须绑定才能操作。
+   * 演示实现：任意 6 位演示码即可完成绑定（真实实现需校验 TOTP 种子）。
+   */
+  bindMfa(adminId: string, code: string): { id: string; mfa_enabled: boolean } {
+    const totp = (code ?? '').trim();
+    if (!/^\d{6}$/.test(totp)) {
+      throw new ApiException(ErrorCode.BAD_REQUEST, '请输入 6 位动态验证码');
+    }
+    if (!safeEqual(totp, this.demoTotp())) {
+      throw new ApiException(ErrorCode.BAD_REQUEST, '动态验证码不正确，请重新输入');
+    }
+    this.app
+      .prepare('UPDATE admin_user SET mfa_enabled = 1, mfa_bonded_at = ? WHERE id = ?')
+      .run(new Date().toISOString(), adminId);
+    this.audit.append(adminId, 'admin_user.bind_mfa', `admin_user:${adminId}`, {});
+    this.logger.log(`[admin-auth] 账号 ${adminId.slice(0, 8)}… 完成 MFA 绑定`);
+    return { id: adminId, mfa_enabled: true };
   }
 
   // ---------- 内部 ----------

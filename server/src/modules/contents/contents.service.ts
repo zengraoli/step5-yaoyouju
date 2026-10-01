@@ -613,25 +613,54 @@ export class ContentsService {
     return { items, stats, total, page, page_size: pageSize };
   }
 
-  /** 批量下线（需双人确认；B03） */
+  /**
+   * 批量下线（需双人确认；B03）。
+   * 每条内容各自一张确认单：发起时为还没有确认单的内容逐条创建确认申请（返回 409 + 待确认清单），
+   * 第二个人逐条确认后再次调用才会真正下线（每条都独立双人确认，验收反馈第 9 条）。
+   */
   batchTakeOffline(
     operatorId: string,
     operator: AdminContext,
     ids: string[],
     reason: string,
-    confirmationId?: string,
+    confirmationIds?: Record<string, string>,
   ) {
+    const reasonText = (reason || '批量下线').trim() || '批量下线';
     const results: { id: string; status: string; references: number }[] = [];
-    let claimed: string | null = confirmationId ?? null;
+    const pending: { id: string; confirmation_id: string; target_label: string; requirement: string }[] = [];
     for (const id of ids) {
+      const item = this.loadItem(id);
+      const gate = this.confirmations.prepare(
+        'content.offline',
+        id,
+        item.title,
+        `批量下线：${reasonText}`,
+        operator,
+        confirmationIds?.[id],
+      );
+      if (!gate.proceed) {
+        pending.push({
+          id,
+          confirmation_id: gate.confirmation!.id,
+          target_label: item.title,
+          requirement: gate.confirmation!.requirement,
+        });
+        continue;
+      }
       const result = this.takeOffline(operatorId, operator, id, {
-        reason: reason || '批量下线',
-        confirmation_id: claimed ?? undefined,
+        reason: reasonText,
+        confirmation_id: confirmationIds?.[id],
       });
-      if (result.confirmation_id) claimed = result.confirmation_id;
       results.push({ id, status: result.content.current_status, references: result.references.count });
     }
-    return { offline: results.length, items: results };
+    if (pending.length > 0) {
+      throw new ApiException(
+        ErrorCode.CONFLICT,
+        `已提交 ${pending.length} 条「一键下线」双人确认申请（需${pending[0].requirement}确认后生效）`,
+        { offline: results.length, items: results, pending },
+      );
+    }
+    return { offline: results.length, items: results, pending: [] };
   }
 
   /** 发现严重问题：已发布 → 已撤回（同样立即对用户端不可见） */

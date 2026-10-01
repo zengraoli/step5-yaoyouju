@@ -33,12 +33,12 @@ class CreateReportDto {
 
   @ApiProperty({ description: '来源类型', enum: ['自述', '报告原文', '医生记录'], required: false })
   @IsOptional()
-  @IsIn(['自述', '报告原文', '医生记录'])
+  @IsIn(['自述', '报告原文', '医生记录'], { message: '来源类型必须是：自述 / 报告原文 / 医生记录' })
   source_type?: string;
 
   @ApiProperty({ description: '核实状态', enum: ['已确认', '尚未确认', '有冲突'], required: false })
   @IsOptional()
-  @IsIn(['已确认', '尚未确认', '有冲突'])
+  @IsIn(['已确认', '尚未确认', '有冲突'], { message: '核实状态必须是：已确认 / 尚未确认 / 有冲突' })
   verify_status?: string;
 }
 

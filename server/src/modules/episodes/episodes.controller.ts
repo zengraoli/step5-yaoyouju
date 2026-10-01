@@ -1,13 +1,14 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { EpisodesService } from './episodes.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { RequireConsent } from '../../common/require-consent.decorator';
 
 class CreateEpisodeDto {
   @ApiProperty({ description: '病程标题', example: '久坐后腰痛' })
-  @IsString()
+  @IsString({ message: '病程标题应为文本' })
+  @MaxLength(50, { message: '病程标题不能超过 50 个字' })
   title!: string;
 
   @ApiProperty({ description: '起病日期 YYYY-MM-DD，可为空=尚未确认', required: false, nullable: true })
@@ -17,7 +18,7 @@ class CreateEpisodeDto {
 
   @ApiProperty({ description: '起病确定度', enum: ['已确认', '尚未确认', '有冲突'], required: false })
   @IsOptional()
-  @IsIn(['已确认', '尚未确认', '有冲突'])
+  @IsIn(['已确认', '尚未确认', '有冲突'], { message: '起病确定度必须是：已确认 / 尚未确认 / 有冲突' })
   onset_certainty?: string;
 }
 
@@ -34,18 +35,18 @@ class UpdateEpisodeDto {
 
   @ApiProperty({ description: '起病确定度', enum: ['已确认', '尚未确认', '有冲突'], required: false })
   @IsOptional()
-  @IsIn(['已确认', '尚未确认', '有冲突'])
+  @IsIn(['已确认', '尚未确认', '有冲突'], { message: '起病确定度必须是：已确认 / 尚未确认 / 有冲突' })
   onset_certainty?: string;
 
   @ApiProperty({ description: '病程状态', enum: ['进行中', '已结束'], required: false })
   @IsOptional()
-  @IsIn(['进行中', '已结束'])
+  @IsIn(['进行中', '已结束'], { message: '病程状态必须是：进行中 / 已结束' })
   status?: string;
 }
 
 class CreateEventDto {
   @ApiProperty({ description: '事件类型', enum: ['报告', '症状', '医嘱', '行动', '结局'] })
-  @IsIn(['报告', '症状', '医嘱', '行动', '结局'])
+  @IsIn(['报告', '症状', '医嘱', '行动', '结局'], { message: '事件类型必须是：报告 / 症状 / 医嘱 / 行动 / 结局' })
   event_type!: string;
 
   @ApiProperty({ description: '发生时间（UTC ISO8601）' })
@@ -53,7 +54,7 @@ class CreateEventDto {
   occurred_at!: string;
 
   @ApiProperty({ description: '来源类型', enum: ['自述', '报告原文', '医生记录'] })
-  @IsIn(['自述', '报告原文', '医生记录'])
+  @IsIn(['自述', '报告原文', '医生记录'], { message: '来源类型必须是：自述 / 报告原文 / 医生记录' })
   source_type!: string;
 
   @ApiProperty({ description: '原文片段', required: false, nullable: true })
@@ -63,7 +64,7 @@ class CreateEventDto {
 
   @ApiProperty({ description: '核实状态', enum: ['已确认', '尚未确认', '有冲突'], required: false })
   @IsOptional()
-  @IsIn(['已确认', '尚未确认', '有冲突'])
+  @IsIn(['已确认', '尚未确认', '有冲突'], { message: '核实状态必须是：已确认 / 尚未确认 / 有冲突' })
   verify_status?: string;
 }
 
@@ -80,12 +81,12 @@ class CorrectEventDto {
 
   @ApiProperty({ description: '来源类型', enum: ['自述', '报告原文', '医生记录'], required: false })
   @IsOptional()
-  @IsIn(['自述', '报告原文', '医生记录'])
+  @IsIn(['自述', '报告原文', '医生记录'], { message: '来源类型必须是：自述 / 报告原文 / 医生记录' })
   source_type?: string;
 
   @ApiProperty({ description: '核实状态', enum: ['已确认', '尚未确认', '有冲突'], required: false })
   @IsOptional()
-  @IsIn(['已确认', '尚未确认', '有冲突'])
+  @IsIn(['已确认', '尚未确认', '有冲突'], { message: '核实状态必须是：已确认 / 尚未确认 / 有冲突' })
   verify_status?: string;
 }
 
@@ -103,7 +104,7 @@ class LogTodayDto {
 
   @ApiProperty({ description: '计划活动完成情况', enum: ['完成', '部分完成', '未完成', '尚未确认'], required: false, nullable: true })
   @IsOptional()
-  @IsIn(['完成', '部分完成', '未完成', '尚未确认'])
+  @IsIn(['完成', '部分完成', '未完成', '尚未确认'], { message: '计划活动完成情况必须是：完成 / 部分完成 / 未完成 / 尚未确认' })
   planned_activity_done?: string | null;
 
   @ApiProperty({ description: '睡眠影响程度 0-3', required: false, nullable: true })
@@ -119,7 +120,7 @@ class LogTodayDto {
 
   @ApiProperty({ description: '腿部变化', enum: ['有', '无', '尚未确认'], required: false, nullable: true })
   @IsOptional()
-  @IsIn(['有', '无', '尚未确认'])
+  @IsIn(['有', '无', '尚未确认'], { message: '腿部变化必须是：有 / 无 / 尚未确认' })
   leg_change?: string | null;
 
   @ApiProperty({ description: '今天是否选择跳过记录', required: false })

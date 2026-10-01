@@ -57,8 +57,12 @@ export class ApiException extends HttpException {
 }
 
 function httpStatus(code: ErrorCode): number {
+  // 错误码与 HTTP 状态不是同一套顺序，先按语义精确映射，避免 50300 被当成 500
+  if (code === ErrorCode.SERVICE_UNAVAILABLE) return HttpStatus.SERVICE_UNAVAILABLE;
+  if (code === ErrorCode.SAFETY_SEEK_CARE || code === ErrorCode.SAFETY_STOP_PERSONAL) {
+    return HttpStatus.CONFLICT;
+  }
   if (code >= ErrorCode.INTERNAL) return HttpStatus.INTERNAL_SERVER_ERROR;
-  if (code >= ErrorCode.SERVICE_UNAVAILABLE) return HttpStatus.SERVICE_UNAVAILABLE;
   if (code >= ErrorCode.CONFLICT) return HttpStatus.CONFLICT;
   if (code >= ErrorCode.NOT_FOUND) return HttpStatus.NOT_FOUND;
   if (code >= ErrorCode.FORBIDDEN) return HttpStatus.FORBIDDEN;

@@ -127,9 +127,8 @@ export class ModelReleasesService {
     if (row.status === '生效') {
       throw new ApiException(ErrorCode.CONFLICT, '该发布已生效，无需提升');
     }
-    if (row.status === '已回滚') {
-      throw new ApiException(ErrorCode.CONFLICT, '已回滚的发布不能重新提升');
-    }
+    // 已回滚的发布允许重新提升（验收反馈：原生效版本被新版本顶替后要能回到上一版），
+    // 但仍必须先通过评测门禁。
 
     // 评测门禁：走向生效前必须全部必需评测集的最近一次运行通过
     const gate = this.evalService.gateStatus(id);
@@ -175,6 +174,14 @@ export class ModelReleasesService {
     return others.length === 0;
   }
 
+  /** 是否存在另一个「已过评测门禁」的发布可以在当前生效发布回滚后顶上 */
+  hasRollbackFallback(id: string): boolean {
+    const rows = this.db.app
+      .prepare(`SELECT id FROM model_release WHERE status<>'已回滚' AND id<>?`)
+      .all(id) as { id: string }[];
+    return rows.some((r) => this.evalService.gateStatus(r.id).passed);
+  }
+
   /** 发布门禁状态（控制器在校验双人确认前先看门禁，避免无意义的确认单） */
   gateStatusOf(id: string): GateStatus {
     this.require(id);
@@ -191,15 +198,24 @@ export class ModelReleasesService {
     if (row.status === '已回滚') {
       throw new ApiException(ErrorCode.CONFLICT, '该发布已回滚，无需重复回滚');
     }
-    // 不能把唯一生效的发布回滚掉：否则新分析会全部失败（验收反馈第 33 条）
+    // 回滚唯一生效的发布会让新分析全部失败：必须先有另一个「已过门禁」的发布可以顶上
     if (row.status === '生效') {
       const others = this.db.app
         .prepare(`SELECT id FROM model_release WHERE status='生效' AND id<>?`)
         .all(id) as { id: string }[];
       if (others.length === 0) {
-        throw new ApiException(
-          ErrorCode.CONFLICT,
-          '这是唯一生效的发布，回滚后新分析会全部失败；请先把另一个通过门禁的发布提升为生效',
+        const fallback = this.db.app
+          .prepare(`SELECT id FROM model_release WHERE status<>'已回滚' AND id<>?`)
+          .all(id) as { id: string }[];
+        const ready = fallback.find((f) => this.evalService.gateStatus(f.id).passed);
+        if (!ready) {
+          throw new ApiException(
+            ErrorCode.CONFLICT,
+            '这是唯一生效的发布，回滚后新分析会全部失败；请先把另一个通过评测门禁的发布提升为生效后再回滚',
+          );
+        }
+        this.logger.warn(
+          `[model_release] 回滚唯一生效发布 ${id}，系统内已存在通过门禁的发布 ${ready.id} 可顶上`,
         );
       }
     }

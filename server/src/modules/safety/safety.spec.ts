@@ -16,6 +16,7 @@ import {
   isReassurance,
   isWorryLoop,
   REASSURANCE_STREAK,
+  normalizeSafetyText,
 } from './safety.rules';
 
 describe('T04 安全规则引擎', () => {
@@ -59,6 +60,7 @@ describe('T04 安全规则引擎', () => {
       ['RF-07', '有肿瘤病史，新发腰痛'],
       ['RF-08', '摔了一跤后腰痛加重'],
       ['RF-09', '左脚背发麻'],
+      ['RF-10', '腰疼得受不了'],
     ];
     for (const [code, text] of cases) {
       const r = safety.checkRedFlags({ texts: [text] });
@@ -66,7 +68,7 @@ describe('T04 安全规则引擎', () => {
     }
     // 规则编号连续且带版本
     expect(RED_FLAG_RULES.map((r) => r.code)).toEqual([
-      'RF-01', 'RF-02', 'RF-03', 'RF-04', 'RF-05', 'RF-06', 'RF-07', 'RF-08', 'RF-09',
+      'RF-01', 'RF-02', 'RF-03', 'RF-04', 'RF-05', 'RF-06', 'RF-07', 'RF-08', 'RF-09', 'RF-10',
     ]);
     expect(RULE_SET_VERSION).toMatch(/^safety-rules-v\d/);
   });
@@ -104,7 +106,7 @@ describe('T04 安全规则引擎', () => {
     expect(after).toBe(before);
   });
 
-  it('服务范围校验：诊断 / 手术 / 用药越界明确不答并转为复诊问题', () => {
+  it('服务范围校验：诊断 / 手术 / 用药 / 治疗 / 预后越界明确不答并转为复诊问题', () => {
     const diag = safety.checkScope('我是不是椎间盘突出了？');
     expect(diag?.category).toBe('诊断');
     expect(diag?.reply).toContain('不能判断');
@@ -120,7 +122,7 @@ describe('T04 安全规则引擎', () => {
 
     // 范围内问题放行
     expect(safety.checkScope('报告里写的 L5/S1 是什么意思？')).toBeNull();
-    expect(OUT_OF_SCOPE_RULES.map((r) => r.category)).toEqual(['诊断', '手术', '用药', '预后']);
+    expect(OUT_OF_SCOPE_RULES.map((r) => r.category)).toEqual(['诊断', '手术', '用药', '治疗', '预后']);
   });
 
   it('evaluateQuestion 合并范围校验与红旗校验', () => {
@@ -130,16 +132,47 @@ describe('T04 安全规则引擎', () => {
   });
 });
 
-describe('T04b 红旗说法的否定识别（验收反馈第 2 条）', () => {
+describe('T04b 红旗说法覆盖面（验收反馈：口语 / 错别字 / 语序变化都要命中）', () => {
   const flagged = (text: string) =>
     RED_FLAG_RULES.filter((r) => matchesRedFlagRule(r, text)).map((r) => r.code);
 
-  it('口语 / 错别字 / App 文案里的红旗说法都要命中', () => {
+  it('自编口语说法逐条命中', () => {
+    const cases: [string, string][] = [
+      ['RF-03', '昨晚不小心尿裤子了自己都没感觉到'],
+      ['RF-03', '大便失控了两回'],
+      ['RF-03', '屎尿都兜不住了'],
+      ['RF-03', '小便失噤好几次了'],
+      ['RF-03', '这两天憋不住尿裤子都湿了'],
+      ['RF-03', '大便拉在身上了自己没察觉'],
+      ['RF-01', '屁股中间那块麻麻的没感觉'],
+      ['RF-01', '屁股中间那一圈摸着没感觉了'],
+      ['RF-01', '坐马桶的时候屁股底下像隔了一层布'],
+      ['RF-02', '左脚背翘不起来了'],
+      ['RF-02', '右脚抬不起来走路拖着脚'],
+      ['RF-02', '双下肢肌力进行性下降'],
+      ['RF-02', '腿麻木无力加重了'],
+      ['RF-02', '双腿突然没力气站不起来'],
+      ['RF-06', '腰疼还一直发高烧39度'],
+      ['RF-07', '我三年前得过乳腺癌'],
+      ['RF-07', '有肺癌病史最近腰痛越来越重'],
+      ['RF-05', '没减肥体重却掉了七八公斤'],
+      ['RF-10', '疼得受不了'],
+      ['RF-10', '腰疼得死去活来'],
+      ['RF-04', '夜里疼得睡不着'],
+      ['RF-09', '走路越来越不稳'],
+    ];
+    for (const [code, text] of cases) {
+      expect(flagged(text)).toContain(code);
+    }
+  });
+
+  it('书面 / 口语 / 错别字基础说法命中', () => {
     const cases: [string, string][] = [
       ['RF-01', '会阴部发麻'],
       ['RF-01', '会阴区或鞍区麻木'],
       ['RF-01', '屁股有点麻'],
       ['RF-01', '会音麻木'],
+      ['RF-01', '肛门周围发木'],
       ['RF-03', '尿不出来'],
       ['RF-02', '腿越来越没力气'],
       ['RF-02', '两条腿越来越没劲'],
@@ -179,25 +212,45 @@ describe('T04b 红旗说法的否定识别（验收反馈第 2 条）', () => {
       '蹲久了腿有点酸',
       '三个月前来过',
       '久坐 4 小时后腰痛，起身活动可缓解',
+      '会阴部没有麻木，大小便也正常',
+      '会阴部没有麻木，大小便也正常，可以正常上班',
+      '孩子发烧了我请假在家照顾腰有点酸',
+      '我老婆前几天发烧了我腰有点疼',
+      '弟弟摔了一跤我自己腰痛是久坐引起的',
+      '门诊记录：……无大小便异常，会阴区无麻木，下肢无进行性无力。诊断：腰肌劳损。',
+      '患者否认大小便失禁及会阴部麻木，查体未见异常，诊断：腰肌劳损。',
+      '腰椎 MRI 平扫：腰椎序列正常，生理曲度存在，L4/5 椎间盘轻度退变。',
+      '影像所见：硬膜囊前脂肪间隙清晰，双侧椎间孔未见明显狭窄。',
+      '大小便正常，无排尿排便困难',
+      '下肢肌力正常，病理征阴性',
+      '无压痛，无叩击痛，活动度可',
+      '疼痛VAS 3分，卧床休息后可缓解',
     ];
     for (const text of negatives) {
       expect(flagged(text)).toEqual([]);
     }
   });
 
-  it('越界提问：诊断 / 手术 / 用药 / 预后都要拒答', () => {
+  it('越界提问：诊断 / 手术 / 用药 / 治疗 / 预后都要拒答', () => {
     expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-01')!, '我是不是腰椎间盘突出症？')).toBe(true);
     expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-01')!, '帮我确定一下是哪种病')).toBe(true);
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-01')!, '这算不算坐骨神经痛')).toBe(true);
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-01')!, '我这是腰肌劳损还是突出')).toBe(true);
     expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-03')!, '我要不要去打封闭针')).toBe(true);
-    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-03')!, '塞来昔布一天吃两次可以吗')).toBe(true);
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-03')!, '可以贴膏药吗，贴哪种好')).toBe(true);
     expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-04')!, '我不会瘫痪吧')).toBe(true);
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-04')!, '我多久能好')).toBe(true);
+    expect(matchesScopeRule(OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-04')!, '以后会不会复发')).toBe(true);
     // 范围内的问题放行
     expect(OUT_OF_SCOPE_RULES.some((r) => matchesScopeRule(r, '我能不能多坐一会儿？'))).toBe(false);
     expect(OUT_OF_SCOPE_RULES.some((r) => matchesScopeRule(r, '报告里写的 L5/S1 是什么意思？'))).toBe(false);
   });
 
-  it('连续 4 次问「不会瘫痪吧」会结束本轮', () => {
+  it('求保证类说法识别（含「是不是没什么大事」）', () => {
     expect(isWorryLoop('不会瘫痪吧')).toBe(true);
+    expect(isReassurance('是不是没什么大事')).toBe(true);
+    expect(isReassurance('我这应该没什么大事吧')).toBe(true);
+    expect(normalizeSafetyText('大小便失禁')).toBe('大小便失禁');
     expect(REASSURANCE_STREAK).toBe(3);
   });
 });

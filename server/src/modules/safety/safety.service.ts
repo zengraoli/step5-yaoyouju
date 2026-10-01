@@ -105,10 +105,10 @@ export class SafetyService {
     return null;
   }
 
-  /** 供问与解释（T08）使用：先范围校验，再红旗校验 */
-  evaluateQuestion(question: string, user_id?: string): SafetyResult {
+  /** 供问与解释（T08）使用：先范围校验，再红旗校验；命中红旗写安全事件并关联病程 */
+  evaluateQuestion(question: string, user_id?: string, episode_id?: string): SafetyResult {
     const out_of_scope = this.checkScope(question);
-    const result = this.checkRedFlags({ user_id, texts: [question] });
+    const result = this.checkRedFlags({ user_id, episode_id, texts: [question] });
     return { ...result, out_of_scope };
   }
 

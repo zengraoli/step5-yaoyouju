@@ -25,6 +25,9 @@ import { ConfirmationService } from '../admin/confirmation.service';
 export const HELP_TYPES = ['看懂了', '知道下一步', '都不好'] as const;
 export type HelpType = (typeof HELP_TYPES)[number];
 
+/** 初筛结论（运营编辑 / 超级管理可做，不看原文） */
+export const TRIAGE_ACTIONS = ['待临床复核', '无需处理', '关闭'] as const;
+
 /** 举报分类（示例值，允许其他中文描述） */
 export const REPORT_CATEGORIES = ['解释与报告不符', '来源缺失', '内容出错', '其他'] as const;
 
@@ -210,6 +213,11 @@ type ContentItemRow = {
 /** 单条授权有效期：7 天（到期自动失效，可提前撤回） */
 export const AUTHORIZE_TTL_DAYS = 7;
 const AUTHORIZE_TTL_MS = AUTHORIZE_TTL_DAYS * 24 * 3600 * 1000;
+
+/** 文本里的完整手机号脱敏（后台任一角色都不应看到） */
+function maskPhone(text: string): string {
+  return text.replace(/(1[3-9]\d)\d{4}(\d{4})/g, '$1****$2');
+}
 
 /** 用户原始内容里的手机号脱敏（后台拿到授权也不应看到完整手机号） */
 function maskSensitive<T>(value: T): T {
@@ -429,15 +437,15 @@ export class FeedbackService {
    * 后台详情：四类版本、受影响范围、处理记录。
    * 用户原始内容默认隐藏（「未授权，不可查看」），单条授权后可见。
    */
-  detail(id: string, actorId?: string): FeedbackDetail {
+  detail(id: string, actorId?: string, canViewRaw = true): FeedbackDetail {
     const row = this.load(id);
-    // 每次读取原文详情都写审计（B10「每次读取写审计」）
+    // 每次读取举报详情都写审计（B10「每次读取写审计」；验收反馈第 32 条）
     if (actorId) {
       this.audit.append(actorId, 'feedback.read', `feedback:${id}`, { severity: row.severity });
     }
     return {
       ...this.queueItem(row),
-      raw_content: this.rawContentOf(row),
+      raw_content: canViewRaw ? this.rawContentOf(row) : UNAUTHORIZED_RAW_CONTENT,
       authorization: this.authorizationOf(row),
       handling: this.handlingRecords(id),
       redline: FEEDBACK_REDLINE,
@@ -522,6 +530,7 @@ export class FeedbackService {
       name: row?.name ?? '未知账号',
       role: { id: '', name: row?.role_name ?? '未知角色' },
       permissions: row ? permissionsOf(row.role_name) : [],
+      mfa_enabled: true,
     };
   }
 
@@ -581,7 +590,39 @@ export class FeedbackService {
   }
 
   private queueItem(row: FeedbackRow): FeedbackQueueItem {
-    return { ...this.view(row), affected_users: this.affectedUsers(row) };
+    const item = { ...this.view(row), affected_users: this.affectedUsers(row) };
+    // 后台任一角色都不应看到完整手机号（含举报原话里的联系方式）
+    return {
+      ...item,
+      description: item.description ? maskPhone(item.description) : null,
+      unsolved_question: item.unsolved_question ? maskPhone(item.unsolved_question) : null,
+    };
+  }
+
+  /** 举报初筛（运营编辑 / 超级管理）：只流转状态，不看原文、不做临床复核 */
+  triage(id: string, actorId: string, input: { action: string; comment: string }): FeedbackDetail {
+    const row = this.load(id);
+    const comment = (input.comment ?? '').trim();
+    if (!comment) throw new ApiException(ErrorCode.BAD_REQUEST, '请填写初筛记录');
+    if (!TRIAGE_ACTIONS.includes(input.action as (typeof TRIAGE_ACTIONS)[number])) {
+      throw new ApiException(ErrorCode.BAD_REQUEST, `初筛结论必须是：${TRIAGE_ACTIONS.join(' / ')}`);
+    }
+    const status = input.action;
+    this.db.app.prepare('UPDATE feedback SET status=? WHERE id=?').run(status, id);
+    this.db.app
+      .prepare(
+        `INSERT INTO feedback_handling (id, feedback_id, actor_id, action, comment, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(randomUUID(), id, actorId, `初筛：${input.action}`, comment, new Date().toISOString());
+    this.audit.append(actorId, 'feedback.triage', `feedback:${id}`, {
+      action: input.action,
+      status,
+      comment,
+      severity: row.severity,
+    });
+    this.logger.log(`[feedback] 举报 ${id.slice(0, 8)}… 初筛：${input.action}`);
+    return this.detail(id, actorId);
   }
 
   private rawContentOf(row: FeedbackRow): RawContentSnapshot | typeof UNAUTHORIZED_RAW_CONTENT {

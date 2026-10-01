@@ -16,5 +16,6 @@ import { AdminContentsController } from './admin-contents.controller';
   imports: [DbModule, SwitchesModule, ConfirmationModule],
   controllers: [ContentsController, AdminContentsController],
   providers: [ContentsService],
+  exports: [ContentsService],
 })
 export class ContentsModule {}

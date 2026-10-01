@@ -118,6 +118,7 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
       name: row.name,
       role: { id: '', name: row.role_name },
       permissions: permissionsOf(row.role_name),
+      mfa_enabled: true,
     };
   }
 

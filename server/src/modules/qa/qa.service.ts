@@ -212,7 +212,8 @@ export class QaService {
     const userMessageId = this.insertMessage(sessionId, 'user', question, null, false, null);
 
     // 2. 安全规则引擎：红旗优先（命中即就医提示，本轮不再生成解释；消息仍保存为系统提示）
-    const safety = this.safety.evaluateQuestion(question, userId);
+    //    安全事件关联到本会话的病程：之后该病程提交分析必须被红旗拦截（验收反馈第 3 条）
+    const safety = this.safety.evaluateQuestion(question, userId, session.episode_id ?? undefined);
     if (safety.matched.length > 0) {
       const notice = this.buildNotice(safety);
       this.insertMessage(sessionId, 'assistant', notice.body, null, false, null);

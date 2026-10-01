@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { CurrentAdmin } from '../../common/current-admin.decorator';
 import { AdminContext } from './admin-auth.service';
+import { AuditService } from '../../common/audit.service';
 import { AdminAuditService, AuditLogPage, AuditExportRequest } from './admin-audit.service';
 import { RequirePermission } from './permission.decorator';
 
@@ -64,12 +65,20 @@ class ExportApproveDto {
 @Controller('admin/audit')
 @RequirePermission('audit.view')
 export class AdminAuditController {
-  constructor(private readonly adminAudit: AdminAuditService) {}
+  constructor(
+    private readonly adminAudit: AdminAuditService,
+    private readonly audit: AuditService,
+  ) {}
 
   /** 列表：时间 / 操作人 / 角色 / 动作 / 对象 / 请求 ID / 哈希 */
   @ApiOperation({ summary: '审计日志列表（筛选 + 分页）' })
   @Get()
-  list(@Query() query: AuditQueryDto): AuditLogPage {
+  list(@CurrentAdmin() admin: AdminContext, @Query() query: AuditQueryDto): AuditLogPage {
+    // 查看审计日志本身也要留痕（验收反馈第 32 条）
+    this.audit.append(admin.id, 'audit.view', 'audit_log:list', {
+      actor: query.actor ?? null,
+      action: query.action ?? null,
+    });
     return this.adminAudit.list({
       actor: query.actor,
       action: query.action,
