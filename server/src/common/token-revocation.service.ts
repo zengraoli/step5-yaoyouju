@@ -51,7 +51,7 @@ export class TokenRevocationService {
     this.app
       .prepare(
         `INSERT INTO revoked_token (key, kind, expires_at, created_at) VALUES (?, ?, NULL, ?)
-         ON CONFLICT(key) DO UPDATE SET expires_at = NULL`,
+         ON CONFLICT(key) DO UPDATE SET expires_at = NULL, created_at = excluded.created_at`,
       )
       .run(key, kind, now);
     void revokedBefore;

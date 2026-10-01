@@ -94,6 +94,13 @@ export const CONFIRMATION_RULES: Record<string, ConfirmationRule> = {
     distinct_roles: false,
     requirement: '超级管理员发起 + 另一名超级管理员确认',
   },
+  'user.mfa_reset_super': {
+    label: '重置超级管理员动态验证码',
+    requester_roles: ['超级管理员'],
+    confirmer_roles: ['超级管理员'],
+    distinct_roles: false,
+    requirement: '超级管理员发起 + 另一名超级管理员确认',
+  },
   'feedback.report_handling': {
     label: '举报临床复核处置',
     requester_roles: ['临床审核', '超级管理员'],
@@ -476,6 +483,7 @@ export class ConfirmationService {
       'feedback.authorize': 'feedback.handle',
       'user.status': 'user.manage',
       'user.invite_super': 'user.manage',
+      'user.mfa_reset_super': 'user.manage',
       'feedback.report_handling': 'feedback.handle',
     };
     const need = requiredByAction[action];

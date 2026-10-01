@@ -236,7 +236,7 @@ export class EvidenceService implements EvidenceRetriever {
   }
 
   /** 新建证据文档（标题、来源类型、来源地址、许可、核实日期；可带原文） */
-  create(actorId: string | null, input: EvidenceDocInput): EvidenceDocDetail {
+  create(actorId: string | null, input: EvidenceDocInput, options: { canVerifyLicense?: boolean } = {}): EvidenceDocDetail {
     const title = (input.title ?? '').trim();
     if (!title) throw new ApiException(ErrorCode.BAD_REQUEST, '证据文档标题不能为空');
     const sourceType = (input.source_type ?? '').trim();
@@ -247,6 +247,11 @@ export class EvidenceService implements EvidenceRetriever {
       );
     }
     const verifiedAt = normalizeDate(input.verified_at, '核实日期');
+    // 许可 / 核实日期只有临床审核 / 超级管理可写；运营编辑新建的证据一律「待核实、不参与检索」
+    const canVerify = options.canVerifyLicense === true || this.actorCanVerify(actorId);
+    const license = canVerify ? input.license?.trim() || null : input.license?.trim() || null;
+    const finalLicense = canVerify ? license : null;
+    const finalVerifiedAt = canVerify ? verifiedAt : null;
     const id = randomUUID();
     const t = now();
     this.db.app
@@ -260,8 +265,8 @@ export class EvidenceService implements EvidenceRetriever {
         title,
         sourceType,
         input.source_url?.trim() || null,
-        input.license?.trim() || null,
-        verifiedAt,
+        finalLicense,
+        finalVerifiedAt,
         input.active === false ? 0 : 1,
         input.raw_text ?? null,
         t,
@@ -270,8 +275,8 @@ export class EvidenceService implements EvidenceRetriever {
       title,
       source_type: sourceType,
       source_url: input.source_url?.trim() || null,
-      license: input.license?.trim() || null,
-      verified_at: verifiedAt,
+      license: finalLicense,
+      verified_at: finalVerifiedAt,
       active: input.active !== false,
     });
     this.logger.log(`[evidence] ${actorId ?? 'system'} 新建证据文档 ${id}《${title}》（${sourceType}）`);

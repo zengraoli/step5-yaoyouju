@@ -46,6 +46,14 @@ class StatusDto {
   confirmation_id?: string;
 }
 
+class ResetMfaDto {
+  @ApiProperty({ description: '双人确认单 ID（重置其他超级管理员的 MFA 需另一名超级管理员确认）', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  confirmation_id?: string;
+}
+
 /**
  * 后台成员与权限（B10）：成员表、权限矩阵来源、邀请 / 停用 / 重置 MFA。
  * 业务逻辑见 AdminUsersService（供双人确认执行器复用）。
@@ -83,7 +91,7 @@ export class AdminUsersController {
   @ApiOperation({ summary: '重置 MFA（仅超级管理员；写审计；该账号下次登录需重新绑定）' })
   @RequirePermission('user.manage')
   @Post(':id/reset-mfa')
-  resetMfa(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
-    return this.users.resetMfa(admin, id);
+  resetMfa(@CurrentAdmin() admin: AdminContext, @Param('id') id: string, @Body() dto?: ResetMfaDto) {
+    return this.users.resetMfa(admin, id, dto?.confirmation_id);
   }
 }

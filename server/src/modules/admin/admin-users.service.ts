@@ -159,7 +159,7 @@ export class AdminUsersService {
     return { id, name: targetName, role: role.name, mfa: '未绑定', mfa_required: true };
   }
 
-  /** 停用 / 启用成员（超级管理员需双人确认；写审计） */
+  /** 停用 / 启用成员（超级管理员的停用与启用都需双人确认；写审计） */
   setStatus(admin: AdminContext, id: string, input: SetStatusInput) {
     const target = this.db.app.prepare('SELECT * FROM admin_user WHERE id = ?').get(id) as
       | { id: string; name: string; status: string }
@@ -170,30 +170,29 @@ export class AdminUsersService {
     if (!input.active && target.id === admin.id) {
       throw new ApiException(ErrorCode.FORBIDDEN, '不能停用当前登录账号');
     }
-    let confirmId: string | null = null;
-    if (!input.active) {
-      const roleName = this.roleNameOf(id);
-      if (roleName === '超级管理员') {
-        const gate = this.confirmations.prepare(
-          'user.status',
-          id,
-          target.name,
-          input.confirmation_id ? `另一人已确认停用 ${target.name}` : `停用超级管理员 ${target.name}`,
-          admin,
-          input.confirmation_id,
-          { active: false, reason: input.reason ?? '停用超级管理员' },
-        );
-        if (!gate.proceed) {
-          throw new ApiException(
-            ErrorCode.CONFLICT,
-            `已提交「停用超级管理员」双人确认申请（需${gate.confirmation?.requirement ?? '另一名超级管理员'}确认后生效）`,
-          );
-        }
-        confirmId = gate.confirmation?.id ?? null;
-      }
-    }
     if (target.status === (input.active ? 'active' : 'disabled')) {
       throw new ApiException(ErrorCode.CONFLICT, input.active ? '该成员已是启用状态' : '该成员已是停用状态');
+    }
+    const verb = input.active ? '启用' : '停用';
+    let confirmId: string | null = null;
+    // 超级管理员的停用与启用都属于高风险：必须另请一名超级管理员双人确认（验收反馈第 6、23 条）
+    if (this.roleNameOf(id) === '超级管理员') {
+      const gate = this.confirmations.prepare(
+        'user.status',
+        id,
+        target.name,
+        input.confirmation_id ? `另一人已确认${verb} ${target.name}` : `${verb}超级管理员 ${target.name}`,
+        admin,
+        input.confirmation_id,
+        { active: input.active, reason: input.reason ?? `${verb}超级管理员` },
+      );
+      if (!gate.proceed) {
+        throw new ApiException(
+          ErrorCode.CONFLICT,
+          `已提交「${verb}超级管理员」双人确认申请（需${gate.confirmation?.requirement ?? '另一名超级管理员'}确认后生效）`,
+        );
+      }
+      confirmId = gate.confirmation?.id ?? null;
     }
     const before = target.status;
     this.db.app.prepare('UPDATE admin_user SET status = ? WHERE id = ?').run(input.active ? 'active' : 'disabled', id);
@@ -207,20 +206,42 @@ export class AdminUsersService {
       to: input.active ? 'active' : 'disabled',
       name: target.name,
     });
-    this.logger.log(`[admin-users] ${admin.name} ${input.active ? '启用' : '停用'}成员 ${target.name}`);
+    this.logger.log(`[admin-users] ${admin.name} ${verb}成员 ${target.name}`);
     return { id, active: input.active };
   }
 
-  /** 重置 MFA（该账号下次登录需重新绑定；立即吊销令牌） */
-  resetMfa(admin: AdminContext, id: string) {
+  /** 重置 MFA（该账号下次登录需重新绑定；立即吊销令牌）。重置其他超级管理员需双人确认 */
+  resetMfa(admin: AdminContext, id: string, confirmationId?: string) {
     const target = this.db.app.prepare('SELECT id, name FROM admin_user WHERE id = ?').get(id) as
       | { id: string; name: string }
       | undefined;
     if (!target) {
       throw new ApiException(ErrorCode.NOT_FOUND, '成员不存在');
     }
+    let confirmId: string | null = null;
+    if (id !== admin.id && this.roleNameOf(id) === '超级管理员') {
+      const gate = this.confirmations.prepare(
+        'user.mfa_reset_super',
+        id,
+        target.name,
+        confirmationId
+          ? `另一人已确认重置 ${target.name} 的动态验证码`
+          : `重置超级管理员 ${target.name} 的动态验证码`,
+        admin,
+        confirmationId,
+        {},
+      );
+      if (!gate.proceed) {
+        throw new ApiException(
+          ErrorCode.CONFLICT,
+          `已提交「重置超级管理员动态验证码」双人确认申请（需${gate.confirmation?.requirement ?? '另一名超级管理员'}确认后生效）`,
+        );
+      }
+      confirmId = gate.confirmation?.id ?? null;
+    }
     this.db.app.prepare('UPDATE admin_user SET mfa_enabled = 0, mfa_bonded_at = NULL WHERE id = ?').run(id);
     this.adminAuth.revokeTokensOf(id);
+    if (confirmId) this.confirmations.markApplied(confirmId);
     this.audit.append(admin.id, 'admin_user.reset_mfa', `admin_user:${id}`, { name: target.name });
     this.logger.log(`[admin-users] ${admin.name} 重置了 ${target.name} 的 MFA`);
     return { id, mfa: '未绑定', mfa_enabled: false };

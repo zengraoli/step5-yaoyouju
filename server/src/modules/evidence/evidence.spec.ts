@@ -275,7 +275,7 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
       caught(() => evidence.create(editor(), { title: 'x', source_type: '维基百科' })).message,
     ).toContain('来源类型必须是');
 
-    const created = evidence.create(editor(), {
+    const created = evidence.create(clinician(), {
       title: '《演示新增证据（T11）》',
       source_type: '研究',
       source_url: 'local://evidence/t11-new',
@@ -289,6 +289,16 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
     expect(created.chunk_count).toBe(0);
     expect(created.ingest_status).toBe('待切分');
     expect(created.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+
+    // 运营编辑新建的证据不写许可 / 核实日期（只有可引用且已核实才参与检索；验收反馈第 9 条）
+    const byEditor = evidence.create(editor(), {
+      title: '《运营编辑新建（T11）》',
+      source_type: '研究',
+      license: '可引用',
+      verified_at: '2026-09-20',
+    });
+    expect(byEditor.license).toBeNull();
+    expect(byEditor.verified_at).toBeNull();
 
     // 审计写入
     const audit = db.app
@@ -519,13 +529,15 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
   });
 
   it('停用后搜不到：active=0 的文档片段被排除，且立即生效', () => {
-    // 建一篇只含独特关键词的证据并入库
-    const doc = evidence.create(editor(), {
+    // 建一篇只含独特关键词的证据并入库（可引用 + 已核实才参与检索）
+    const doc = evidence.create(clinician(), {
       title: '《演示停用检索（T11）》',
       source_type: '研究',
+      license: '可引用',
+      verified_at: '2026-09-01',
       raw_text: `${LONG_TEXT}\n${UNIQUE_MARK}：本句包含只在本文档出现的内容，用于验证停用后检索不到。`,
     });
-    evidence.ingest(editor(), doc.id);
+    evidence.ingest(clinician(), doc.id);
 
     // 启用时：独特关键词只命中这一篇
     const before = search(UNIQUE_MARK, 10);

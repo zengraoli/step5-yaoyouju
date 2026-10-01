@@ -214,15 +214,42 @@ type ContentItemRow = {
 export const AUTHORIZE_TTL_DAYS = 7;
 const AUTHORIZE_TTL_MS = AUTHORIZE_TTL_DAYS * 24 * 3600 * 1000;
 
-/** 文本里的完整手机号脱敏（后台任一角色都不应看到） */
+/** 全角数字 → 半角（用于手机号识别） */
+function toHalfDigits(text: string): string {
+  return text.replace(/[\uFF10-\uFF19]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
+}
+
+const CN_NUM: Record<string, string> = {
+  '\u5E7A': '1', '\u3007': '0', '\u4E00': '1', '\u4E8C': '2', '\u4E24': '2', '\u4E09': '3',
+  '\u56DB': '4', '\u4E94': '5', '\u516D': '6', '\u4E03': '7', '\u516B': '8', '\u4E5D': '9',
+};
+const NUM_CHARS = Object.keys(CN_NUM).join('');
+/** 数字分隔符（空格 / 横线 / 点 / 全角空格 / 全角横线） */
+const SEP = '[\\s.\\-\u3000\uFF0D]*';
+/** 大陆手机号（1[3-9] + 9 位），允许分隔符与 +86 前缀 */
+const CN_MOBILE_RE = new RegExp(`(?:\\+?86)?${SEP}(1[3-9]${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d)`);
+/** 汉字数字手机号（幺/一 + [3-9] + 9 位汉字数字） */
+const CN_MOBILE_CN_RE = new RegExp(`[\u5E7A\u4E00][\u4E09\u56DB\u4E94\u4E03\u516B\u4E5D][${NUM_CHARS}]{9}`);
+
+/** 文本里的手机号脱敏（后台任一角色都不应看到；兼容间隔 / 横线 / 全角 / +86 / 汉字数字） */
 function maskPhone(text: string): string {
-  return text.replace(/(1[3-9]\d)\d{4}(\d{4})/g, '$1****$2');
+  if (!text) return text;
+  let out = toHalfDigits(text);
+  out = out.replace(new RegExp(CN_MOBILE_RE.source, 'g'), (m) => {
+    const core = m.replace(/\D/g, '').slice(-11);
+    return `${core.slice(0, 3)}****${core.slice(7)}`;
+  });
+  out = out.replace(new RegExp(CN_MOBILE_CN_RE.source, 'g'), (m) => {
+    const core = [...m].map((c) => CN_NUM[c] ?? '').join('');
+    return `${core.slice(0, 3)}****${core.slice(7)}`;
+  });
+  return out;
 }
 
 /** 用户原始内容里的手机号脱敏（后台拿到授权也不应看到完整手机号） */
 function maskSensitive<T>(value: T): T {
   const json = JSON.stringify(value) ?? '""';
-  const masked = json.replace(/(1[3-9]\d)\d{4}(\d{4})/g, '$1****$2');
+  const masked = maskPhone(json);
   return JSON.parse(masked) as T;
 }
 
@@ -630,7 +657,8 @@ export class FeedbackService {
       severity: row.severity,
     });
     this.logger.log(`[feedback] 举报 ${id.slice(0, 8)}… 初筛：${input.action}`);
-    return this.detail(id, actorId);
+    // 初筛回复不得带用户原文快照（运营编辑只流转状态，不看原文）
+    return this.detail(id, actorId, false);
   }
 
   private rawContentOf(row: FeedbackRow): RawContentSnapshot | typeof UNAUTHORIZED_RAW_CONTENT {

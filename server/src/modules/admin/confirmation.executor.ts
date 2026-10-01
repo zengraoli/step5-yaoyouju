@@ -68,6 +68,8 @@ export class ConfirmationExecutor {
         });
       case 'user.invite_super':
         return this.users.createInvitedSuper(text(payload.name), claimed.id, payload, admin.id);
+      case 'user.mfa_reset_super':
+        return this.users.resetMfa(admin, claimed.target_id, claimed.id);
       case 'feedback.report_handling':
         return this.feedback.handle(claimed.target_id, admin.id, {
           action: text(payload.action) as never,
