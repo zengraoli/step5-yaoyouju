@@ -254,7 +254,7 @@ fun FeedbackScreen(
                                     )
                                     toastText = "已收到反馈，谢谢"
                                 } catch (e: Exception) {
-                                    toastText = e.message ?: "提交失败，请稍后重试"
+                                    toastText = e.userMessage()
                                 } finally {
                                     submitting = false
                                 }
@@ -349,7 +349,7 @@ fun FeedbackScreen(
                                     )
                                     toastText = "举报已提交，我们会尽快核实"
                                 } catch (e: Exception) {
-                                    toastText = e.message ?: "提交失败，请稍后重试"
+                                    toastText = e.userMessage()
                                 } finally {
                                     submitting = false
                                 }

@@ -612,7 +612,7 @@ private fun loadHomeData(
                 ),
             )
         } catch (e: Exception) {
-            onError(e.message ?: "首页数据加载失败")
+            onError(e.userMessage())
         }
     }
 }
@@ -637,7 +637,7 @@ private fun confirmEventInline(
             )
             onDone()
         } catch (e: Exception) {
-            onError(e.message ?: "确认失败，请稍后重试")
+            onError(e.userMessage())
         }
     }
 }
@@ -655,7 +655,7 @@ private fun createAnalysisInline(
             handleResponse(analysesApi.create(CreateAnalysisRequest(episodeId = episodeId)))
             onDone()
         } catch (e: Exception) {
-            onError(e.message ?: "分析任务提交失败，请稍后重试")
+            onError(e.userMessage())
         }
     }
 }

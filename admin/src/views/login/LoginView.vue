@@ -69,7 +69,9 @@ async function onSubmit() {
         <label class="field">
           <span class="field__label">账号</span>
           <span class="field__box">
-            <span class="field__icon" aria-hidden="true">👤</span>
+            <span class="field__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12.6a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4z" /><path d="M4.8 20.4c0-3.6 3.2-6 7.2-6s7.2 2.4 7.2 6" /></svg>
+            </span>
             <input v-model="name" class="field__input" type="text" placeholder="工作邮箱" autocomplete="username" />
           </span>
         </label>
@@ -77,7 +79,9 @@ async function onSubmit() {
         <label class="field">
           <span class="field__label">密码</span>
           <span class="field__box">
-            <span class="field__icon" aria-hidden="true">🔒</span>
+            <span class="field__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.4" width="14" height="9.6" rx="2" /><path d="M8.4 10.4V7.6a3.6 3.6 0 0 1 7.2 0v2.8" /></svg>
+            </span>
             <input v-model="password" class="field__input" type="password" placeholder="••••••••" autocomplete="current-password" />
           </span>
         </label>
@@ -85,7 +89,9 @@ async function onSubmit() {
         <label class="field">
           <span class="field__label">动态验证码（TOTP）</span>
           <span class="field__box">
-            <span class="field__icon" aria-hidden="true">🛡</span>
+            <span class="field__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 5 6v5.4c0 4.4 3 7.6 7 9.2 4-1.6 7-4.8 7-9.2V6z" /></svg>
+            </span>
             <input v-model="totp" class="field__input" type="text" inputmode="numeric" maxlength="6" placeholder="6 位验证码" />
           </span>
         </label>
@@ -96,7 +102,8 @@ async function onSubmit() {
       </form>
 
       <AppNotice type="info">
-        连续失败 5 次锁定 30 分钟；会话 30 分钟无操作过期；所有登录与敏感操作写入审计日志。
+        连续失败 5 次锁定 30 分钟；会话 30 分钟到期即失效；所有登录与敏感操作写入审计日志。
+        新成员首次登录需先绑定动态验证码（MFA）才能操作。
       </AppNotice>
 
       <p class="login-card__foot">忘记密码或未绑定 MFA？请联系超级管理员重置。</p>

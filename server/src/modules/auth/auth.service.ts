@@ -483,7 +483,11 @@ export class AuthService {
     const lockedUntil = fails >= MAX_CODE_FAILS ? Date.now() + LOCK_MS : (prev?.lockedUntil ?? 0);
     this.attempts.set(key, { fails, lockedUntil });
     if (lockedUntil > Date.now()) {
-      this.logger.warn(`[auth] ${key} 验证码连续输错 ${fails} 次，已临时锁定 15 分钟`);
+      // 日志里的手机号必须脱敏（全局约定：日志不出现完整手机号）
+      const shown = key.startsWith('del:')
+        ? `删除确认 ${FieldCrypto.maskPhone(key.slice(4))}`
+        : FieldCrypto.maskPhone(key);
+      this.logger.warn(`[auth] ${shown} 验证码连续输错 ${fails} 次，已临时锁定 15 分钟`);
     }
   }
 }

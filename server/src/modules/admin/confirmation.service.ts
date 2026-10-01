@@ -317,6 +317,7 @@ export class ConfirmationService {
     note: string | null,
     admin: AdminContext,
     confirmationId?: string | null,
+    payload: Record<string, unknown> = {},
   ): { proceed: boolean; confirmation: ConfirmationItem | null } {
     if (confirmationId) {
       const row = this.require(confirmationId);
@@ -330,7 +331,7 @@ export class ConfirmationService {
       }
       return { proceed: true, confirmation: this.byId(confirmationId) };
     }
-    const confirmation = this.request(action, targetId, {}, note, admin, targetLabel);
+    const confirmation = this.request(action, targetId, payload, note, admin, targetLabel);
     return { proceed: false, confirmation };
   }
 

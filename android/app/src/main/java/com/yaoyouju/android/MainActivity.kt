@@ -33,11 +33,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
-        // 启动时读取本地令牌：未登录直接进登录页（验收反馈第 17 条）
+        // 启动时读取本地令牌并用 /auth/me 校验：令牌已被服务端失效时直接进登录页，
+        // 不再带着旧令牌进首页后各页显示「手机号未确认 / 还没有同意记录」（验收反馈第 35 条）
         lifecycleScope.launch {
             val token = ServiceLocator.tokenStore.token.first()
             ServiceLocator.authRepository.restoreToken(token)
-            savedToken.value = token
+            savedToken.value = if (token.isBlank()) {
+                ""
+            } else {
+                try {
+                    ServiceLocator.authRepository.me()
+                    token
+                } catch (_: Exception) {
+                    ServiceLocator.authRepository.logout()
+                    ""
+                }
+            }
         }
         setContent {
             YaoyoujuTheme {

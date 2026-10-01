@@ -115,7 +115,7 @@ fun AnalysisScreen(
                         else -> delay(2000)
                     }
                 } catch (e: Exception) {
-                    errorText = e.message ?: "查询分析状态失败"
+                    errorText = e.userMessage()
                     loading = false
                     break
                 }
@@ -125,7 +125,7 @@ fun AnalysisScreen(
             try {
                 analysis = handleResponse(analysesApi.detail(analysisId))
             } catch (e: Exception) {
-                errorText = e.message ?: "分析加载失败"
+                errorText = e.userMessage()
             } finally {
                 loading = false
             }
@@ -143,7 +143,7 @@ fun AnalysisScreen(
                     errorText = "还没有病程记录"
                 }
             } catch (e: Exception) {
-                errorText = e.message ?: "分析加载失败"
+                errorText = e.userMessage()
             } finally {
                 loading = false
             }
@@ -422,7 +422,7 @@ fun AnalysisScreen(
                                 }
                                 toastText = "已保存到病程"
                             } catch (e: Exception) {
-                                toastText = e.message ?: "保存失败，请稍后重试"
+                                toastText = e.userMessage()
                             } finally {
                                 saving = false
                             }

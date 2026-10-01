@@ -168,20 +168,23 @@ async function ensureEpisode(): Promise<string> {
 }
 
 /** 结构化摘要：写入病程事件，并作为 POST /analyses 的症状变化参与红旗校验 */
+/**
+ * 结构化摘要：写入病程事件，并作为 POST /analyses 的症状变化参与红旗校验。
+ * 用紧凑单行记录（不在病程 / 一页分析里堆放问卷原文）；未回答的记为「尚未确认」。
+ */
 function buildSummary(): string {
-  const lines: string[] = ['关键变化确认（自述，尚未确认）：']
-  lines.push(`1. 与上次记录相比，最近腰痛或腿部症状有变化吗？${change.value || '尚未确认'}`)
+  const parts: string[] = ['关键变化确认（自述，尚未确认）：']
+  parts.push(`与上次相比：${change.value || '尚未确认'}`)
   const flags = redFlags.value.map((key) => RED_FLAG_LABELS[key] ?? key)
-  lines.push(`2. 最近是否出现以下任一情况？${flags.length > 0 ? flags.join('、') : '尚未确认'}`)
-  lines.push(`3. 疼痛或麻木主要涉及哪一侧？${side.value || '尚未确认'}`)
-  lines.push(`4. 这次症状大约从什么时候开始？${onsetDate.value || onsetChip.value || '尚未确认'}`)
+  parts.push(`需医生及时评估的情况：${flags.length > 0 ? flags.join('、') : '尚未确认'}`)
+  parts.push(`侧别：${side.value || '尚未确认'}`)
+  parts.push(`起病：${onsetDate.value || onsetChip.value || '尚未确认'}`)
   const noteTexts = NOTE_KEYS.map((key) => notes.value[key].trim()).filter((text) => text.length > 0)
-  if (noteTexts.length > 0) lines.push(`补充说明：${noteTexts.join('；')}`)
+  if (noteTexts.length > 0) parts.push(`补充：${noteTexts.join('；')}`)
   // 需要医生及时评估的信号（规范名，供安全规则校验；命中医治提示）
   const matches = matchTextsOfKeys(redFlags.value)
-  if (matches.length > 0) lines.push(`需要医生及时评估：${matches.join('、')}`)
-  lines.push('未回答的问题记录为「尚未确认」，不当作「没有」。')
-  return lines.join('\n')
+  if (matches.length > 0) parts.push(`信号：${matches.join('、')}`)
+  return parts.join('；')
 }
 
 /** 下一步：写入病程事件 → 进入 A04 选择主要困惑（分析在核对后生成） */

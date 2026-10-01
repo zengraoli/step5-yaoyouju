@@ -15,18 +15,27 @@ export interface RequestOptions {
 }
 
 export function getBaseUrl(): string {
-  const saved = localStorage.getItem(STORAGE_KEYS.baseUrl)
+  const saved = sessionStorage.getItem(STORAGE_KEYS.baseUrl)
   if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '')
   return DEFAULT_API_BASE_URL
 }
 
+/** 设置 API 基础地址（同一会话内生效） */
+export function setBaseUrl(url: string): void {
+  sessionStorage.setItem(STORAGE_KEYS.baseUrl, url.trim().replace(/\/+$/, ''))
+}
+
+/**
+ * 后台令牌存放策略：只放 sessionStorage（同一标签页会话内有效，关闭页面即失效），
+ * 不写 localStorage（验收反馈：后台令牌不应长期驻留本地存储）。
+ */
 export function getAdminToken(): string {
-  return localStorage.getItem(STORAGE_KEYS.adminToken) ?? ''
+  return sessionStorage.getItem(STORAGE_KEYS.adminToken) ?? ''
 }
 
 export function setAdminToken(token: string): void {
-  if (token) localStorage.setItem(STORAGE_KEYS.adminToken, token)
-  else localStorage.removeItem(STORAGE_KEYS.adminToken)
+  if (token) sessionStorage.setItem(STORAGE_KEYS.adminToken, token)
+  else sessionStorage.removeItem(STORAGE_KEYS.adminToken)
 }
 
 export async function request<T>(options: RequestOptions): Promise<T> {

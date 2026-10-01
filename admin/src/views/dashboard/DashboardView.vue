@@ -19,7 +19,18 @@ interface DashboardSummary {
   today: { date: string; analysis_total: number; analysis_done: number; analysis_failed: number; analysis_blocked: number }
   fail_rate_15m: { value: number; threshold: number; total: number; failed: number }
   blocked_candidates: number
-  pending_reports: { total: number; high: number; medium: number; low: number; avg_handle_days: number | null }
+  pending_reports: {
+    total: number
+    pending: number
+    in_progress: number
+    high: number
+    medium: number
+    low: number
+    pending_high: number
+    pending_medium: number
+    pending_low: number
+    avg_handle_days: number | null
+  }
   eval_gate: { result: string; metrics: Record<string, number>; created_at: string } | null
   pending_review: number
   switches: { key: string; enabled: boolean; reason: string | null }[]
@@ -114,7 +125,7 @@ const evalMetrics = computed<{ label: string; value: string; pass: boolean }[]>(
           <p class="stat-card__label">今日分析任务</p>
           <p class="stat-card__value">{{ data.today.analysis_total }}</p>
           <p class="stat-card__sub">
-            成功 {{ data.today.analysis_done }} · 阻断 {{ data.today.analysis_blocked }}（红旗）·
+            成功 {{ data.today.analysis_done }} · 命中红旗 {{ data.today.analysis_blocked }} ·
             失败 {{ data.today.analysis_failed }}
           </p>
         </AppCard>
@@ -146,9 +157,10 @@ const evalMetrics = computed<{ label: string; value: string; pass: boolean }[]>(
         </AppCard>
         <AppCard class="stat-card">
           <p class="stat-card__label">待处理举报</p>
-          <p class="stat-card__value">{{ data.pending_reports.total }}</p>
+          <p class="stat-card__value">{{ data.pending_reports.pending }}</p>
           <p class="stat-card__sub">
-            高 {{ data.pending_reports.high }} · 中 {{ data.pending_reports.medium }} · 低 {{ data.pending_reports.low }}
+            高 {{ data.pending_reports.pending_high }} · 中 {{ data.pending_reports.pending_medium }} · 低
+            {{ data.pending_reports.pending_low }} · 处理中 {{ data.pending_reports.in_progress }} 条
             <template v-if="data.pending_reports.avg_handle_days !== null">
               · 平均处理 {{ data.pending_reports.avg_handle_days }} 天
             </template>
@@ -180,7 +192,7 @@ const evalMetrics = computed<{ label: string; value: string; pass: boolean }[]>(
           <!-- 安全事件 -->
           <AppCard class="safety-card">
             <div class="safety-card__head">
-              <h2 class="card-title"><span aria-hidden="true">⚠</span> 安全事件（24 小时）</h2>
+              <h2 class="card-title"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8 2.9 19.6h18.2z" /><path d="M12 9.6v4.2" /><path d="M12 16.6v.4" /></svg> 安全事件（24 小时）</h2>
               <button type="button" class="link-btn" @click="router.push('/safety')">查看全部</button>
             </div>
             <table class="table">
@@ -210,7 +222,7 @@ const evalMetrics = computed<{ label: string; value: string; pass: boolean }[]>(
         <div class="main-grid__right">
           <!-- 功能开关状态 -->
           <AppCard class="switch-card">
-            <h2 class="card-title"><span aria-hidden="true">⏻</span> 功能开关状态</h2>
+            <h2 class="card-title"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.4v7.2" /><path d="M7.4 7.2a6.4 6.4 0 1 0 9.2 0" /></svg> 功能开关状态</h2>
             <div class="switch-list">
               <div v-for="s in data.switches" :key="s.key" class="switch-row">
                 <div class="switch-row__text">
@@ -224,7 +236,7 @@ const evalMetrics = computed<{ label: string; value: string; pass: boolean }[]>(
 
           <!-- 评测门禁 -->
           <AppCard class="eval-card">
-            <h2 class="card-title"><span aria-hidden="true">✓</span> 评测门禁 · 最近运行</h2>
+            <h2 class="card-title"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.8 12.6 9.8 17.6 19.2 6.6" /></svg> 评测门禁 · 最近运行</h2>
             <div class="eval-list">
               <div v-for="m in evalMetrics" :key="m.label" class="eval-row">
                 <span class="eval-row__label">{{ m.label }}</span>

@@ -103,7 +103,7 @@ fun ReportVerifyScreen(navController: NavHostController) {
                     summary = structured.summary
                 }
             } catch (e: Exception) {
-                toastText = e.message ?: "结构化信息加载失败"
+                toastText = e.userMessage()
             } finally {
                 loading = false
             }
@@ -126,7 +126,7 @@ fun ReportVerifyScreen(navController: NavHostController) {
                 )
                 load()
             } catch (e: Exception) {
-                toastText = e.message ?: "确认失败，请稍后重试"
+                toastText = e.userMessage()
             }
         }
     }
@@ -150,7 +150,7 @@ fun ReportVerifyScreen(navController: NavHostController) {
                     throw e
                 }
             } catch (e: Exception) {
-                toastText = e.message ?: "生成分析失败，请稍后重试"
+                toastText = e.userMessage()
             } finally {
                 submitting = false
             }
@@ -352,7 +352,7 @@ private fun StructuredItemCard(
                 )
                 // 时间
                 Text(
-                    text = item.occurredAt?.take(10) ?: "时间尚未确认",
+                    text = BjTime.date(item.occurredAt).ifBlank { "时间尚未确认" },
                     fontSize = 11.sp,
                     color = Text3,
                 )

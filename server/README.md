@@ -40,14 +40,14 @@ npm run seed              # 写入演示种子数据（仅在库为空时写入�
 
   | 账号 | 角色 | 权限（最小必要，见 `src/modules/admin/admin.constants.ts`） |
   |-|-|-|
-  | editor01 | 运营编辑 | content.draft / content.submit |
+  | editor01 | 运营编辑 | content.draft / content.submit（发布由临床审核 / 超级管理做） |
   | clinician01 | 临床审核 | content.review / content.publish / content.offline |
   | tech01 | 技术 | model.manage / eval.manage / switch.manage / evidence.manage |
   | compliance01 | 合规 | feedback.view / feedback.handle / audit.view / consent.view / audit.export / dual_control.manage |
   | super01 | 超级管理 | 全部权限（`*`） |
 
   登录口令取 `.env` 的 `ADMIN_DEMO_PASSWORD`，TOTP 取 `.env` 的 `ADMIN_TOTP_DEMO_CODE`（默认演示值见 `.env.example`，仓库不保存明文）。
-  连续输错 5 次锁定 15 分钟；后台令牌 30 分钟有效（`Authorization: Bearer <admin token>`），与用户端令牌互不通用。
+  连续输错 5 次锁定 30 分钟；后台令牌 30 分钟有效（`Authorization: Bearer <admin token>`），与用户端令牌互不通用。
 
 ## 后台接口（/admin，需后台令牌；越权返回 40300 并写审计）
 

@@ -518,11 +518,26 @@ export class ContentsService {
       input.confirmation_id ? reason : '批量下线：' + reason,
       operator,
       input.confirmation_id,
+      { reason },
     );
     if (!gate.proceed) {
+      // 待确认清单随错误返回：界面可提示，另一名具备权限的账号可在「待我确认」里直接确认
       throw new ApiException(
         ErrorCode.CONFLICT,
         '已提交「一键下线」双人确认申请（需' + (gate.confirmation?.requirement ?? '另一人') + '确认后生效）',
+        {
+          confirmation_id: gate.confirmation?.id ?? null,
+          pending: gate.confirmation
+            ? [
+                {
+                  id: itemId,
+                  confirmation_id: gate.confirmation.id,
+                  target_label: item.title,
+                  requirement: gate.confirmation.requirement,
+                },
+              ]
+            : [],
+        },
       );
     }
 
@@ -637,6 +652,7 @@ export class ContentsService {
         `批量下线：${reasonText}`,
         operator,
         confirmationIds?.[id],
+        { reason: reasonText },
       );
       if (!gate.proceed) {
         pending.push({
@@ -680,11 +696,25 @@ export class ContentsService {
       input.confirmation_id ? reason : '撤回内容：' + reason,
       operator,
       input.confirmation_id,
+      { reason },
     );
     if (!gate.proceed) {
       throw new ApiException(
         ErrorCode.CONFLICT,
         '已提交「内容撤回」双人确认申请（需' + (gate.confirmation?.requirement ?? '另一人') + '确认后生效）',
+        {
+          confirmation_id: gate.confirmation?.id ?? null,
+          pending: gate.confirmation
+            ? [
+                {
+                  id: itemId,
+                  confirmation_id: gate.confirmation.id,
+                  target_label: item.title,
+                  requirement: gate.confirmation.requirement,
+                },
+              ]
+            : [],
+        },
       );
     }
 

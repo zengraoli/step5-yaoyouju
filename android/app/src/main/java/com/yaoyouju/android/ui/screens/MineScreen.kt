@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.platform.LocalContext
@@ -86,9 +88,13 @@ fun MineScreen(navController: NavHostController) {
     var phoneMasked by remember { mutableStateOf("") }
     var consents by remember { mutableStateOf<List<ConsentItem>>(emptyList()) }
     var toastText by remember { mutableStateOf("") }
+    /** 待二次确认撤回的同意范围（撤回同意不能点一下就生效） */
+    var revokeTarget by remember { mutableStateOf<String?>(null) }
+    /** 最近一次导出的文件（用于分享） */
+    var exportedFile by remember { mutableStateOf<java.io.File?>(null) }
 
     /** 版本信息（按设计稿） */
-    val versionInfo = "App v0.1.0 · 安全规则集 safety-rules-v2.0"
+    val versionInfo = "App v0.1.0 · 规则集版本见「一页分析」的来源信息"
 
     fun load() {
         loading = true
@@ -106,7 +112,7 @@ fun MineScreen(navController: NavHostController) {
                 phoneMasked = me.phoneMasked
                 consents = handleResponse(authApi.consents())
             } catch (e: Exception) {
-                toastText = e.message ?: "加载失败，请稍后重试"
+                toastText = e.userMessage()
             } finally {
                 loading = false
             }
@@ -209,6 +215,32 @@ fun MineScreen(navController: NavHostController) {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // 撤回同意二次确认
+                    if (revokeTarget != null) {
+                        AlertDialog(
+                            onDismissRequest = { revokeTarget = null },
+                            title = { Text("撤回「${revokeTarget}」的同意") },
+                            text = { Text("撤回后立即停止个性化分析与问答；已录入的数据仍可只读查看。确定撤回吗？") },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val scopeName = revokeTarget ?: ""
+                                    revokeTarget = null
+                                    scope.launch {
+                                        try {
+                                            consents = authRepository.revokeConsent(scopeName)
+                                            toastText = "已撤回「${scopeName}」同意，可在本页重新同意"
+                                        } catch (e: Exception) {
+                                            toastText = e.userMessage()
+                                        }
+                                    }
+                                }) { Text("撤回") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { revokeTarget = null }) { Text("取消") }
+                            },
+                        )
+                    }
+
                     // 同意记录（可查可撤回）
                     Text(text = "同意记录", fontSize = 15.sp, color = Text1)
                     Spacer(modifier = Modifier.height(4.dp))
@@ -229,17 +261,34 @@ fun MineScreen(navController: NavHostController) {
                             ConsentRow(
                                 item = item,
                                 onRevoke = {
-                                    scope.launch {
-                                        try {
-                                            consents = authRepository.revokeConsent(item.scope)
-                                            toastText = "已撤回「${item.scope}」同意"
-                                        } catch (e: Exception) {
-                                            toastText = e.message ?: "撤回失败，请稍后重试"
-                                        }
-                                    }
+                                    // 撤回同意要二次确认（验收反馈第 36 条：不能点一下就生效）
+                                    revokeTarget = item.scope
                                 },
                             )
                             Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        // 撤回后的重新同意入口（不必退出重新登录）
+                        val revoked = consents.filter { !it.granted }
+                        if (revoked.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            revoked.forEach { item ->
+                                AppButton(
+                                    text = "重新同意「${item.scope}」",
+                                    type = AppButtonType.Secondary,
+                                    block = true,
+                                    onClick = {
+                                        scope.launch {
+                                            try {
+                                                consents = authRepository.grantConsent(item.scope)
+                                                toastText = "已重新同意「${item.scope}」"
+                                            } catch (e: Exception) {
+                                                toastText = e.userMessage()
+                                            }
+                                        }
+                                    },
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
                         }
                     }
 
@@ -260,19 +309,25 @@ fun MineScreen(navController: NavHostController) {
                             scope.launch {
                                 try {
                                     val json = authRepository.exportData()
-                                    // 演示实现：导出内容写到应用缓存目录，用户在通知里看到路径
-                                    val file = java.io.File(
-                                        context.cacheDir,
-                                        "yaoyouju-export-" + System.currentTimeMillis() + ".json",
-                                    )
-                                    file.writeText(json)
-                                    toastText = "已导出到 " + file.name
+                                    // 导出到公开 Download 目录（用户能在文件管理器里看到），并支持分享
+                                    val file = exportToDownloads(context, json)
+                                    exportedFile = file
+                                    toastText = "已导出到 Download/Yaoyouju/" + file.name
                                 } catch (e: Exception) {
-                                    toastText = e.message ?: "导出失败，请稍后重试"
+                                    toastText = e.userMessage()
                                 }
                             }
                         },
                     )
+                    if (exportedFile != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        AppButton(
+                            text = "分享导出文件",
+                            type = AppButtonType.Secondary,
+                            block = true,
+                            onClick = { exportedFile?.let { f -> shareFile(context, f) } },
+                        )
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     if (deleteStep > 0) {
                         AppNotice(
@@ -310,7 +365,7 @@ fun MineScreen(navController: NavHostController) {
                                         }
                                     }
                                 } catch (e: Exception) {
-                                    toastText = e.message ?: "操作失败，请稍后重试"
+                                    toastText = e.userMessage()
                                 }
                             }
                         },
@@ -328,7 +383,7 @@ fun MineScreen(navController: NavHostController) {
                                         deleteStep = 0
                                         toastText = "已取消删除申请"
                                     } catch (e: Exception) {
-                                        toastText = e.message ?: "取消失败"
+                                        toastText = e.userMessage()
                                     }
                                 }
                             },
@@ -432,9 +487,9 @@ private fun ConsentRow(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (item.granted) {
-                        "同意于 " + (item.grantedAt?.take(10) ?: "时间尚未确认")
+                        "同意于 " + BjTime.date(item.grantedAt).ifBlank { "时间尚未确认" }
                     } else {
-                        "已撤回" + (item.revokedAt?.let { "（" + it.take(10) + "）" } ?: "")
+                        "已撤回" + (item.revokedAt?.let { "（" + BjTime.date(it) + "）" } ?: "")
                     },
                     fontSize = 11.sp,
                     color = Text3,
@@ -458,5 +513,37 @@ private fun ConsentRow(
                 )
             }
         }
+    }
+}
+
+/** 导出到公开 Download 目录（Android 8+ 可用；用户可在文件管理器查看并分享） */
+private fun exportToDownloads(context: android.content.Context, json: String): java.io.File {
+    val dir = java.io.File(
+        android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+        "Yaoyouju",
+    )
+    if (!dir.exists()) dir.mkdirs()
+    val file = java.io.File(dir, "yaoyouju-export-" + System.currentTimeMillis() + ".json")
+    file.writeText(json)
+    return file
+}
+
+/** 分享导出文件（FileProvider，不暴露 file:// URI） */
+private fun shareFile(context: android.content.Context, file: java.io.File) {
+    try {
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            context,
+            context.packageName + ".fileprovider",
+            file,
+        )
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+            type = "application/json"
+            putExtra(android.content.Intent.EXTRA_STREAM, uri)
+            putExtra(android.content.Intent.EXTRA_SUBJECT, "腰有据 · 我的数据导出")
+            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(android.content.Intent.createChooser(intent, "分享导出文件"))
+    } catch (e: Exception) {
+        android.widget.Toast.makeText(context, "分享失败：${e.message}", android.widget.Toast.LENGTH_SHORT).show()
     }
 }

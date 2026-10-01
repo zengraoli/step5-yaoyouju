@@ -12,6 +12,7 @@ import {
   RetrievedChunk,
 } from './evidence-retrieval';
 import { ChunkSpec, chunkerParams, splitIntoChunks } from './chunker';
+import { permissionsOf } from '../admin/admin.constants';
 
 /**
  * 医学证据库服务（B05，docs/system-design.md 第 3 节 EVIDENCE_DOC / EVIDENCE_CHUNK）。
@@ -312,6 +313,16 @@ export class EvidenceService implements EvidenceRetriever {
     if (wantsVerified) verifiedAt = normalizeDate(String(input.verified_at), '核实日期');
     const rawText = input.raw_text === undefined ? row.raw_text : input.raw_text;
     const active = input.active === undefined ? row.active === 1 : input.active;
+    // 已启用（或已标记「可引用」）的证据：原文改动只能由临床审核 / 超级管理做。
+    // 运营编辑只负责录入，不能悄悄改写用户正在检索引用的原文（验收反馈第 33 条）。
+    const inUse = row.active === 1 || row.license === '可引用';
+    const canEditRaw = canVerify || this.actorCanVerify(actorId);
+    if (rawText !== row.raw_text && inUse && !canEditRaw) {
+      throw new ApiException(
+        ErrorCode.FORBIDDEN,
+        '已启用的证据原文只能由临床审核或超级管理员修改（改动会影响用户检索结果）',
+      );
+    }
 
     const diff: Record<string, unknown> = {};
     if (title !== row.title) diff.title = { from: row.title, to: title };
@@ -597,6 +608,19 @@ export class EvidenceService implements EvidenceRetriever {
   }
 
   // ---------- 内部 ----------
+
+  /** 操作人是否具备「证据核实」权限（临床审核 / 超级管理） */
+  private actorCanVerify(actorId: string | null): boolean {
+    if (!actorId) return false;
+    const row = this.db.app
+      .prepare(
+        `SELECT r.name AS role_name FROM admin_user u JOIN role r ON r.id = u.role_id WHERE u.id = ?`,
+      )
+      .get(actorId) as { role_name: string } | undefined;
+    if (!row) return false;
+    const perms = permissionsOf(row.role_name);
+    return perms.includes('*') || perms.includes('evidence.verify');
+  }
 
   private loadDoc(docId: string): EvidenceDocRow {
     const row = this.db.app.prepare(`SELECT * FROM evidence_doc WHERE id=?`).get(docId) as

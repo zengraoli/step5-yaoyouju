@@ -23,7 +23,6 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
   运营编辑: [
     'content.draft',
     'content.submit',
-    'content.publish',
     'evidence.ingest',
     'feedback.view',
     'feedback.triage',

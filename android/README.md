@@ -57,8 +57,8 @@ adb shell am start -a android.intent.action.VIEW -d "yaoyouju://A07"
 
 - 接口基地址写在 `BuildConfig.API_BASE_URL`（默认 `http://127.0.0.1:3200`，
   `app/build.gradle.kts` 中修改）；
-- 明文 HTTP 白名单仅放开 `127.0.0.1` / `10.0.0.2` / `localhost`
-  （`res/xml/network_security_config.xml`），生产必须改 HTTPS；
+- 明文 HTTP 白名单仅放开 `127.0.0.1` / `localhost`（`res/xml/network_security_config.xml`），
+  生产必须改 HTTPS；
 - 登录令牌存 DataStore（`core/datastore/TokenStore.kt`），不写入账号口令；
 - 日志拦截器已脱敏 Authorization 头。
 
@@ -76,7 +76,7 @@ app/src/main/java/com/yaoyouju/android/
     ├── theme/                 Material 3 主题（色彩令牌 / 字体 / 圆角）
     ├── components/            按钮 / 芯片 / 状态标签 / 提示条 / 卡片 / 底部导航
     ├── navigation/            路由表与 NavHost
-    └── screens/               各页面（T43 阶段为占位，T44–T50 逐页实现）
+    └── screens/               A01–A18 各页面（含 data / core 子包）
 ```
 
 ## 测试
@@ -102,4 +102,6 @@ gradlew.bat verifyRoborazziDebug
 
 - 大模型 / OCR 均为 server 侧模拟实现，客户端不调用任何外部服务；
 - 数据来自 server 接口的页面，在无网络截图测试中渲染空态 / 加载态；
-- 真机调试依赖 `adb reverse`，模拟器可直接访问 127.0.0.1。
+- 真机调试用 `adb reverse tcp:3200 tcp:3200`，之后 App 内默认基地址 `http://127.0.0.1:3200` 即可；
+- deep link 使用独立 scheme `yaoyoujuapp://<页面编号>`（如 `yaoyoujuapp://A07`），避免与设备上其他应用冲突；
+- 复诊摘要的 PDF / 图片导出：H5 走浏览器打印；Android 端用系统分享「打印 / 导出 PDF」或截图保存。

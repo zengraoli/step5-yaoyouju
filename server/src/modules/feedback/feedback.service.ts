@@ -474,6 +474,7 @@ export class FeedbackService {
       input.confirmation_id ? '另一人已确认的单条授权：' + scope : '单条授权：' + scope,
       this.adminById(actorId),
       input.confirmation_id,
+      { scope },
     );
     if (!gate.proceed) {
       throw new ApiException(
@@ -483,6 +484,7 @@ export class FeedbackService {
           '审批后生效，' +
           AUTHORIZE_TTL_DAYS +
           ' 天后自动失效）',
+        { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
       );
     }
     const expiresAt = new Date(nowDate.getTime() + AUTHORIZE_TTL_MS).toISOString();

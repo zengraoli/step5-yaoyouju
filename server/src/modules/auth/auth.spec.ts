@@ -109,7 +109,7 @@ describe('T03 登录与同意', () => {
   it('公开接口无需登录（就医提示）', async () => {
     const res = await api().get('/safety/emergency-notice');
     expect(res.status).toBe(200);
-    expect(res.body.data.headline).toBe('建议尽快就医');
+    expect(res.body.data.headline).toBe('建议及时就医评估');
     expect(res.body.data.footer_note).toContain('不是诊断结论');
   });
 

@@ -25,6 +25,8 @@ export interface ReleaseItem {
   content_lib_version: string | null;
   status: string;
   created_at: string;
+  /** 向量 / embedding 模型版本（演示实现：与检索策略一致的本地向量） */
+  embedding: string;
   latest_eval: LatestEval | null;
   /** 门禁状态：是否已覆盖全部必需评测集且最近一次均通过 */
   gate: GateStatus;
@@ -252,6 +254,7 @@ export class ModelReleasesService {
       content_lib_version: row.content_lib_version,
       status: row.status,
       created_at: row.created_at,
+      embedding: `local-16d（${row.model_name} ${row.prompt_version}）`,
       latest_eval: this.latestEval(row.id),
       gate: this.evalService.gateStatus(row.id),
     };

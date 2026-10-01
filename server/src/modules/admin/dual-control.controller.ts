@@ -1,10 +1,11 @@
-import { Body, ConflictException, Controller, Get, Put } from '@nestjs/common';
+import { Body, Controller, Get, Put } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentAdmin } from '../../common/current-admin.decorator';
 import { AdminContext } from './admin-auth.service';
 import { DualControlService, DualControlSettings } from './dual-control.service';
 import { ConfirmationService } from './confirmation.service';
+import { ApiException, ErrorCode } from '../../common/api-error';
 import { RequirePermission } from './permission.decorator';
 
 class UpdateDualControlDto {
@@ -51,10 +52,16 @@ export class AdminDualControlController {
       dto.confirmation_id ? '另一人已确认：' + dto.reason : '变更双人确认设置：' + dto.reason,
       admin,
       dto.confirmation_id,
+      { enabled: dto.enabled, reason: dto.reason },
     );
     if (!gate.proceed) {
-      throw new ConflictException(
+      throw new ApiException(
+        ErrorCode.CONFLICT,
         '已提交「双人确认设置」变更申请（需' + (gate.confirmation?.requirement ?? '另一人') + '确认后生效）',
+        {
+          confirmation_id: gate.confirmation?.id ?? null,
+          requirement: gate.confirmation?.requirement ?? null,
+        },
       );
     }
     const result = this.dualControl.updateSettings(dto.enabled, dto.reason, admin.id);

@@ -110,7 +110,7 @@ fun TodayScreen(navController: NavHostController) {
                 // 不预填昨日答案：表单保持为空（缺失即尚未确认）
             }
         } catch (e: Exception) {
-            toastText = e.message ?: "今日状态加载失败"
+            toastText = e.userMessage()
         } finally {
             loading = false
         }
@@ -181,7 +181,7 @@ fun TodayScreen(navController: NavHostController) {
                 toastText = if (skipped) "已跳过今天（不会当作没有症状）" else "已保存今天的记录"
                 navController.popBackStack()
             } catch (e: Exception) {
-                toastText = e.message ?: "保存失败，请稍后重试"
+                toastText = e.userMessage()
             } finally {
                 saving = false
             }

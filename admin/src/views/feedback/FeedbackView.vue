@@ -67,13 +67,26 @@ interface HandlingRecord {
 
 interface FeedbackDetail extends QueueItem {
   raw_content: unknown
-  authorization: { authorized: boolean; by: string | null; at: string | null; scope: string | null }
+  authorization: {
+    authorized: boolean
+    by: string | null
+    approved_by?: string | null
+    at: string | null
+    scope: string | null
+    expires_at?: string | null
+    expired?: boolean
+    revoked?: boolean
+    revoked_at?: string | null
+    can_revoke?: boolean
+    ttl_days?: number
+  }
   handling: HandlingRecord[]
   redline: { auto_ingest: false; note: string }
 }
 
 /** 处置动作（与服务端 HANDLING_ACTIONS 一致） */
 const HANDLING_ACTIONS = ['转内容修正', '转模型复盘', '已回复用户', '无需处理', '关闭']
+const TRIAGE_ACTIONS = ['待临床复核', '无需处理', '关闭']
 
 const auth = useAuthStore()
 
@@ -110,6 +123,12 @@ const detailLoading = ref(false)
 const handleAction = ref('')
 const handleComment = ref('')
 const handling = ref(false)
+const authorizing = ref(false)
+const revoking = ref(false)
+/** 初筛（运营编辑） */
+const triaging = ref(false)
+const triageAction = ref('待临床复核')
+const triageComment = ref('')
 
 onMounted(async () => {
   await load()
@@ -219,6 +238,52 @@ async function onHandle() {
     notify(e instanceof Error ? e.message : '处置失败')
   } finally {
     handling.value = false
+  }
+}
+
+/** 举报初筛（运营编辑 / 超级管理）：只流转状态，不看原文、不做临床复核 */
+async function onTriage() {
+  if (!detail.value) return
+  if (!triageAction.value) {
+    notify('请选择初筛结论')
+    return
+  }
+  if (!triageComment.value.trim()) {
+    notify('请填写初筛记录')
+    return
+  }
+  triaging.value = true
+  try {
+    detail.value = await request<FeedbackDetail>({
+      url: `/admin/feedback/${detail.value.id}/triage`,
+      method: 'POST',
+      data: { action: triageAction.value, comment: triageComment.value.trim() },
+    })
+    notify('已记录初筛（写入审计）')
+    triageComment.value = ''
+    await load()
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '初筛失败')
+  } finally {
+    triaging.value = false
+  }
+}
+
+/** 撤回单条授权（立即生效，写审计） */
+async function onRevokeAuthorization() {
+  if (!detail.value) return
+  revoking.value = true
+  try {
+    detail.value = await request<FeedbackDetail>({
+      url: `/admin/feedback/${detail.value.id}/revoke-view`,
+      method: 'POST',
+    })
+    notify('已撤回单条授权（写入审计）')
+    await load()
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '撤回失败')
+  } finally {
+    revoking.value = false
   }
 }
 
@@ -359,8 +424,9 @@ const affectedText = computed<string>(() => {
             <div class="versions">
               <p class="versions__title">受影响版本（自动附带）</p>
               <p class="versions__row">分析 {{ detail.versions?.analysis_id?.slice(0, 8) ?? '—' }} · v{{ detail.versions?.analysis_version ?? '—' }} · {{ detail.created_at.slice(0, 16).replace('T', ' ') }}</p>
-              <p class="versions__row">模型 {{ detail.versions?.model?.model_name ?? '—' }}（{{ detail.versions?.model?.prompt_version ?? '—' }} · 提示词 p14 · 检索 R-4）</p>
-              <p class="versions__row">内容版本 {{ detail.versions?.content ? `${detail.versions.content.current_status} v${detail.versions.content.version}` : '审核科普 #07 v1' }}</p>
+              <p class="versions__row">模型 {{ detail.versions?.model?.model_name ?? '尚未关联' }}（{{ detail.versions?.model?.prompt_version ?? '—' }}）</p>
+              <p class="versions__row">内容版本 {{ detail.versions?.content ? `${detail.versions.content.current_status} v${detail.versions.content.version}` : '尚未关联内容' }}</p>
+              <p class="versions__row">规则集 {{ detail.versions?.rule_set_version ?? '—' }}</p>
               <p class="versions__row">受影响范围 {{ affectedText }}</p>
             </div>
 
@@ -373,11 +439,35 @@ const affectedText = computed<string>(() => {
               <p class="authorize__title">
                 <StatusTag v-if="detail.authorization.authorized" status="confirmed" text="已授权" />
                 <StatusTag v-else status="unconfirmed" text="未授权" />
-                单条授权：用户已允许查看本条分析涉及的报告与记录（{{ detail.authorization.at ? detail.authorization.at.slice(0, 10) : '—' }}，可撤回）
+                <template v-if="detail.authorization.authorized">
+                  单条授权：由临床审核申请、超级管理员审批后生效（{{ detail.authorization.at ? detail.authorization.at.slice(0, 10) : '—' }}
+                  <template v-if="detail.authorization.expires_at"> · 有效至 {{ String(detail.authorization.expires_at).slice(0, 10) }}</template>），可随时撤回
+                </template>
+                <template v-else>
+                  单条授权：需临床审核申请、超级管理员审批后才能查看用户原始内容
+                </template>
               </p>
-              <AppButton v-if="auth.hasPermission('feedback.handle') && !detail.authorization.authorized" type="soft" size="sm" @click="onAuthorize">
-                查看相关资料（写入审计）
+              <AppButton
+                v-if="auth.hasPermission('feedback.handle') && !detail.authorization.authorized"
+                type="soft"
+                size="sm"
+                :loading="authorizing"
+                @click="onAuthorize"
+              >
+                申请查看用户原始内容（需另一人审批）
               </AppButton>
+              <AppButton
+                v-if="detail.authorization.can_revoke"
+                type="soft"
+                size="sm"
+                :loading="revoking"
+                @click="onRevokeAuthorization"
+              >
+                撤回单条授权
+              </AppButton>
+              <span v-if="!auth.hasPermission('feedback.handle')" class="panel__hint">
+                当前角色没有申请权限（需要临床审核角色）
+              </span>
             </div>
           </AppCard>
 
@@ -397,15 +487,44 @@ const affectedText = computed<string>(() => {
             </div>
             <textarea v-model="handleComment" class="handle-comment" placeholder="处理记录（必填）" />
             <AppButton
+              v-if="auth.hasPermission('feedback.triage')"
+              type="soft"
+              size="sm"
+              :loading="triaging"
+              @click="onTriage"
+            >
+              提交初筛（运营编辑）
+            </AppButton>
+            <AppButton
               v-if="auth.hasPermission('feedback.handle')"
               type="primary"
               size="sm"
               :loading="handling"
               @click="onHandle"
             >
-              提交处置
+              提交临床复核处置
             </AppButton>
-            <p v-else class="panel__hint">当前角色无处置权限（需要「合规」角色）。</p>
+            <p v-if="!auth.hasPermission('feedback.triage') && !auth.hasPermission('feedback.handle')" class="panel__hint">
+              当前角色没有举报处置权限（初筛需要运营编辑 / 超级管理，临床复核需要临床审核）。
+            </p>
+
+            <div v-if="auth.hasPermission('feedback.triage')" class="handle-triage">
+              <p class="handling-log__title">举报初筛（只流转状态，不查看原文）</p>
+              <div class="handle-actions">
+                <button
+                  v-for="a in TRIAGE_ACTIONS"
+                  :key="a"
+                  type="button"
+                  class="handle-chip"
+                  :class="{ 'handle-chip--selected': triageAction === a }"
+                  @click="triageAction = a"
+                >
+                  {{ a }}
+                </button>
+              </div>
+              <textarea v-model="triageComment" class="handle-comment" placeholder="初筛记录（必填）" />
+              <AppButton type="soft" size="sm" :loading="triaging" @click="onTriage">提交初筛</AppButton>
+            </div>
 
             <div class="handling-log">
               <p class="handling-log__title">处理记录</p>

@@ -1,11 +1,11 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as express from 'express';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/response.interceptor';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { REQUEST_ID_HEADER, newRequestId, runWithRequestId } from './common/request-context';
+import { SmartValidationPipe } from './common/smart-validation.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -51,15 +51,9 @@ async function bootstrap() {
       next();
     },
   );
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      transform: true,
-      // 关闭隐式类型转换：标题传数字、数字传文本一律按中文校验错误返回，
-      // 而不是悄悄转换后落库（验收反馈第 27 条）
-      transformOptions: { enableImplicitConversion: false },
-    }),
-  );
+  // 分来源校验：请求体不做隐式类型转换（标题传数字 → 中文 400）；
+  // 查询 / 路径参数允许隐式转换（?page=1&page_size=50）
+  app.useGlobalPipes(new SmartValidationPipe({ whitelist: true }));
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter());
 

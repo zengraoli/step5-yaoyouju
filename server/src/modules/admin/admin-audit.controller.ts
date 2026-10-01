@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Res } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { CurrentAdmin } from '../../common/current-admin.decorator';
@@ -117,5 +118,19 @@ export class AdminAuditController {
   @Get('export-requests')
   listExportRequests(): { items: AuditExportRequest[] } {
     return { items: this.adminAudit.listExportRequests() };
+  }
+
+  /**
+   * 下载导出文件（审批通过后才能下载；未审批返回 40900）。
+   * 演示实现：返回 JSON 文本（前端触发浏览器下载）。
+   */
+  @ApiOperation({ summary: '下载审计导出文件（需已审批）' })
+  @Get('export')
+  @RequirePermission('audit.view')
+  exportFile(@CurrentAdmin() admin: AdminContext, @Res() res: Response, @Query('request_id') requestId?: string) {
+    const { filename, body } = this.adminAudit.buildExport(admin.id, requestId);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(body);
   }
 }

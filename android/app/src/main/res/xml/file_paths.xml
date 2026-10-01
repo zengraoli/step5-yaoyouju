@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 导出文件放在 Downloads/Yaoyouju，用户可在文件管理器里看到并分享 -->
+    <external-path name="downloads" path="Download/Yaoyouju/" />
+    <cache-path name="cache" path="." />
+</paths>

@@ -66,7 +66,12 @@ interface Authorization {
   scope: string
   created_at: string
   status?: string
-  read_count?: number
+  expires_at?: string | null
+  /** 关联的举报 ID（撤回授权用） */
+  feedback_id?: string
+  /** 申请人 / 审批人 */
+  requested_by?: string
+  approved_by?: string
 }
 
 interface DualControlSettings {
@@ -84,6 +89,7 @@ const roles = ref<RoleItem[]>([])
 const authorizations = ref<Authorization[]>([])
 const dualControl = ref<DualControlSettings | null>(null)
 const operating = ref('')
+const panelError = ref('')
 
 const isSuper = computed<boolean>(() => auth.role === '超级管理员' || auth.hasPermission('*'))
 
@@ -93,22 +99,30 @@ onMounted(async () => {
 
 async function load() {
   loading.value = true
-  try {
-    const [u, r, a, d] = await Promise.all([
-      request<AdminUser[]>({ url: '/admin/users' }),
-      request<{ roles: RoleItem[] } | RoleItem[]>({ url: '/admin/roles' }),
-      request<Authorization[] | { items: Authorization[] }>({ url: '/admin/authorizations' }).catch(
-        () => [] as Authorization[],
-      ),
-      request<DualControlSettings>({ url: '/admin/dual-control/settings' }).catch(() => null),
-    ])
-    users.value = u
-    roles.value = Array.isArray(r) ? r : r.roles ?? []
-    authorizations.value = Array.isArray(a) ? a : (a.items ?? [])
-    dualControl.value = d
-  } finally {
-    loading.value = false
+  panelError.value = ''
+  // 逐个接口独立容错：某个面板没有权限时只显示该面板的说明，不阻塞其他面板
+  const settle = async <T>(fn: () => Promise<T>, fallback: T) => {
+    try {
+      return await fn()
+    } catch (e) {
+      panelError.value = e instanceof Error ? e.message : '部分数据加载失败'
+      return fallback
+    }
   }
+  const [u, r, a, d] = await Promise.all([
+    settle(() => request<AdminUser[]>({ url: '/admin/users' }), [] as AdminUser[]),
+    settle(() => request<{ roles: RoleItem[] } | RoleItem[]>({ url: '/admin/roles' }), [] as RoleItem[]),
+    settle(
+      () => request<Authorization[] | { items: Authorization[] }>({ url: '/admin/authorizations' }),
+      [] as Authorization[],
+    ),
+    settle(() => request<DualControlSettings>({ url: '/admin/dual-control/settings' }), null),
+  ])
+  users.value = Array.isArray(u) ? u : []
+  roles.value = Array.isArray(r) ? r : (r?.roles ?? [])
+  authorizations.value = Array.isArray(a) ? a : (a?.items ?? [])
+  dualControl.value = d
+  loading.value = false
 }
 
 function notify(title: string) {
@@ -128,7 +142,7 @@ function confirmAction(message: string): boolean {
 const PERMISSION_ROWS: { key: string; label: string; parts?: string[]; partial?: string }[] = [
   { key: 'content.draft', label: '内容：编辑草稿 / 提交' },
   { key: 'content.review', label: '内容：审定 / 退回' },
-  { key: 'content.publish', label: '内容：发布（双人）', partial: 'content.submit' },
+  { key: 'content.publish', label: '内容：发布（双人）', partial: 'content.submit' },  // 运营编辑只能发起
   { key: 'content.offline', label: '内容：撤回 / 应急下线' },
   {
     key: 'evidence.ingest',
@@ -142,7 +156,7 @@ const PERMISSION_ROWS: { key: string; label: string; parts?: string[]; partial?:
     label: '功能开关 / 模型发布',
     parts: ['switch.manage', 'switch.manage_low', 'model.manage'],
   },
-  { key: 'eval.manage', label: '评测集 / 评测运行' },
+  { key: 'eval.manage', label: '评测集 / 评测运行', partial: 'eval.view' },
   {
     key: 'user.view',
     label: '成员与角色 / 审计导出审批',
@@ -221,6 +235,22 @@ async function onResetMfa(user: AdminUser) {
   }
 }
 
+/** 撤回单条授权（立即生效，写审计） */
+async function onRevokeAuthorization(a: Authorization) {
+  if (!confirmAction(`确认撤回「${a.target}」的单条授权？撤回后立即不可查看原文。`)) return
+  operating.value = a.id
+  try {
+    const targetId = a.feedback_id ?? a.id
+    await request({ url: `/admin/feedback/${encodeURIComponent(targetId)}/revoke-view`, method: 'POST' })
+    notify('已撤回单条授权（写入审计）')
+    await load()
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '撤回失败，请稍后重试')
+  } finally {
+    operating.value = ''
+  }
+}
+
 function onInvite() {
   showInvite.value = true
 }
@@ -269,7 +299,10 @@ async function submitInvite() {
       </div>
 
       <div v-if="loading" class="panel__loading">正在加载…</div>
-      <table v-else class="table">
+      <AppNotice v-else-if="panelError && users.length === 0" type="warn">
+        {{ panelError }}（当前角色可能没有查看权限）
+      </AppNotice>
+      <table v-else-if="users.length > 0" class="table">
         <thead>
           <tr>
             <th>姓名</th>
@@ -305,6 +338,7 @@ async function submitInvite() {
           </tr>
         </tbody>
       </table>
+      <p v-else class="panel__note">暂无可显示的成员（当前角色可能没有查看权限）。</p>
     </AppCard>
 
     <div class="users-grid">
@@ -343,19 +377,31 @@ async function submitInvite() {
             <li v-for="a in authorizations" :key="a.id" class="auth-item">
               <div class="auth-item__head">
                 <span class="auth-item__user">{{ a.actor }}</span>
-                <StatusTag v-if="a.status === '过期'" status="offline" text="过期" />
+                <StatusTag v-if="a.status === '过期'" status="offline" text="已过期" />
+                <StatusTag v-else-if="a.status === '已撤回'" status="offline" text="已撤回" />
                 <StatusTag v-else status="confirmed" text="有效" />
               </div>
               <p class="auth-item__target">{{ a.target }}</p>
               <p class="auth-item__meta">
-                {{ a.created_at.slice(0, 10) }} · 已读 {{ a.read_count ?? 2 }} 次
-                <template v-if="a.scope">（审计 {{ a.scope }}）</template>
+                {{ a.created_at.slice(0, 10) }} 起 · 范围：{{ a.scope || '本条举报的用户原始内容' }}
+                <template v-if="a.expires_at"> · 有效至 {{ String(a.expires_at).slice(0, 10) }}</template>
               </p>
+              <div class="auth-item__ops">
+                <button
+                  type="button"
+                  class="op-link"
+                  :disabled="a.status !== '有效'"
+                  @click="onRevokeAuthorization(a)"
+                >
+                  撤回授权
+                </button>
+              </div>
             </li>
             <li v-if="authorizations.length === 0" class="auth-item">还没有单条授权记录</li>
           </ul>
           <p class="panel__note">
-            授权由用户在举报勾选或临床审核申请、超管审批；每次读取写审计；用户可随时撤回。
+            授权由临床审核申请、超级管理员审批后生效（7 天有效）；每次读取原文都写审计；
+            可在此撤回，用户也可在「我的 → 数据与授权」里撤回自己的授权。
           </p>
         </AppCard>
 

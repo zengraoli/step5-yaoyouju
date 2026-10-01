@@ -98,7 +98,7 @@ export class AdminAuthService {
     }
     if (row.status !== 'active') {
       this.appendFailure(row.id, account, '账号已禁用');
-      throw new ApiException(ErrorCode.FORBIDDEN, '账号状态异常，请联系超级管理员');
+      throw new ApiException(ErrorCode.FORBIDDEN, '该账号已被停用，请联系超级管理员');
     }
     if (!safeEqual(this.hashPassword(password), row.password_hash)) {
       this.recordFailure(account);

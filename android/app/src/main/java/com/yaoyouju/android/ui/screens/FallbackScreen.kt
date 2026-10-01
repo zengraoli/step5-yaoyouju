@@ -110,7 +110,7 @@ fun FallbackScreen(
                 }
             }
         } catch (e: Exception) {
-            reason = e.message ?: "服务暂时不可用"
+            reason = e.userMessage()
         } finally {
             loading = false
         }

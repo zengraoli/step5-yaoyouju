@@ -1,5 +1,19 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import AdminLayout from '@/layouts/AdminLayout.vue'
+import { useAuthStore } from '@/stores/auth'
+
+/** 权限判定：超级管理通配，其余按账号权限列表（与 server 的 hasPermission 口径一致） */
+function hasAdminPermission(auth: ReturnType<typeof useAuthStore>, required: string): boolean {
+  const perms = auth.permissions ?? []
+  if (perms.includes('*')) return true
+  if (perms.includes(required)) return true
+  if (required === 'content.view' && (perms.includes('content.draft') || perms.includes('content.review'))) return true
+  if (required === 'switch.manage_low' && perms.includes('switch.manage')) return true
+  if (required === 'model.view' && (perms.includes('model.manage') || perms.includes('eval.manage'))) return true
+  if (required === 'eval.view' && perms.includes('eval.manage')) return true
+  if (required === 'audit.view' && perms.includes('audit.export_approve')) return true
+  return false
+}
 
 const routes: RouteRecordRaw[] = [
   {
@@ -7,6 +21,12 @@ const routes: RouteRecordRaw[] = [
     name: 'login',
     component: () => import('@/views/login/LoginView.vue'),
     meta: { public: true, title: '后台登录' },
+  },
+  {
+    path: '/bind-mfa',
+    name: 'bind-mfa',
+    component: () => import('@/views/login/BindMfaView.vue'),
+    meta: { title: '绑定动态验证码' },
   },
   {
     path: '/',
@@ -53,13 +73,13 @@ const routes: RouteRecordRaw[] = [
         path: 'models',
         name: 'models',
         component: () => import('@/views/models/ModelsView.vue'),
-        meta: { nav: 'models', title: '模型与评测', permission: 'model.manage' },
+        meta: { nav: 'models', title: '模型与评测', permission: 'model.view' },
       },
       {
         path: 'eval',
         name: 'eval',
         component: () => import('@/views/eval/EvalView.vue'),
-        meta: { nav: 'eval', title: '评测集与回归', permission: 'eval.manage' },
+        meta: { nav: 'eval', title: '评测集与回归', permission: 'eval.view' },
       },
       {
         path: 'users',
@@ -95,11 +115,28 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 })
 
-/** 登录态守卫：未登录跳登录页；权限在布局与页面内按 store 判断（最小必要） */
-router.beforeEach((to) => {
-  const token = localStorage.getItem('yyj_admin_token')
+/**
+ * 路由守卫：未登录跳登录页；按 meta.permission 校验角色权限，
+ * 越权直接跳仪表盘并提示（地址栏直达菜单之外的页面不再照常渲染，验收反馈第 14 条）。
+ */
+router.beforeEach(async (to) => {
+  const token = sessionStorage.getItem('yyj_admin_token')
   if (!to.meta.public && !token) {
     return { name: 'login', query: to.fullPath === '/' ? undefined : { redirect: to.fullPath } }
+  }
+  const required = to.meta.permission as string | undefined
+  if (!required) return true
+  const auth = useAuthStore()
+  if (!auth.admin) {
+    try {
+      await auth.fetchMe()
+    } catch {
+      auth.logout()
+      return { name: 'login', query: { redirect: to.fullPath } }
+    }
+  }
+  if (!hasAdminPermission(auth, required)) {
+    return { path: '/dashboard', query: { denied: '1' } }
   }
   return true
 })

@@ -331,7 +331,7 @@ private fun TimelineItemCard(
             }
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "${item.eventType} · ${item.occurredAt?.take(10) ?: "时间尚未确认"}",
+                text = "${item.eventType} · ${BjTime.date(item.occurredAt).ifBlank { "时间尚未确认" }}",
                 fontSize = 11.sp,
                 color = Text3,
             )
@@ -377,7 +377,7 @@ private fun loadTimelineData(
             }
             onResult(timeline, today)
         } catch (e: Exception) {
-            onError(e.message ?: "时间线加载失败")
+            onError(e.userMessage())
         }
     }
 }

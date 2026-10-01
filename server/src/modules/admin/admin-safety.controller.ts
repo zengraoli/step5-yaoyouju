@@ -186,10 +186,19 @@ export class AdminSafetyController {
     // 高危开关必须双人确认（B10：技术负责人 + 临床审核 / 超级管理）
     if (HIGH_RISK_SWITCHES.includes(key)) {
       const note = `开关 ${key} → ${dto.enabled ? '开启' : '关闭'}：${dto.reason?.trim() || '后台变更'}`;
-      const gate = this.confirmations.prepare('switch.update', key, key, note, admin, dto.confirmation_id);
+      const gate = this.confirmations.prepare('switch.update', key, key, note, admin, dto.confirmation_id, {
+        enabled: dto.enabled,
+        reason: dto.reason?.trim() || '后台变更',
+      });
       if (!gate.proceed) {
-        throw new ConflictException(
+        // 待确认信息随错误返回：界面可提示，另一名具备对应角色的账号可在「待我确认」里确认
+        throw new ApiException(
+          ErrorCode.CONFLICT,
           '已提交「高危开关变更」双人确认申请（需' + (gate.confirmation?.requirement ?? '另一人') + '确认后生效）',
+          {
+            confirmation_id: gate.confirmation?.id ?? null,
+            requirement: gate.confirmation?.requirement ?? null,
+          },
         );
       }
       const result = this.switches.setEnabled(key, dto.enabled, dto.reason?.trim() || '后台变更', admin.id);
@@ -216,13 +225,27 @@ export class AdminSafetyController {
       'evidence.deactivate': '证据停用',
     };
     return rows.map((r, i) => {
+      // 事故记录由审计日志如实派生：不写死「复盘完成」，未做的步骤不谎称已完成
       let summary = actionLabels[r.action] ?? r.action;
+      let followup: string | null = null;
       try {
-        const diff = r.diff ? JSON.parse(r.diff) : {};
-        if (r.action === 'content.offline') summary = `内容已下线 → 更正中 · 复盘完成`
-        if (r.action === 'model.rollback') summary = `模型发布已回滚 · 加入评测集 · 复盘完成`
-        if (r.action === 'switch.update') summary = `开关变更：${diff.key ?? ''} → ${diff.enabled ? '开启' : '关闭'}`
-        if (r.action === 'evidence.deactivate') summary = `证据停用`
+        const diff = r.diff ? (JSON.parse(r.diff) as Record<string, unknown>) : {};
+        const title = typeof diff.title === 'string' ? diff.title : typeof diff.key === 'string' ? diff.key : '';
+        if (r.action === 'content.offline') {
+          summary = `内容已下线${title ? `《${title}》` : ''}（引用分析 ${Number(diff.reference_count ?? 0)} 条）`;
+          followup = '待办：定位引用页面并评估是否需要更正';
+        }
+        if (r.action === 'model.rollback') {
+          summary = `模型发布已回滚（${String(diff.reason ?? '未填写原因')}）`;
+          followup = '待办：把失败用例加入回归评测集后重跑';
+        }
+        if (r.action === 'switch.update') {
+          summary = `开关变更：${String(diff.key ?? '')} → ${diff.enabled ? '开启' : '关闭'}`;
+        }
+        if (r.action === 'evidence.deactivate') {
+          summary = `证据已停用（影响引用 ${Number(diff.citation_count ?? 0)} 条）`;
+          followup = '待办：评估已生成分析中的引用来源是否失效';
+        }
       } catch {
         // 忽略解析失败
       }
@@ -232,6 +255,7 @@ export class AdminSafetyController {
         severity,
         date: r.created_at.slice(0, 10),
         summary,
+        followup,
         audit_id: r.id,
       };
     });

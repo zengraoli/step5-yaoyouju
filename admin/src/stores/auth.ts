@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import * as authApi from '@/api/auth'
 import { getAdminToken, setAdminToken } from '@/api/request'
 
-/** 后台登录态（token 持久化到 localStorage；短会话 30 分钟） */
+/** 后台登录态（token 只存 sessionStorage；短会话 30 分钟） */
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(getAdminToken())
   const admin = ref<authApi.AdminProfile | null>(null)
@@ -30,11 +30,18 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes('*') || permissions.value.includes(permission)
   }
 
+  /** 绑定动态验证码（首次登录必做） */
+  async function bindMfa(totp: string) {
+    const res = await authApi.bindMfa(totp)
+    if (admin.value) admin.value = { ...admin.value, mfa_enabled: true }
+    return res
+  }
+
   function logout() {
     token.value = ''
     admin.value = null
     setAdminToken('')
   }
 
-  return { token, admin, isLoggedIn, role, permissions, login, fetchMe, hasPermission, logout }
+  return { token, admin, isLoggedIn, role, permissions, login, fetchMe, bindMfa, hasPermission, logout }
 })

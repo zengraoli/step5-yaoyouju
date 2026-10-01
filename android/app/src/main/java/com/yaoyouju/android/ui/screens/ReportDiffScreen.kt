@@ -99,7 +99,7 @@ fun ReportDiffScreen(
                 items = structured.items
             }
         } catch (e: Exception) {
-            errorText = e.message ?: "原文对照加载失败"
+            errorText = e.userMessage()
         } finally {
             loading = false
         }

@@ -170,7 +170,7 @@ fun ChangeScreen(navController: NavHostController) {
                         Routes.EMERGENCY + "?signals=" + signal.labels + "&stop=" + if (signal.stop) "1" else "0",
                     )
                 } else {
-                    toastText = e.message ?: "提交失败，请稍后重试"
+                    toastText = e.userMessage()
                 }
             } finally {
                 submitting = false
@@ -450,14 +450,14 @@ private suspend fun writeEvents(
     matchTexts: List<String>,
 ) {
     val now = java.time.Instant.now().toString()
-    val lines = mutableListOf<String>()
-    lines.add("1. 与上次记录相比，最近腰痛或腿部症状有变化吗？${change ?: "尚未确认"}")
-    lines.add("2. 疼痛或麻木主要涉及哪一侧？${side ?: "尚未确认"}")
-    lines.add("3. 这次症状大约从什么时候开始？${onset ?: "尚未确认"}")
+    // 紧凑单行记录：不在病程 / 一页分析里堆放问卷原文；未回答的记为「尚未确认」
+    val parts = mutableListOf("关键变化确认（自述，尚未确认）：")
+    parts.add("与上次相比：${change ?: "尚未确认"}")
+    parts.add("侧别：${side ?: "尚未确认"}")
+    parts.add("起病：${onset ?: "尚未确认"}")
     if (matchTexts.isNotEmpty()) {
-        lines.add("需要医生及时评估：${matchTexts.joinToString("、")}")
+        parts.add("信号：${matchTexts.joinToString("、")}")
     }
-    lines.add("未回答的问题记录为「尚未确认」，不当作「没有」。")
     val event = handleResponse(
         episodesApi.addEvent(
             episodeId,
@@ -465,7 +465,7 @@ private suspend fun writeEvents(
                 eventType = "症状",
                 occurredAt = now,
                 sourceType = "自述",
-                rawText = lines.joinToString("\n"),
+                rawText = parts.joinToString("；"),
                 verifyStatus = "尚未确认",
             ),
         ),

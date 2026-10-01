@@ -41,6 +41,15 @@ export function adminMe(): Promise<AdminProfile> {
   return request<AdminProfile>({ url: '/admin/auth/me' })
 }
 
+/** 绑定动态验证码（新成员 / 重置 MFA 后首次登录必做） */
+export function bindMfa(totp: string): Promise<{ id: string; mfa_enabled: boolean }> {
+  return request<{ id: string; mfa_enabled: boolean }>({
+    url: '/admin/auth/bind-mfa',
+    method: 'POST',
+    data: { totp },
+  })
+}
+
 /** 登出（写审计） */
 export function adminLogout(): Promise<unknown> {
   return request({ url: '/admin/auth/logout', method: 'POST' })

@@ -30,8 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +41,7 @@ import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.EmergencyAction
 import com.yaoyouju.android.core.net.EmergencyNotice
 import com.yaoyouju.android.core.net.NetworkModule
+import com.yaoyouju.android.core.net.EpisodesApi
 import com.yaoyouju.android.core.net.SafetyApi
 import com.yaoyouju.android.core.net.handleResponse
 import com.yaoyouju.android.ui.components.AppButton
@@ -59,6 +58,7 @@ import com.yaoyouju.android.ui.theme.Primary
 import com.yaoyouju.android.ui.theme.Surface
 import com.yaoyouju.android.ui.theme.Text1
 import com.yaoyouju.android.ui.theme.Text2
+import com.yaoyouju.android.ui.theme.NeutralLight
 import com.yaoyouju.android.ui.theme.Text3
 
 /**
@@ -82,11 +82,55 @@ fun EmergencyScreen(
     stop: Boolean = false,
 ) {
     val safetyApi: SafetyApi = NetworkModule.api()
+    val episodesApi: EpisodesApi = NetworkModule.api()
     val context = LocalContext.current
     var toastText by remember { mutableStateOf("") }
 
     var notice by remember { mutableStateOf<EmergencyNotice?>(null) }
     var offline by remember { mutableStateOf(false) }
+    /** 「就诊时可以带上」：按当前用户病程数据判断，不打勾就不谎称有（验收反馈第 7 条） */
+    var bringItems by remember {
+        mutableStateOf(
+            listOf(
+                BringItem("已录入的检查报告原文", "", false),
+                BringItem("症状开始时间与最近变化记录", "", false),
+                BringItem("正在使用的药物与既有医嘱", "", false),
+            ),
+        )
+    }
+
+    // 未登录 / 没有病程时全部显示「尚未确认」，不写死任何报告（验收反馈第 7 条）
+    LaunchedEffect(Unit) {
+        try {
+            val episodes = handleResponse(episodesApi.list())
+            val active = episodes.firstOrNull { it.status == "进行中" } ?: episodes.firstOrNull()
+            if (active == null) return@LaunchedEffect
+            val detail = handleResponse(episodesApi.detail(active.id))
+            val events = detail.events
+            val report = events.firstOrNull { it.eventType == "报告" }
+            val symptomCount = events.count { it.eventType == "症状" }
+            val advice = events.firstOrNull { it.eventType == "医嘱" }
+            bringItems = listOf(
+                BringItem(
+                    "已录入的检查报告原文",
+                    report?.let { BjTime.date(it.occurredAt) + " 检查报告" } ?: "",
+                    report != null,
+                ),
+                BringItem(
+                    "症状开始时间与最近变化记录",
+                    if (symptomCount > 0) "共 ${symptomCount} 条症状记录" else "",
+                    symptomCount > 0,
+                ),
+                BringItem(
+                    "正在使用的药物与既有医嘱",
+                    advice?.let { BjTime.date(it.occurredAt) + " 医嘱" } ?: "",
+                    advice != null,
+                ),
+            )
+        } catch (_: Exception) {
+            // 未登录或网络异常：保持全部「尚未确认」
+        }
+    }
 
     // 命中的红旗信号（从 A02 参数传入）
     val signalList = remember(signals) {
@@ -103,7 +147,7 @@ fun EmergencyScreen(
             actions = listOf(
                 EmergencyAction("call", "拨打 120 / 前往急诊"),
                 EmergencyAction("hospital", "查找附近医院"),
-                EmergencyAction("doctor", "联系我的主治医生（已保存）"),
+                EmergencyAction("doctor", "联系我的主治医生"),
             ),
             bringList = listOf(
                 "已录入的检查报告原文",
@@ -237,19 +281,33 @@ fun EmergencyScreen(
                                         Intent(Intent.ACTION_DIAL, android.net.Uri.parse("tel:120")),
                                     )
                                 }
-                                "hospital" -> runCatching {
-                                    context.startActivity(
-                                        Intent(
-                                            Intent.ACTION_VIEW,
-                                            android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode("医院")),
-                                        ),
+                                "hospital" -> {
+                                    // 没有地图应用时给出明确说明，而不是静默失败（验收反馈第 37 条）
+                                    val intent = Intent(
+                                        Intent.ACTION_VIEW,
+                                        android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode("医院")),
                                     )
+                                    val resolved = runCatching {
+                                        context.startActivity(intent)
+                                        true
+                                    }.getOrDefault(false)
+                                    if (!resolved) {
+                                        toastText = "本机没有可用的地图应用；请用手机地图搜索「附近的医院」，或拨打 120"
+                                    }
                                 }
                                 "doctor" -> toastText = "演示环境：主治医生联系方式需在「我的」中保存"
                             }
                         },
                     )
                     Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                if (stop) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    AppNotice(
+                        type = NoticeType.Error,
+                        text = "本轮不会生成个性化分析。请先就医，之后再回到本产品整理复诊资料。",
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -269,7 +327,7 @@ fun EmergencyScreen(
                             color = Text3,
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        data.bringList.forEach { item ->
+                        bringItems.forEach { entry ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -280,22 +338,31 @@ fun EmergencyScreen(
                                     modifier = Modifier
                                         .size(18.dp)
                                         .clip(RoundedCornerShape(9.dp))
-                                        .background(if (offline) ErrorLight else Primary),
+                                        .background(if (entry.available) Primary else NeutralLight),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = null,
-                                        tint = Surface,
-                                        modifier = Modifier.size(11.dp),
-                                    )
+                                    if (entry.available) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            tint = Surface,
+                                            modifier = Modifier.size(11.dp),
+                                        )
+                                    }
                                 }
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = item,
-                                    fontSize = 13.sp,
-                                    color = Text2,
-                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = entry.label,
+                                        fontSize = 13.sp,
+                                        color = Text2,
+                                    )
+                                    Text(
+                                        text = if (entry.available) entry.detail else "尚未确认",
+                                        fontSize = 11.sp,
+                                        color = Text3,
+                                    )
+                                }
                             }
                         }
                     }
@@ -355,3 +422,7 @@ fun EmergencyScreen(
         }
     }
 }
+
+
+/** 「就诊时可以带上」的一条 */
+private data class BringItem(val label: String, val detail: String, val available: Boolean)

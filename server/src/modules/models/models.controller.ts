@@ -1,4 +1,4 @@
-import { Body, ConflictException, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiException, ErrorCode } from '../../common/api-error';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
@@ -95,7 +95,8 @@ export class ModelsController {
     // 先过评测门禁：门禁没过就没有必要请第二个人确认
     const gateStatus = this.releases.gateStatusOf(id);
     if (!gateStatus.passed) {
-      throw new ConflictException(
+      throw new ApiException(
+        ErrorCode.CONFLICT,
         '评测门禁未通过，不能生效：' +
           (gateStatus.missing.length > 0 ? '缺少必需评测集（' + gateStatus.missing.join('、') + '）' : '') +
           (gateStatus.blocked.length > 0 ? '最近一次评测未通过（' + gateStatus.blocked.join('、') + '）' : ''),
@@ -110,8 +111,10 @@ export class ModelsController {
       dto.confirmation_id,
     );
     if (!gate.proceed) {
-      throw new ConflictException(
+      throw new ApiException(
+        ErrorCode.CONFLICT,
         '已提交「模型发布提升」双人确认申请（需' + (gate.confirmation?.requirement ?? '另一人') + '确认后生效）',
+        { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
       );
     }
     const result = this.releases.promote(id, admin.id);
@@ -126,7 +129,8 @@ export class ModelsController {
     const reasonText = (dto.reason ?? '').trim();
     if (!reasonText) throw new ApiException(ErrorCode.BAD_REQUEST, '回滚原因不能为空');
     if (this.releases.isLastActive(id) && !this.releases.hasRollbackFallback(id)) {
-      throw new ConflictException(
+      throw new ApiException(
+        ErrorCode.CONFLICT,
         '这是唯一生效的发布，回滚后新分析会全部失败；请先把另一个通过门禁的发布提升为生效后再回滚',
       );
     }
@@ -137,10 +141,13 @@ export class ModelsController {
       dto.confirmation_id ? '另一人已确认的模型发布回滚：' + dto.reason : '模型发布回滚：' + dto.reason,
       admin,
       dto.confirmation_id,
+      { reason: dto.reason },
     );
     if (!gate.proceed) {
-      throw new ConflictException(
+      throw new ApiException(
+        ErrorCode.CONFLICT,
         '已提交「模型发布回滚」双人确认申请（需' + (gate.confirmation?.requirement ?? '另一人') + '确认后生效）',
+        { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
       );
     }
     const result = this.releases.rollback(id, dto.reason, admin.id);

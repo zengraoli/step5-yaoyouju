@@ -2,6 +2,7 @@ package com.yaoyouju.android.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -80,6 +81,7 @@ fun FollowupScreen(navController: NavHostController) {
     val followupApi: FollowupApi = NetworkModule.api()
     val episodesApi: EpisodesApi = NetworkModule.api()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var loading by remember { mutableStateOf(true) }
     var generating by remember { mutableStateOf(false) }
@@ -106,7 +108,7 @@ fun FollowupScreen(navController: NavHostController) {
                     }
                 }
             } catch (e: Exception) {
-                toastText = e.message ?: "摘要加载失败"
+                toastText = e.userMessage()
             } finally {
                 loading = false
             }
@@ -128,7 +130,7 @@ fun FollowupScreen(navController: NavHostController) {
                 summary = handleResponse(followupApi.generate(episode.id))
                 toastText = "已生成六段草稿"
             } catch (e: Exception) {
-                toastText = e.message ?: "生成失败，请稍后重试"
+                toastText = e.userMessage()
             } finally {
                 generating = false
             }
@@ -151,10 +153,25 @@ fun FollowupScreen(navController: NavHostController) {
                 )
                 exportText = result.text
                 tab = tabs[1]
-                toastText = "已导出（$format），请自行决定是否分享给医生"
+                if (format == "文本") {
+                    // 文本：直接调起系统分享（可发给医生或存记事本）
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT, result.text)
+                    }
+                    context.startActivity(android.content.Intent.createChooser(send, "分享复诊摘要"))
+                    toastText = "已生成摘要文本，请选择分享方式"
+                } else {
+                    // PDF / 图片：Android 用系统打印 / 分享，提示明确路径
+                    toastText = if (format == "PDF") {
+                        "摘要已生成；请用系统分享里的「打印 / 导出 PDF」保存"
+                    } else {
+                        "摘要已生成；请用系统截图保存为图片后分享"
+                    }
+                }
                 load()
             } catch (e: Exception) {
-                toastText = e.message ?: "导出失败，请稍后重试"
+                toastText = e.userMessage()
             } finally {
                 exporting = false
             }
@@ -264,6 +281,13 @@ fun FollowupScreen(navController: NavHostController) {
                             SectionCard(index = index + 1, section = section)
                             Spacer(modifier = Modifier.height(10.dp))
                         }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        AppButton(
+                            text = if (generating) "生成中…" else "重新生成（并入新增记录）",
+                            type = AppButtonType.Secondary,
+                            loading = generating,
+                            onClick = { generate() },
+                        )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = s.disclaimer,

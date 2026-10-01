@@ -139,11 +139,10 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     expect(data.token.startsWith('av1.')).toBe(true);
     expect(data.admin.name).toBe('editor01');
     expect(data.admin.role.name).toBe('运营编辑');
-    // B10：运营编辑可建草稿 / 提交 / 发起发布 / 举报初筛
+    // B10：运营编辑可建草稿 / 提交 / 发起发布 / 举报初筛（发布由临床审核 / 超级管理做）
     expect(data.admin.permissions).toEqual([
       'content.draft',
       'content.submit',
-      'content.publish',
       'evidence.ingest',
       'feedback.view',
       'feedback.triage',
@@ -240,11 +239,10 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
       '超级管理员',
     ]);
     const byName = new Map(data.roles.map((r) => [r.name, r.permissions]));
-    // B10：运营编辑可建草稿 / 提交 / 发起发布 / 举报初筛
+    // B10：运营编辑可建草稿 / 提交 / 发起发布 / 举报初筛（不持有 content.publish）
     expect(byName.get('运营编辑')).toEqual([
       'content.draft',
       'content.submit',
-      'content.publish',
       'evidence.ingest',
       'feedback.view',
       'feedback.triage',

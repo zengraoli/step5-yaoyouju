@@ -136,7 +136,7 @@ fun QaScreen(navController: NavHostController) {
                 }
                 loadContext()
             } catch (e: Exception) {
-                toastText = e.message ?: "初始化失败，请稍后重试"
+                toastText = e.userMessage()
             }
         }
     }
@@ -180,7 +180,7 @@ fun QaScreen(navController: NavHostController) {
                     )
                     return@launch
                 }
-                toastText = e.message ?: "提问失败，请稍后重试"
+                toastText = e.userMessage()
                 // 回滚乐观更新
                 messages = messages.filterNot { it.id.startsWith("local-") }
             } finally {

@@ -13,24 +13,27 @@ import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import DualConfirm from '@/components/DualConfirm.vue'
-import { batchTakeOffline, listContentsAdmin, type ContentAdminItem } from '@/api/contents'
-import { request } from '@/api/request'
+import {
+  batchTakeOffline,
+  createDraft,
+  listContentsAdmin,
+  type ContentAdminItem,
+} from '@/api/contents'
 
 /** 筛选选项（按设计稿） */
 const TYPE_OPTIONS = ['全部', '视频', '图文组件', '案例']
 const STATUS_OPTIONS = ['全部', '草稿', '待医学审核', '已审定', '已发布', '更正中', '已撤回', '已下线']
 const SCOPE_OPTIONS = ['全部', '报告术语', '病程变化', '复诊准备', '生活影响', '信息来源']
-/** 审核人下拉：来自真实成员表 */
+/**
+ * 审核人下拉：只列当前内容里真实出现过的审核人（来自内容列表本身）。
+ * 不再请求 /admin/users：运营编辑 / 临床审核没有该权限，
+ * 每次加载都会产生 403 并在审计里堆出越权记录（验收反馈第 43 条）。
+ */
 const reviewerOptions = ref<string[]>(['全部'])
 
-async function loadReviewers() {
-  try {
-    const users = await request<{ name: string }[]>({ url: '/admin/users' })
-    reviewerOptions.value = ['全部', ...users.map((u) => u.name)]
-  } catch {
-    reviewerOptions.value = ['全部']
-  }
+function syncReviewerOptions(list: ContentAdminItem[]) {
+  const names = [...new Set(list.map((i) => i.reviewer).filter((n): n is string => Boolean(n)))]
+  reviewerOptions.value = ['全部', ...names]
 }
 
 const router = useRouter()
@@ -42,14 +45,13 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
 const selected = ref<string[]>([])
-/** 批量下线双人确认弹层 */
-const dualOfflineRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
 const errorText = ref('')
+const busy = ref(false)
 
 const filters = ref({ type: '全部', status: '全部', scope: '全部', reviewer: '全部' })
 
 onMounted(async () => {
-  await Promise.all([load(), loadReviewers()])
+  await load()
 })
 
 async function load() {
@@ -67,6 +69,7 @@ async function load() {
     items.value = res.items
     stats.value = res.stats
     total.value = res.total
+    syncReviewerOptions(res.items)
   } catch (e) {
     errorText.value = e instanceof Error ? e.message : '数据加载失败'
   } finally {
@@ -102,27 +105,69 @@ function onToggleAll() {
   selected.value = allSelected.value ? [] : items.value.map((i) => i.id)
 }
 
-/** 批量下线（需双人确认：先发起确认单，另一人确认后才真正下线） */
+/** 批量下线（需双人确认：每条内容各一张确认单，另一人逐条确认后才真正下线） */
 async function onBatchOffline() {
   if (selected.value.length === 0) {
     notify('请先选择内容')
     return
   }
-  dualOfflineRef.value?.start(selected.value.length, `批量下线 ${selected.value.length} 条内容`)
+  busy.value = true
+  errorText.value = ''
+  try {
+    // 先逐条发起确认单（服务端会为还没有确认单的内容创建待确认申请）
+    await batchTakeOffline([...selected.value], '批量下线（双人确认后执行）')
+    notify(`已提交 ${selected.value.length} 条「一键下线」确认申请，请由另一名临床审核 / 超级管理员在上方「待我确认」里逐条确认`)
+  } catch (e) {
+    // 409 = 已提交确认申请（含待确认清单），这是正常的第一步
+    const data = (e as { data?: { pending?: { id: string; confirmation_id: string }[] } })?.data
+    if (data?.pending && Array.isArray(data.pending) && data.pending.length > 0) {
+      notify(`已提交 ${data.pending.length} 条确认申请，请另一名具备权限的账号在上方「待我确认」里逐条确认并执行`)
+    } else {
+      errorText.value = e instanceof Error ? e.message : '批量下线失败'
+    }
+  } finally {
+    busy.value = false
+  }
 }
 
-/** 第二人确认后执行批量下线 */
-async function submitBatchOffline(confirmationId: string): Promise<unknown> {
-  const ids = [...selected.value]
-  const result = await batchTakeOffline(ids, '批量下线（双人确认后执行）', confirmationId)
-  notify(`已批量下线 ${ids.length} 条（双人确认后生效）`)
-  selected.value = []
-  await load()
-  return result
-}
-
+/** 新建内容草稿（运营编辑 / 超级管理） */
 function onCreate() {
-  notify('新建内容草稿表单将在后续版本提供')
+  showCreate.value = true
+}
+
+const showCreate = ref(false)
+const createForm = ref({ type: '视频', title: '', applicable_scope: '', not_applicable: '', script: '' })
+const creating = ref(false)
+
+async function submitCreate() {
+  const title = createForm.value.title.trim()
+  if (!title) {
+    notify('请填写内容标题')
+    return
+  }
+  if (!createForm.value.script.trim()) {
+    notify('请填写脚本 / 正文（写入第一个版本）')
+    return
+  }
+  creating.value = true
+  try {
+    const detail = await createDraft({
+      type: createForm.value.type,
+      title,
+      applicable_scope: createForm.value.applicable_scope.trim() || '一般腰痛',
+      not_applicable: createForm.value.not_applicable.trim() || '急性外伤 / 需紧急就医的情况',
+      script: createForm.value.script.trim(),
+    })
+    notify(`已创建草稿《${title}》，请在详情页提交医学审核`)
+    showCreate.value = false
+    createForm.value = { type: '视频', title: '', applicable_scope: '', not_applicable: '', script: '' }
+    await load()
+    void detail
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '创建草稿失败')
+  } finally {
+    creating.value = false
+  }
 }
 
 function statusTagKey(status: string): 'confirmed' | 'unconfirmed' | 'unverified' | 'offline' | 'self' {
@@ -253,16 +298,41 @@ const pageCount = computed<number>(() => Math.max(1, Math.ceil(total.value / pag
       “下线开关”立即对用户端隐藏内容且不改变审核状态，用于应急；正式撤回请在详情页走“撤回”流程并定位引用页面。
     </AppNotice>
 
-    <!-- 批量下线双人确认弹层 -->
-    <DualConfirm
-      :ref="(el) => (dualOfflineRef = el as never)"
-      action="content.offline"
-      target-id="batch-take-offline"
-      target-label="批量下线（临床审核 + 超级管理员）"
-      :submit="submitBatchOffline"
-      button-text="占位"
-      @done="loadReviewers()"
-    />
+    <!-- 新建内容草稿弹层 -->
+    <div v-if="showCreate" class="modal-mask" @click.self="showCreate = false">
+      <AppCard class="modal">
+        <h3 class="modal__title">新建内容草稿</h3>
+        <p class="modal__desc">创建后进入草稿状态，需提交医学审核 → 临床审核 → 双人确认后才能发布。</p>
+        <label class="modal__field">
+          <span>类型</span>
+          <select v-model="createForm.type" class="modal__input">
+            <option value="视频">视频</option>
+            <option value="图文组件">图文组件</option>
+            <option value="案例">案例</option>
+          </select>
+        </label>
+        <label class="modal__field">
+          <span>标题</span>
+          <input v-model="createForm.title" class="modal__input" type="text" maxlength="100" />
+        </label>
+        <label class="modal__field">
+          <span>适用范围</span>
+          <input v-model="createForm.applicable_scope" class="modal__input" type="text" maxlength="200" />
+        </label>
+        <label class="modal__field">
+          <span>不适用范围</span>
+          <input v-model="createForm.not_applicable" class="modal__input" type="text" maxlength="200" />
+        </label>
+        <label class="modal__field">
+          <span>脚本 / 正文</span>
+          <textarea v-model="createForm.script" class="modal__input" rows="4" maxlength="4000" />
+        </label>
+        <div class="modal__actions">
+          <AppButton type="primary" :disabled="creating" @click="submitCreate">创建草稿</AppButton>
+          <AppButton type="soft" @click="showCreate = false">取消</AppButton>
+        </div>
+      </AppCard>
+    </div>
   </div>
 </template>
 

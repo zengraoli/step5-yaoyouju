@@ -219,6 +219,40 @@ export class AdminAuditService {
     return rows;
   }
 
+  /**
+   * 生成导出文件内容（仅「已审批」的申请可以导出）。
+   * 演示实现：把当前筛选范围内的审计日志导出为 JSON 文本（含哈希，便于外部校验）。
+   */
+  buildExport(actorId: string, requestId?: string): { filename: string; body: string } {
+    const request = requestId ? this.loadRequest(requestId) : null;
+    if (requestId && (!request || request.status !== '已审批')) {
+      throw new ApiException(ErrorCode.CONFLICT, '导出申请还没有通过审批，暂不能下载');
+    }
+    const rows = this.db.app
+      .prepare(
+        `SELECT id, created_at, actor_id, action, target, request_id, hash, prev_hash, seq, diff
+         FROM audit_log ORDER BY rowid ASC`,
+      )
+      .all() as Record<string, unknown>[];
+    const exportedAt = new Date().toISOString();
+    const body = JSON.stringify(
+      {
+        exported_at: exportedAt,
+        exported_by: actorId,
+        request: request ? { id: request.id, reason: request.reason, approver: request.approver_name } : null,
+        total: rows.length,
+        items: rows,
+        note: '审计日志只追加；每条记录带哈希与前向哈希，可用 /admin/audit/verify 校验完整性。',
+      },
+      null,
+      2,
+    );
+    this.audit.append(actorId, 'audit.export', `audit_export_request:${requestId ?? 'none'}`, {
+      total: rows.length,
+    });
+    return { filename: `yaoyouju-audit-${exportedAt.slice(0, 10)}.json`, body };
+  }
+
   private loadRequest(id: string): AuditExportRequest {
     const row = this.db.app
       .prepare(

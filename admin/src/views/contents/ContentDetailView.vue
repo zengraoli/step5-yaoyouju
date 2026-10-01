@@ -22,9 +22,14 @@ import { useAuthStore } from '@/stores/auth'
 import {
   approveContent,
   getContentDetailAdmin,
+  markCorrecting,
   publishContent,
   rejectContent,
+  resubmitContent,
+  submitForReview,
   takeOffline,
+  updateDraft,
+  withdrawContent,
   type ContentDetail,
 } from '@/api/contents'
 import { request } from '@/api/request'
@@ -82,6 +87,104 @@ function confirmAction(message: string): boolean {
 const canReview = computed<boolean>(() => auth.hasPermission('content.review'))
 const canPublish = computed<boolean>(() => auth.hasPermission('content.publish'))
 const canOffline = computed<boolean>(() => auth.hasPermission('content.offline'))
+const canDraft = computed<boolean>(() => auth.hasPermission('content.draft') || auth.hasPermission('*'))
+
+/** 状态判断（驱动可用动作，避免「什么状态都能发布」） */
+const isDraft = computed<boolean>(() => detail.value?.current_status === '草稿')
+const isPending = computed<boolean>(() => detail.value?.current_status === '待医学审核')
+const isReviewed = computed<boolean>(() => detail.value?.current_status === '已审定')
+const isPublished = computed<boolean>(() => detail.value?.current_status === '已发布')
+const isCorrecting = computed<boolean>(() => detail.value?.current_status === '更正中')
+
+/** 编辑草稿表单 */
+const editing = ref(false)
+const editForm = ref({ title: '', applicable_scope: '', not_applicable: '', script: '' })
+
+function onEdit() {
+  const d = detail.value
+  if (!d) return
+  editForm.value = {
+    title: d.title,
+    applicable_scope: d.applicable_scope ?? '',
+    not_applicable: d.not_applicable ?? '',
+    script: d.current_version?.script ?? '',
+  }
+  editing.value = true
+}
+
+async function submitEdit() {
+  submitting.value = 'edit'
+  try {
+    await updateDraft(contentId.value, editForm.value)
+    toast('已保存草稿改动')
+    editing.value = false
+    await load()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '保存失败')
+  } finally {
+    submitting.value = ''
+  }
+}
+
+/** 提交审核（草稿 → 待医学审核） */
+async function onSubmitReview() {
+  submitting.value = 'submit'
+  try {
+    await submitForReview(contentId.value)
+    toast('已提交医学审核')
+    await load()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '提交审核失败')
+  } finally {
+    submitting.value = ''
+  }
+}
+
+/** 撤回（已发布 → 已撤回；需双人确认：临床审核 + 超级管理员） */
+async function onWithdraw() {
+  const reason = globalThis.prompt ? globalThis.prompt('请输入撤回原因（写审计）') : '发现严重问题'
+  if (!reason) return
+  submitting.value = 'withdraw'
+  try {
+    await withdrawContent(contentId.value, reason)
+    toast('已提交撤回申请，需另一名具备权限的账号确认后生效')
+    await load()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '撤回失败（若返回待确认，请另一人到「待我确认」里确认）')
+  } finally {
+    submitting.value = ''
+  }
+}
+
+/** 标记更正（已发布 → 更正中） */
+async function onMarkCorrecting() {
+  const reason = globalThis.prompt ? globalThis.prompt('请输入更正原因（写审计）') : '需要更正'
+  if (!reason) return
+  submitting.value = 'correcting'
+  try {
+    await markCorrecting(contentId.value, reason)
+    toast('已标记为更正中')
+    await load()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '操作失败')
+  } finally {
+    submitting.value = ''
+  }
+}
+
+/** 提交新版本（更正中 → 待医学审核） */
+async function onResubmit() {
+  submitting.value = 'resubmit'
+  try {
+    await resubmitContent(contentId.value)
+    toast('已提交新版本，等待医学审核')
+    await load()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '提交新版本失败')
+  } finally {
+    submitting.value = ''
+  }
+}
 
 /** 脚本对比：当前版本与上一版本 */
 /** 类型 + 时长（时长由字幕长度推导，不写死） */
@@ -310,11 +413,46 @@ function onBack() {
           </label>
 
           <div class="flow__actions">
-            <AppButton v-if="canReview" type="primary" size="sm" :loading="submitting === 'approve'" @click="onApprove">✓ 审核通过</AppButton>
-            <AppButton v-if="canReview" type="soft" size="sm" :loading="submitting === 'reject'" @click="onReject">× 退回修改</AppButton>
-            <AppButton v-if="canPublish" type="primary" size="sm" :loading="submitting === 'publish'" @click="onPublish">发布（需双人确认）</AppButton>
+            <AppButton v-if="canDraft && isDraft" type="soft" size="sm" @click="onEdit">编辑草稿</AppButton>
+            <AppButton v-if="canDraft && isDraft" type="primary" size="sm" :loading="submitting === 'submit'" @click="onSubmitReview">提交医学审核</AppButton>
+            <AppButton v-if="canReview && isPending" type="primary" size="sm" :loading="submitting === 'approve'" @click="onApprove">✓ 审核通过</AppButton>
+            <AppButton v-if="canReview && isPending" type="soft" size="sm" :loading="submitting === 'reject'" @click="onReject">× 退回修改</AppButton>
+            <AppButton v-if="canPublish && isReviewed" type="primary" size="sm" :loading="submitting === 'publish'" @click="onPublish">发布（需双人确认）</AppButton>
+            <AppButton v-if="canOffline && isPublished" type="soft" size="sm" :loading="submitting === 'withdraw'" @click="onWithdraw">撤回（需双人确认）</AppButton>
+            <AppButton v-if="canDraft && isPublished" type="soft" size="sm" :loading="submitting === 'correcting'" @click="onMarkCorrecting">标记更正</AppButton>
+            <AppButton v-if="canDraft && isCorrecting" type="primary" size="sm" :loading="submitting === 'resubmit'" @click="onResubmit">提交新版本</AppButton>
           </div>
-          <p v-if="!canReview" class="flow__note">当前角色无审核权限（需要「医学审核」）。</p>
+          <p v-if="!canReview && !canDraft" class="flow__note">当前角色没有内容操作权限。</p>
+          <p v-else-if="!isDraft && !isPending && !isReviewed && !isPublished && !isCorrecting" class="flow__note">
+            当前状态（{{ detail.current_status }}）下没有可用操作。
+          </p>
+
+          <!-- 编辑草稿弹层 -->
+          <div v-if="editing" class="modal-mask" @click.self="editing = false">
+            <AppCard class="modal">
+              <h3 class="modal__title">编辑草稿</h3>
+              <label class="modal__field">
+                <span>标题</span>
+                <input v-model="editForm.title" class="modal__input" type="text" maxlength="100" />
+              </label>
+              <label class="modal__field">
+                <span>适用范围</span>
+                <input v-model="editForm.applicable_scope" class="modal__input" type="text" maxlength="200" />
+              </label>
+              <label class="modal__field">
+                <span>不适用范围</span>
+                <input v-model="editForm.not_applicable" class="modal__input" type="text" maxlength="200" />
+              </label>
+              <label class="modal__field">
+                <span>脚本 / 正文</span>
+                <textarea v-model="editForm.script" class="modal__input" rows="4" maxlength="4000" />
+              </label>
+              <div class="modal__actions">
+                <AppButton type="primary" :loading="submitting === 'edit'" @click="submitEdit">保存</AppButton>
+                <AppButton type="soft" @click="editing = false">取消</AppButton>
+              </div>
+            </AppCard>
+          </div>
         </AppCard>
 
         <AppCard class="panel">

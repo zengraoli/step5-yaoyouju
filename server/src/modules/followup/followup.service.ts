@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DbService } from '../../db/db.service';
 import { ApiException, ErrorCode } from '../../common/api-error';
-import { beijingDate } from '../../common/time.util';
+import { beijingDate, beijingDateTime } from '../../common/time.util';
 import { SOURCE_TYPES, VERIFY_STATUSES, UNCONFIRMED } from '../episodes/episodes.service';
 
 /**
@@ -632,7 +632,10 @@ export class FollowupService {
     });
     lines.push('——————————————');
     lines.push(FOLLOWUP_DISCLAIMER);
-    lines.push(`生成时间：${content.generated_at ?? '未知'}（UTC）`);
+    // 时间一律按北京时间展示（全局约定：界面按北京时间显示）
+    lines.push(
+      `生成时间：${content.generated_at ? beijingDateTime(content.generated_at) : '未知'}（北京时间）`,
+    );
     if (content.corrected) lines.push('本摘要已被用户纠正修改');
     return lines.join('\n');
   }

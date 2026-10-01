@@ -97,7 +97,7 @@ fun ContentDetailScreen(
         try {
             detail = handleResponse(contentsApi.detail(contentId))
         } catch (e: Exception) {
-            errorText = e.message ?: "内容加载失败"
+            errorText = e.userMessage()
         } finally {
             loading = false
         }
@@ -273,7 +273,7 @@ fun ContentDetailScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = "发布时间：" + (d.currentVersion?.publishedAt?.take(10) ?: "尚未确认"),
+                                    text = "发布时间：" + BjTime.date(d.currentVersion?.publishedAt).ifBlank { "尚未确认" },
                                     fontSize = 11.sp,
                                     color = Text3,
                                 )
@@ -342,7 +342,7 @@ fun ContentDetailScreen(
                                                 }
                                             }
                                             Text(
-                                                text = record.reviewedAt.take(10),
+                                                text = BjTime.date(record.reviewedAt).ifBlank { "时间尚未确认" },
                                                 fontSize = 10.sp,
                                                 color = Text3,
                                             )
@@ -409,7 +409,7 @@ fun ContentDetailScreen(
                                         )
                                         toastText = "举报已提交，我们会尽快核实"
                                     } catch (e: Exception) {
-                                        toastText = e.message ?: "举报提交失败，请稍后重试"
+                                        toastText = e.userMessage()
                                     }
                                 }
                             },

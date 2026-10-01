@@ -155,7 +155,7 @@ fun ReportInputScreen(navController: NavHostController) {
                 }
                 navController.navigate(Routes.REPORT_VERIFY)
             } catch (e: Exception) {
-                toastText = e.message ?: "保存失败，请稍后重试"
+                toastText = e.userMessage()
             } finally {
                 submitting = false
             }
@@ -327,7 +327,7 @@ fun ReportInputScreen(navController: NavHostController) {
                                         tab = tabs[0]
                                         toastText = "已提取示例文本，请核对后使用"
                                     } catch (e: Exception) {
-                                        toastText = e.message ?: "拍照提取失败，请改用粘贴文字"
+                                        toastText = e.userMessage()
                                     } finally {
                                         ocrLoading = false
                                     }

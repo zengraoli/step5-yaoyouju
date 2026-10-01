@@ -238,7 +238,7 @@ function riskTag(r: RiskItem): { key: 'confirmed' | 'unconfirmed' | 'conflict' |
 
         <AppCard class="panel">
           <div class="panel__head">
-            <h2 class="panel__title"><span aria-hidden="true">⚠</span> 可识别风险检查（发布前必过）</h2>
+            <h2 class="panel__title"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8 2.9 19.6h18.2z" /><path d="M12 9.6v4.2" /><path d="M12 16.6v.4" /></svg> 可识别风险检查（发布前必过）</h2>
             <AppButton type="soft" size="sm" @click="notify('逐项复核对发布前逐项打勾；当前按下方清单状态展示')">逐项复核</AppButton>
           </div>
           <ul class="risk-list">

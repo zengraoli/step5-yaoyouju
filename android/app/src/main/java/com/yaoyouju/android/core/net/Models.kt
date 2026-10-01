@@ -20,6 +20,8 @@ class ApiException(
     val code: Int,
     override val message: String,
     val data: String? = null,
+    /** 是否网络层异常（连不上 / 超时），界面据此进入服务不可用页或提供重试 */
+    val network: Boolean = false,
 ) : Exception(message)
 
 /** 登录结果（POST /auth/login） */

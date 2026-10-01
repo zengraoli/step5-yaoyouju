@@ -429,7 +429,11 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
     ).toBe(first.chunk_count);
 
     // 原文变短后再次 ingest：片段数随之变化（按位置更新 + 删除多余旧片段）
-    evidence.update(editor(), doc.id, { raw_text: LONG_TEXT.slice(0, 120) });
+    // 已启用的证据原文只能由临床审核修改（运营编辑不能悄悄改写用户正在检索的原文）
+    evidence.update(clinician(), doc.id, { raw_text: LONG_TEXT.slice(0, 120) });
+    expect(
+      caught(() => evidence.update(editor(), doc.id, { raw_text: LONG_TEXT.slice(0, 80) })).code,
+    ).toBe(40300);
     const shrunk = evidence.ingest(editor(), doc.id);
     expect(shrunk.chunk_count).toBeLessThan(first.chunk_count);
     expect(shrunk.positions).toEqual(Array.from({ length: shrunk.chunk_count }, (_, i) => i));

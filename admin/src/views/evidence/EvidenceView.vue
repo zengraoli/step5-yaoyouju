@@ -11,12 +11,13 @@
  * - GET  /admin/evidence/{id}/impact    停用影响预览
  * - POST /admin/evidence/{id}/active    停用 / 启用（停用返回影响预览）
  */
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { request } from '@/api/request'
+import { useAuthStore } from '@/stores/auth'
 
 interface EvidenceListItem {
   id: string
@@ -86,6 +87,8 @@ const createMode = ref<'create' | 'import'>('create')
 const createForm = ref({ title: '', source_type: '指南', source_url: '', license: '待确认', raw_text: '' })
 const creating = ref(false)
 
+const auth = useAuthStore()
+
 const loading = ref(true)
 const items = ref<EvidenceListItem[]>([])
 const stats = ref<Record<string, number>>({})
@@ -100,6 +103,12 @@ const pipelineDocTitle = ref('')
 const impact = ref<ImpactReport | null>(null)
 const impactDocTitle = ref('')
 const disabling = ref(false)
+const verifying = ref(false)
+/** 当前管线文档的许可是否为「可引用」（未确认时不参与用户检索） */
+const pipelineLicenseOk = computed<boolean>(() => {
+  const doc = items.value.find((i) => i.title === pipelineDocTitle.value)
+  return doc?.license === '可引用'
+})
 
 onMounted(async () => {
   await load()
@@ -206,6 +215,35 @@ async function onViewImpact(item: EvidenceListItem) {
   }
 }
 
+/** 标记许可已确认（临床审核 / 超级管理）：许可置为「可引用」并记录核实日期，写审计 */
+async function onVerifyLicense() {
+  const target =
+    items.value.find((i) => i.title === pipelineDocTitle.value) ??
+    items.value.find((i) => i.license !== '可引用') ??
+    items.value[0]
+  if (!target) return
+  if (!auth.hasPermission('evidence.verify') && !auth.hasPermission('*')) {
+    notify('只有临床审核或超级管理员可以标记许可已确认')
+    return
+  }
+  const date = globalThis.prompt ? globalThis.prompt('请输入核实日期（YYYY-MM-DD，默认今天）', todayIso()) : todayIso()
+  if (!date) return
+  verifying.value = true
+  try {
+    await request({
+      url: `/admin/evidence/${encodeURIComponent(target.id)}/verify-license`,
+      method: 'POST',
+      data: { verified_at: date.trim() || undefined },
+    })
+    notify(`已标记《${target.title}》许可为「可引用」（核实日期 ${date.trim() || todayIso()}）`)
+    await load()
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '标记失败')
+  } finally {
+    verifying.value = false
+  }
+}
+
 /** 停用（需先看影响预览；写入审计） */
 async function onDisable() {
   if (!impact.value) return
@@ -229,7 +267,10 @@ async function onDisable() {
 }
 
 /** 由管线视图推导五个入库步骤（许可检查 → 文本清洗 → 切分 → 向量化 → 建索引） */
-function pipelineSteps(p: PipelineView): { key: string; label: string; status: 'done' | 'pending' | 'failed'; detail?: string }[] {
+function pipelineSteps(
+  p: PipelineView,
+  licenseOk: boolean,
+): { key: string; label: string; status: 'done' | 'pending' | 'failed'; detail?: string }[] {
   const ingested = p.chunk_count > 0
   const failed = p.status === '失败'
   const step = (key: string, label: string, done: boolean, detail?: string) => ({
@@ -239,12 +280,17 @@ function pipelineSteps(p: PipelineView): { key: string; label: string; status: '
     detail,
   })
   return [
-    step('license', '许可检查', true, '许可：可引用'),
-    step('clean', '文本清洗', true, '已完成 · 去页眉页脚与页码'),
-    step('split', '切分', ingested, ingested ? `已完成 · 约 ${p.raw_text_length} tokens / 重叠 ${p.chunker.overlap} · ${p.chunk_count} 片段` : '等待许可通过后执行'),
-    step('embed', '向量化', ingested, ingested ? `等待许可通过后执行（embedding v3）` : '等待许可通过后执行（embedding v3）'),
-    step('index', '建索引', ingested, ingested ? '已写入检索索引' : '—'),
+    step('license', '许可检查', licenseOk, licenseOk ? '许可：可引用（临床审核已确认）' : '许可：待确认——标记为「可引用」后才会参与用户检索'),
+    step('clean', '文本清洗', ingested, ingested ? '已完成 · 去页眉页脚与页码' : '切分入库时执行'),
+    step('split', '切分', ingested, ingested ? `已完成 · 约 ${p.raw_text_length} 字 / 重叠 ${p.chunker.overlap} 字 · ${p.chunk_count} 片段` : licenseOk ? '点击「切分入库」执行' : '等待许可通过后执行'),
+    step('embed', '向量化', ingested, ingested ? `已计算本地向量（${p.chunk_count} 条，写入 embedding 列）` : licenseOk ? '切分后自动计算' : '等待许可通过后执行'),
+    step('index', '建索引', ingested, ingested ? '已写入检索索引（用户检索可见）' : '—'),
   ]
+}
+
+/** 今天的北京时间日期（YYYY-MM-DD） */
+function todayIso(): string {
+  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)
 }
 
 function licenseTagKey(license: string | null): 'confirmed' | 'unconfirmed' | 'self' {
@@ -349,7 +395,7 @@ function stepTag(status: string): { key: 'confirmed' | 'unconfirmed' | 'offline'
         <AppCard v-if="pipeline" class="panel">
           <h2 class="panel__title">入库管线 · {{ pipelineDocTitle }}</h2>
           <ul class="pipeline">
-            <li v-for="step in pipelineSteps(pipeline)" :key="step.key" class="pipeline__step">
+            <li v-for="step in pipelineSteps(pipeline, pipelineLicenseOk)" :key="step.key" class="pipeline__step">
               <span class="pipeline__dot" :class="`pipeline__dot--${step.status}`" aria-hidden="true" />
               <div class="pipeline__body">
                 <p class="pipeline__label">{{ step.label }}</p>
@@ -359,13 +405,13 @@ function stepTag(status: string): { key: 'confirmed' | 'unconfirmed' | 'offline'
             </li>
           </ul>
           <p class="pipeline__params">切分参数：每片 {{ pipeline.chunker.min }}–{{ pipeline.chunker.max }} 字 · 重叠 {{ pipeline.chunker.overlap }} 字</p>
-          <AppButton type="soft" size="sm" @click="notify('已记录：许可标记为已确认（临床审核）')">
+          <AppButton type="soft" size="sm" :loading="verifying" @click="onVerifyLicense">
             标记许可已确认（临床审核）
           </AppButton>
         </AppCard>
 
         <AppCard v-if="impact" class="panel">
-          <h2 class="panel__title"><span aria-hidden="true">⚠</span> 停用影响预览 · {{ impactDocTitle }}</h2>
+          <h2 class="panel__title"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8 2.9 19.6h18.2z" /><path d="M12 9.6v4.2" /><path d="M12 16.6v.4" /></svg> 停用影响预览 · {{ impactDocTitle }}</h2>
           <p class="panel__hint">
             停用后立即从检索中剔除。以下内容曾引用该文档，需临床审核决定是否更正：
           </p>

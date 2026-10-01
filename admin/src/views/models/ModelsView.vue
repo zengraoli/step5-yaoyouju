@@ -36,6 +36,8 @@ interface ReleaseItem {
   content_lib_version: string | null
   status: string
   created_at: string
+  /** 向量 / embedding 模型版本（模型表由服务端给出，不写死） */
+  embedding?: string | null
   latest_eval: {
     id: string
     eval_set_id: string
@@ -301,7 +303,7 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
             <td>{{ r.prompt_version }}</td>
             <td>{{ r.retrieval_strategy ?? '—' }}</td>
             <td>{{ r.content_lib_version ?? '—' }}</td>
-            <td>v3</td>
+            <td>{{ r.embedding ?? '—' }}</td>
             <td>
               <StatusTag :status="statusKey(r.status)" :text="r.status" />
               <p class="table__eval">{{ evalResultText(r) }}</p>
@@ -309,24 +311,30 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
             <td>{{ r.status === '生效' ? '100%' : r.status === '灰度' ? '0%' : '—' }}</td>
             <td class="table__ops">
               <button
-                v-if="r.status === '候选' || r.status === '灰度'"
+                v-if="r.status === '候选' || r.status === '灰度' || r.status === '已回滚'"
                 type="button"
                 class="op-link"
                 :disabled="promoting === r.id"
                 @click.stop="onPromote(r)"
               >
-                重跑评测 · 查看失败用例
+                提升一级（需双人确认）
               </button>
               <button
-                v-if="r.status === '生效'"
+                v-if="r.status !== '已回滚'"
                 type="button"
                 class="op-link op-link--danger"
                 :disabled="rollingBack === r.id"
                 @click.stop="onRollback(r)"
               >
-                回滚到上一版
+                回滚（需双人确认）
               </button>
-              <span v-else class="op-link op-link--muted">查看</span>
+              <button
+                type="button"
+                class="op-link op-link--muted"
+                @click.stop="selectedReleaseId = r.id"
+              >
+                查看评测与失败用例
+              </button>
             </td>
           </tr>
         </tbody>

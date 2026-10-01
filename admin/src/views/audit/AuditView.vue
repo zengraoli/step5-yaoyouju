@@ -15,7 +15,7 @@ import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
-import { request } from '@/api/request'
+import { getAdminToken, getBaseUrl, request } from '@/api/request'
 
 interface AuditItem {
   id: string
@@ -146,13 +146,32 @@ async function onApproveExport(id: string) {
       method: 'POST',
       data: { request_id: id },
     })
-    notify('已审批，导出申请生效')
+    notify('已审批，导出申请生效，可以下载导出文件')
     await loadApprovals()
   } catch (e) {
     notify(e instanceof Error ? e.message : '审批失败')
   } finally {
     approving.value = ''
   }
+}
+
+/** 下载导出文件（仅已审批的申请可下载；服务端返回 JSON 文件） */
+async function onDownloadExport(id: string) {
+  const res = await fetch(`${getBaseUrl()}/admin/audit/export?request_id=${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${getAdminToken()}` },
+  })
+  if (!res.ok) {
+    notify('下载失败：该导出申请还没有通过审批')
+    return
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `yaoyouju-audit-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  notify('导出文件已开始下载')
 }
 
 /** 导出申请列表 */
@@ -288,7 +307,14 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
               >
                 审批
               </button>
-              <span v-else class="op-link op-link--muted">—</span>
+              <button
+                v-else
+                type="button"
+                class="op-link"
+                @click="onDownloadExport(a.id)"
+              >
+                下载导出文件
+              </button>
             </td>
           </tr>
           <tr v-if="approvals.length === 0">
@@ -297,7 +323,7 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
         </tbody>
       </table>
       <p class="panel__note">
-        审批通过后导出内容写入审计（approver / 请求 ID / 原因）；审计日志只追加，不可修改或删除。
+        审批通过后可在此下载导出文件（JSON，含哈希），导出行为本身也写入审计；审计日志只追加，不可修改或删除。
       </p>
     </AppCard>
 
@@ -336,7 +362,9 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
       </table>
 
       <div class="panel__foot">
-        <span class="panel__total">共 {{ total.toLocaleString() }} 条 · 每页 {{ pageSize }} 条 · 按月分区归档至对象存储</span>
+        <span class="panel__total">
+          共 {{ total.toLocaleString() }} 条 · 每页 {{ pageSize }} 条 · 演示实现：审计保存在本地 SQLite（只追加 + 哈希链），导出需审批
+        </span>
         <div class="pager">
           <button type="button" :disabled="page <= 1" @click="page -= 1; load()">‹</button>
           <span class="pager__current">{{ page }}</span>

@@ -107,7 +107,7 @@ fun LoginScreen(navController: NavHostController) {
                 countdown = 60
                 toastText = "验证码已发送至 $masked（演示验证码 123456）"
             } catch (e: Exception) {
-                toastText = e.message ?: "验证码发送失败，请稍后重试"
+                toastText = e.userMessage()
             } finally {
                 action = "idle"
             }
@@ -126,7 +126,7 @@ fun LoginScreen(navController: NavHostController) {
                 }
                 action = "logged_in"
             } catch (e: Exception) {
-                toastText = e.message ?: "登录失败，请稍后重试"
+                toastText = e.userMessage()
                 action = "idle"
             } finally {
                 if (action == "logging") action = "idle"

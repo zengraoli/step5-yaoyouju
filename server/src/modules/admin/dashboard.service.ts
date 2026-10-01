@@ -48,6 +48,11 @@ export class DashboardService {
     const closedStatuses = ['已关闭', '无需处理', '已处理'];
     const openReports = reports.filter((r) => !closedStatuses.includes(r.status));
     const sevCount = (s: string) => openReports.filter((r) => r.severity === s).length;
+    // 「待处理」与「处理中」分开计数：待处理不含处理中（验收反馈第 43 条）
+    const pendingOnly = openReports.filter((r) => r.status === '待处理').length;
+    const inProgress = openReports.filter((r) => r.status === '处理中').length;
+    const sevPending = (s: string) =>
+      openReports.filter((r) => r.severity === s && r.status === '待处理').length;
 
     // 举报平均处理时长（已处理的举报：处理记录时间 - 创建时间）
     const handledRows = app
@@ -149,9 +154,14 @@ export class DashboardService {
       pending_review: pendingReview,
       pending_reports: {
         total: openReports.length,
+        pending: pendingOnly,
+        in_progress: inProgress,
         high: sevCount('high'),
         medium: sevCount('medium'),
         low: sevCount('low'),
+        pending_high: sevPending('high'),
+        pending_medium: sevPending('medium'),
+        pending_low: sevPending('low'),
         avg_handle_days: avgHandleDays,
       },
       safety_events_24h: safetyEvents.map((e) => ({

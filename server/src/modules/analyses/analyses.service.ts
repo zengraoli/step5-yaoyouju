@@ -93,15 +93,12 @@ export class AnalysesService {
         this.logger.warn(
           `[analysis] 病程 ${ep.id} 已记录红旗 ${recorded.map((r) => r.rule_code).join(',')}，停止个性化分析`,
         );
-        return {
-          status: 'fallback',
-          fallback: buildFallbackSections({
-            episode_title: ep.title as string,
-            events: this.episodeEvents(ep.id as string),
-            reason: 'safety_stop',
-          }),
-          safety_notice: notice,
-        };
+        // 与「本次命中」一致：抛 40911 + 就医提示，绝不再生成个性化分析
+        throw new ApiException(
+          ErrorCode.SAFETY_STOP_PERSONAL,
+          notice.matched[0]?.advice,
+          notice,
+        );
       }
     }
 

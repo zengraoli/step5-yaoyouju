@@ -133,11 +133,18 @@ export function resubmitContent(id: string): Promise<ContentDetail> {
   return request<ContentDetail>({ url: `/admin/contents/${encodeURIComponent(id)}/resubmit`, method: 'POST' })
 }
 
-/** 批量下线（需双人确认） */
-export function batchTakeOffline(ids: string[], reason?: string, confirmationId?: string): Promise<unknown> {
+/**
+ * 批量下线（需双人确认）。
+ * 每条内容各自一张确认单：确认人拿着每条对应的 confirmation_ids 再次提交才会真正下线。
+ */
+export function batchTakeOffline(
+  ids: string[],
+  reason?: string,
+  confirmationIds?: Record<string, string>,
+): Promise<unknown> {
   return request({
     url: '/admin/contents/batch-take-offline',
     method: 'POST',
-    data: { ids, reason, ...(confirmationId ? { confirmation_id: confirmationId } : {}) },
+    data: { ids, reason, ...(confirmationIds ? { confirmation_ids: confirmationIds } : {}) },
   })
 }

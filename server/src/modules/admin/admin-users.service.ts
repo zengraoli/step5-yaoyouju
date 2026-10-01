@@ -121,6 +121,7 @@ export class AdminUsersService {
           input.confirmation_id ? `另一人已确认停用 ${target.name}` : `停用超级管理员 ${target.name}`,
           admin,
           input.confirmation_id,
+          { active: false, reason: input.reason ?? '停用超级管理员' },
         );
         if (!gate.proceed) {
           throw new ApiException(

@@ -54,6 +54,8 @@ interface Incident {
   severity: string
   date: string
   summary: string
+  /** 待办（未做的步骤不谎称已完成） */
+  followup?: string | null
   audit_id: string
 }
 
@@ -208,7 +210,7 @@ const headerSummary = computed<string>(() => {
       <section class="safety-left">
         <AppCard class="panel">
           <div class="panel__head">
-            <h2 class="panel__title"><span aria-hidden="true">⏻</span> 应急开关</h2>
+            <h2 class="panel__title"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.4v7.2" /><path d="M7.4 7.2a6.4 6.4 0 1 0 9.2 0" /></svg> 应急开关</h2>
             <StatusTag status="conflict" text="高危需双人确认" />
           </div>
           <div class="switch-list">
@@ -250,15 +252,18 @@ const headerSummary = computed<string>(() => {
 
         <AppCard class="panel">
           <div class="panel__head">
-            <h2 class="panel__title"><span aria-hidden="true">⚠</span> 事故记录</h2>
-            <AppButton type="soft" size="sm" @click="notify('事故记录表单将在后续版本提供')">新建</AppButton>
+            <h2 class="panel__title"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.8 2.9 19.6h18.2z" /><path d="M12 9.6v4.2" /><path d="M12 16.6v.4" /></svg> 事故记录</h2>
+            <AppButton type="soft" size="sm" @click="notify('事故记录由审计日志自动派生，无需手工新建')">说明</AppButton>
           </div>
           <ul class="incident-list">
             <li v-for="inc in incidents" :key="inc.id" class="incident-item">
               <span class="incident-item__id">{{ inc.id }}</span>
               <StatusTag :status="inc.severity === '高' ? 'conflict' : inc.severity === '中' ? 'unconfirmed' : 'confirmed'" :text="inc.severity" />
               <span class="incident-item__date">{{ inc.date }}</span>
-              <span class="incident-item__summary">{{ inc.summary }}</span>
+              <span class="incident-item__summary">
+                {{ inc.summary }}
+                <template v-if="inc.followup"> · {{ inc.followup }}</template>
+              </span>
             </li>
             <li v-if="incidents.length === 0" class="incident-item">还没有事故记录</li>
           </ul>
@@ -316,10 +321,19 @@ const headerSummary = computed<string>(() => {
 
         <AppCard class="panel">
           <div class="panel__head">
-            <h2 class="panel__title"><span aria-hidden="true">🛡</span> 红旗规则集</h2>
+            <h2 class="panel__title">
+              <svg class="panel__title-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.4 5 6v5.4c0 4.4 3 7.6 7 9.2 4-1.6 7-4.8 7-9.2V6z" /></svg>
+              红旗规则集
+            </h2>
             <div class="panel__head-right">
               <StatusTag status="self" :text="`当前 ${ruleSet?.rule_set_version ?? 'rs-1.3'} · 临床审定 2026-09-10`" />
-              <AppButton type="soft" size="sm" @click="notify('规则表详情将在后续版本提供')">查看规则表</AppButton>
+              <AppButton
+                type="soft"
+                size="sm"
+                @click="notify(`规则集 ${ruleSet?.rule_set_version ?? '—'} 共 ${ruleSet?.red_flags.length ?? 0} 条红旗规则、${ruleSet?.out_of_scope.length ?? 0} 类越界规则；变更需临床负责人签署并触发回归评测`)"
+              >
+                查看规则表
+              </AppButton>
             </div>
           </div>
           <p class="panel__note">{{ ruleSet?.note }}</p>
