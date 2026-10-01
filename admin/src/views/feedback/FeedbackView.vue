@@ -307,14 +307,14 @@ function versionsText(item: QueueItem): string {
   if (v.analysis_version) parts.push(`分析 v${v.analysis_version}`)
   if (v.model) parts.push(v.model.model_name)
   if (v.content) parts.push(`内容版本 ${v.content.current_status} v${v.content.version}`)
-  parts.push(`检索 R-4`)
+  if (v.rule_set_version) parts.push(`规则集 ${v.rule_set_version}`)
   return parts.join(' · ')
 }
 
 const affectedText = computed<string>(() => {
   const users = detail.value?.affected_users ?? []
-  if (users.length === 0) return '同版本组合近 7 天：0 条分析'
-  return `同版本组合近 7 天：${users.length * 312} 条分析（脱敏统计）`
+  if (users.length === 0) return '暂未关联到受影响用户'
+  return `受影响用户 ${users.length} 人（脱敏统计）`
 })
 </script>
 
