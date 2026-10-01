@@ -470,7 +470,7 @@ export class FeedbackService {
     const gate = this.confirmations.prepare(
       'feedback.authorize',
       id,
-      '举报原文单条授权',
+      `举报原文 #${id.slice(0, 6)} · ${row.severity || '举报'}`,
       input.confirmation_id ? '另一人已确认的单条授权：' + scope : '单条授权：' + scope,
       this.adminById(actorId),
       input.confirmation_id,
@@ -487,23 +487,29 @@ export class FeedbackService {
         { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
       );
     }
+    // 以申请时的授权范围为准，忽略确认人请求里的范围
+    const effScope =
+      gate.confirmation && typeof gate.confirmation.payload.scope === 'string' && gate.confirmation.payload.scope.trim()
+        ? gate.confirmation.payload.scope
+        : scope;
     const expiresAt = new Date(nowDate.getTime() + AUTHORIZE_TTL_MS).toISOString();
     this.db.app
       .prepare(
         `UPDATE feedback SET authorized_by=?, authorized_at=?, authorize_scope=?, authorize_expires_at=?, authorize_revoked_at=NULL WHERE id=?`,
       )
-      .run(gate.confirmation!.requested_by, now, scope, expiresAt, id);
+      .run(gate.confirmation!.requested_by, now, effScope, expiresAt, id);
     this.db.app.prepare('UPDATE feedback SET approve_by = ? WHERE id = ?').run(actorId, id);
     this.audit.append(actorId, 'feedback.authorize_view', `feedback:${id}`, {
       requested_by: gate.confirmation!.requested_by,
       approved_by: actorId,
-      scope,
+      scope: effScope,
       severity: row.severity,
       authorized_at: now,
       expires_at: expiresAt,
       confirmation_id: gate.confirmation?.id ?? null,
     });
-    this.logger.log(`[feedback] ${actorId} 单条授权查看举报 ${id} 的用户原始内容（范围：${scope}）`);
+    this.logger.log(`[feedback] ${actorId} 单条授权查看举报 ${id} 的用户原始内容（范围：${effScope}）`);
+    if (gate.confirmation) this.confirmations.markApplied(gate.confirmation.id);
     return this.detail(id, actorId);
   }
 

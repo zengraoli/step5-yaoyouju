@@ -64,7 +64,10 @@ export class AdminDualControlController {
         },
       );
     }
-    const result = this.dualControl.updateSettings(dto.enabled, dto.reason, admin.id);
+    const p = (gate.confirmation?.payload ?? {}) as { enabled?: unknown; reason?: unknown };
+    const effEnabled = typeof p.enabled === 'boolean' ? p.enabled : dto.enabled;
+    const effReason = (typeof p.reason === 'string' && p.reason.trim()) || dto.reason?.trim() || '变更双人确认设置';
+    const result = this.dualControl.updateSettings(effEnabled, effReason, admin.id);
     if (gate.confirmation) this.confirmations.markApplied(gate.confirmation.id);
     return result;
   }

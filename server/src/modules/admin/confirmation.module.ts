@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DbModule } from '../../db/db.module';
 import { AuditService } from '../../common/audit.service';
 import { ConfirmationService } from './confirmation.service';
+import { DualControlService } from './dual-control.service';
 
 /**
  * 双人确认（B10 / 验收反馈第 9、10、30 条）。
@@ -11,7 +12,7 @@ import { ConfirmationService } from './confirmation.service';
  */
 @Module({
   imports: [DbModule],
-  providers: [ConfirmationService, AuditService],
-  exports: [ConfirmationService],
+  providers: [ConfirmationService, AuditService, DualControlService],
+  exports: [ConfirmationService, DualControlService],
 })
 export class ConfirmationModule {}

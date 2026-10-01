@@ -201,7 +201,11 @@ export class AdminSafetyController {
           },
         );
       }
-      const result = this.switches.setEnabled(key, dto.enabled, dto.reason?.trim() || '后台变更', admin.id);
+      // 双人确认带单执行时，以「申请时」的值为准，忽略确认人请求体里的值（反馈：确认人不能改值）
+      const p = (gate.confirmation?.payload ?? {}) as { enabled?: unknown; reason?: unknown };
+      const effEnabled = typeof p.enabled === 'boolean' ? p.enabled : dto.enabled;
+      const effReason = (typeof p.reason === 'string' && p.reason.trim()) || dto.reason?.trim() || '后台变更';
+      const result = this.switches.setEnabled(key, effEnabled, effReason, admin.id);
       if (gate.confirmation) this.confirmations.markApplied(gate.confirmation.id);
       return result;
     }

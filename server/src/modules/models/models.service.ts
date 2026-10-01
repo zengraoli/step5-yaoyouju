@@ -70,6 +70,15 @@ export class ModelReleasesService {
     private readonly evalService: EvalService,
   ) {}
 
+  /** 组合标识（确认单展示用）：模型名 + 提示词版本 */
+  labelOf(id: string): string {
+    const row = this.db.app
+      .prepare('SELECT model_name, prompt_version FROM model_release WHERE id = ?')
+      .get(id) as { model_name: string; prompt_version: string } | undefined;
+    if (!row) return '模型发布';
+    return `${row.model_name} ${row.prompt_version}`;
+  }
+
   /** 发布组合表：模型名、提示词版本、检索策略、内容库版本、状态、创建时间、最近评测结果 */
   list(): ReleaseItem[] {
     const rows = this.db.app

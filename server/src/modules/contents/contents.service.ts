@@ -5,6 +5,7 @@ import { ApiException, ErrorCode } from '../../common/api-error';
 import { AuditService } from '../../common/audit.service';
 import { SwitchesService } from '../switches/switches.service';
 import { ConfirmationService } from '../admin/confirmation.service';
+import { DualControlService } from '../admin/dual-control.service';
 import { AdminContext } from '../admin/admin-auth.service';
 
 /**
@@ -261,6 +262,7 @@ export class ContentsService {
     private readonly switches: SwitchesService,
     private readonly audit: AuditService,
     private readonly confirmations: ConfirmationService,
+    private readonly dualControl: DualControlService,
   ) {}
 
   // ---------- 用户端 ----------
@@ -473,7 +475,9 @@ export class ContentsService {
     if (!approver) {
       throw new ApiException(ErrorCode.CONFLICT, '发布需双人确认：未找到临床审核通过记录');
     }
-    if (approver === publisherId) {
+    // 「发布双人确认」设置关闭时，允许审定的同一人发布（不必换另一角色）；
+    // 开启时必须与最近的审核通过人不是同一人。
+    if (this.dualControl.getSettings().enabled && approver === publisherId) {
       throw new ApiException(
         ErrorCode.CONFLICT,
         '发布需双人确认：审核人与发布人不能是同一人，请换一位临床审核角色发布',
@@ -727,6 +731,7 @@ export class ContentsService {
         reason,
       });
     });
+    if (gate.confirmation) this.confirmations.markApplied(gate.confirmation.id);
     this.logger.log(`[contents] ${itemId} 撤回（${item.current_status} → ${to}）：${reason}`);
     return this.detailOf(this.loadItem(itemId));
   }

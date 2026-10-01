@@ -19,6 +19,7 @@ import { ApiException, ErrorCode } from '../../common/api-error';
 import { ContentsController } from './contents.controller';
 import { ContentsService } from './contents.service';
 import { ConfirmationService } from '../admin/confirmation.service';
+import { DualControlService } from '../admin/dual-control.service';
 import { AdminContext } from '../admin/admin-auth.service';
 import { permissionsOf } from '../admin/admin.constants';
 
@@ -78,6 +79,7 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
         ContentsService,
         SwitchesService,
         ConfirmationService,
+        DualControlService,
         AuditService,
         SchemaService,
         { provide: APP_GUARD, useClass: AuthGuard },

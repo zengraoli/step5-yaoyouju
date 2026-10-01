@@ -105,7 +105,7 @@ export class ModelsController {
     const gate = this.confirmations.prepare(
       'model.promote',
       id,
-      '模型发布提升',
+      this.releases.labelOf(id),
       dto.confirmation_id ? '另一人已确认的模型发布提升' : '模型发布提升',
       admin,
       dto.confirmation_id,
@@ -137,7 +137,7 @@ export class ModelsController {
     const gate = this.confirmations.prepare(
       'model.rollback',
       id,
-      '模型发布回滚',
+      this.releases.labelOf(id),
       dto.confirmation_id ? '另一人已确认的模型发布回滚：' + dto.reason : '模型发布回滚：' + dto.reason,
       admin,
       dto.confirmation_id,
@@ -150,7 +150,9 @@ export class ModelsController {
         { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
       );
     }
-    const result = this.releases.rollback(id, dto.reason, admin.id);
+    const p = (gate.confirmation?.payload ?? {}) as { reason?: unknown };
+    const effReason = (typeof p.reason === 'string' && p.reason.trim()) || dto.reason || '回滚';
+    const result = this.releases.rollback(id, effReason, admin.id);
     if (gate.confirmation) this.confirmations.markApplied(gate.confirmation.id);
     return result;
   }

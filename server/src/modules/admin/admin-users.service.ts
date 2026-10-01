@@ -111,6 +111,7 @@ export class AdminUsersService {
     if (!input.active && target.id === admin.id) {
       throw new ApiException(ErrorCode.FORBIDDEN, '不能停用当前登录账号');
     }
+    let confirmId: string | null = null;
     if (!input.active) {
       const roleName = this.roleNameOf(id);
       if (roleName === '超级管理员') {
@@ -129,6 +130,7 @@ export class AdminUsersService {
             `已提交「停用超级管理员」双人确认申请（需${gate.confirmation?.requirement ?? '另一名超级管理员'}确认后生效）`,
           );
         }
+        confirmId = gate.confirmation?.id ?? null;
       }
     }
     if (target.status === (input.active ? 'active' : 'disabled')) {
@@ -139,6 +141,7 @@ export class AdminUsersService {
     if (!input.active) {
       this.adminAuth.revokeTokensOf(id);
     }
+    if (confirmId) this.confirmations.markApplied(confirmId);
     this.audit.append(admin.id, 'admin_user.status', `admin_user:${id}`, {
       active: input.active,
       from: before,
