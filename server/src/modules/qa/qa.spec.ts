@@ -117,6 +117,36 @@ describe('T08 问与解释', () => {
     expect(rows.n).toBe(3);
   });
 
+  it('越界扩展提问（手术 / 用药 / 诊断 / 预后）都与答复诊问题，不做个性化解释（验收反馈第 18 条）', async () => {
+    const created = await api().post('/qa/sessions').set(H()).send({});
+    const sid = created.body.data.id as string;
+    const ask = (content: string) =>
+      api().post(`/qa/sessions/${sid}/messages`).set(H()).send({ content });
+    const cases: [string, string][] = [
+      ['算不算腰突', '不能判断这是什么病'],
+      ['是梨状肌综合征吗', '不能判断这是什么病'],
+      ['医生说要手术，你怎么看', '不能给出手术建议'],
+      ['要不要去做个小针刀', '不能给出手术建议'],
+      ['手术还是保守', '不能给出手术建议'],
+      ['我想停掉医生开的药', '不能提供用药'],
+      ['洛索洛芬一次吃几粒', '不能提供用药'],
+      ['吃点钙片有用吗', '不能提供用药'],
+      ['这个病能断根吗', '没法预测'],
+      ['多长时间能恢复上班', '没法预测'],
+      ['这辈子会不会一直腰疼', '没法预测'],
+      ['我多久能好', '没法预测'],
+      ['以后会不会复发', '没法预测'],
+    ];
+    for (const [q, expectText] of cases) {
+      const res = await ask(q);
+      expect(res.body.code).toBe(0);
+      expect(res.body.data.refused).toBe(true);
+      expect(res.body.data.reply).toContain(expectText);
+      expect(res.body.data.followup_question).toBeTruthy();
+      expect(res.body.data.add_to_followup).toBe(true);
+    }
+  });
+
   it('范围内问题：正常回答且带 citations（evidence_doc / care_event / analysis）', async () => {
     const res = await api()
       .post(`/qa/sessions/${sessionId}/messages`)

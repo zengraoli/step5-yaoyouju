@@ -5,15 +5,13 @@ import { ApiException, ErrorCode } from '../../common/api-error';
 import { SafetyResult, SafetyService } from '../safety/safety.service';
 import { LocalEvidenceRetriever } from '../evidence/evidence-retrieval';
 import {
-  OUT_OF_SCOPE_RULES,
   QA_DISCLAIMER,
   QaAnswer,
   QaCitation,
   REASSURANCE_REPLY,
   REASSURANCE_STREAK,
   buildQaAnswer,
-  isWorryLoop,
-  matchesScopeRule,
+  isReassurance,
 } from './qa-answer';
 
 /**
@@ -230,14 +228,12 @@ export class QaService {
       );
     }
 
-    // 3. 反复求保证 / 预后类提问：给出稳定解释，不做个性化
-    const prognosis = safety.out_of_scope?.category === '预后';
-    if (prognosis || isWorryLoop(question)) {
+    // 3. 反复求保证（带“一定 / 肯定 / 没事”等保证类措辞）：给出稳定解释并结束本轮，不拒答。
+    //    纯粹的预后提问（“会不会复发”“多久能好”）不带保证措辞 → 落到第 4 步按越界拒答并转复诊问题（验收反馈第 18 条）。
+    if (isReassurance(question)) {
       const messageId = this.insertMessage(sessionId, 'assistant', REASSURANCE_REPLY, [], false, null);
       const streak = this.reassuranceStreak(sessionId);
-      this.logger.log(
-        `[qa] 会话 ${sessionId} ${prognosis ? '预后类提问' : '连续求保证'}(${streak}/${REASSURANCE_STREAK})`,
-      );
+      this.logger.log(`[qa] 会话 ${sessionId} 连续求保证(${streak}/${REASSURANCE_STREAK})`);
       return {
         session_id: sessionId,
         user_message_id: userMessageId,
@@ -387,7 +383,7 @@ ${QA_DISCLAIMER}`,        refused: false,
       .all(sessionId) as { content: string }[];
     let n = 0;
     for (const r of rows) {
-      if (!isWorryLoop(r.content)) break;
+      if (!isReassurance(r.content)) break;
       n += 1;
     }
     return n;
