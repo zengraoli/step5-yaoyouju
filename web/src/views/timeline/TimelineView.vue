@@ -213,11 +213,12 @@ async function onSave(updateCurrent = false) {
       })
     }
     // 命中红旗时立刻提示就医（服务端在响应里附带 safety_notice）
-    const notice = (result as { safety_notice?: { headline: string; matched: { label: string }[] } } | null)?.safety_notice
+    const notice = (result as { safety_notice?: { headline: string; matched: { label: string; severity?: string }[] } } | null)?.safety_notice
     if (notice) {
       const labels = notice.matched.map((m) => m.label).join('、')
+      const stop = notice.matched.some((m) => m.severity === 'high') ? '1' : '0'
       toast(notice.headline + '：' + labels)
-      router.push('/emergency?signals=' + encodeURIComponent(labels))
+      router.push(`/emergency?signals=${encodeURIComponent(labels)}&stop=${stop}`)
       return
     }
     resetForm()

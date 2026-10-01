@@ -561,7 +561,7 @@ async function onSaveReport() {
               <span class="video-row__body">
                 <span class="video-row__title">{{ item.title }}</span>
                 <span class="video-row__meta">
-                  <StatusTag status="reviewed" text="已审核 v2" />
+                  <StatusTag status="reviewed" text="已审核" />
                   <span class="video-row__reason">推荐理由：{{ item.reason }}</span>
                 </span>
               </span>
