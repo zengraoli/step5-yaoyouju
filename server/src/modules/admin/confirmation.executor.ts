@@ -66,6 +66,8 @@ export class ConfirmationExecutor {
           reason: text(payload.reason),
           confirmation_id: claimed.id,
         });
+      case 'user.invite_super':
+        return this.users.createInvitedSuper(text(payload.name), claimed.id, payload, admin.id);
       case 'feedback.report_handling':
         return this.feedback.handle(claimed.target_id, admin.id, {
           action: text(payload.action) as never,

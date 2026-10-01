@@ -257,6 +257,7 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
       'evidence.deactivate',
       'feedback.view',
       'feedback.handle',
+      'feedback.triage',
       'consent.view',
       'switch.manage_low',
       'model.view',

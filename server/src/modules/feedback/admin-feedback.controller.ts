@@ -5,6 +5,7 @@ import { RequirePermission } from '../admin/permission.decorator';
 import { AdminContext } from '../admin/admin-auth.service';
 import { CurrentAdmin } from '../../common/current-admin.decorator';
 import { CurrentUser } from '../../common/current-user.decorator';
+import { AuditService } from '../../common/audit.service';
 import { FeedbackService, HANDLING_ACTIONS } from './feedback.service';
 
 class AuthorizeViewDto {
@@ -46,7 +47,7 @@ class HandleDto {
 @ApiTags('admin-feedback')
 @Controller('admin/feedback')
 export class AdminFeedbackController {
-  constructor(private readonly feedback: FeedbackService) {}
+  constructor(private readonly feedback: FeedbackService, private readonly audit: AuditService) {}
 
   /**
    * 举报初筛（运营编辑 / 超级管理可做）：只做状态流转，不看原文、不做临床复核。
@@ -71,6 +72,11 @@ export class AdminFeedbackController {
     @Query('type') type?: string,
     @Query('status') status?: string,
   ) {
+    // 读取举报队列会暴露用户描述与受影响用户，属于敏感读取，必须留痕（验收反馈第 46 条）
+    this.audit.append(admin.id, 'feedback.queue_view', 'feedback:queue', {
+      type: type ?? null,
+      status: status ?? null,
+    });
     return {
       items: this.feedback.queue({ type, status }),
       stats: this.feedback.stats(),

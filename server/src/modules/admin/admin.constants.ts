@@ -37,6 +37,7 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
     'evidence.deactivate',
     'feedback.view',
     'feedback.handle',
+    'feedback.triage',
     'consent.view',
     'switch.manage_low',
     'model.view',

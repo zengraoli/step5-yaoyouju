@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { DbService } from '../db/db.service';
 import { currentRequestId } from './request-context';
 
@@ -11,8 +11,23 @@ import { currentRequestId } from './request-context';
  * 1. 每条记录带自增 seq（1..N 连续），删除任意一条都会出现断号；
  * 2. 每次追加同步更新「链头锚点」audit_anchor（head_hash + total），
  *    只删尾记录不会破坏哈希链，但会让锚点与链头不一致，从而被发现；
- * 3. request_id 参与哈希，改一个字符链就断。
+ * 3. 锚点另存一个「链头校验和」head_hmac：用仅存在于服务端的密钥对
+ *    (head_hash, total) 做 HMAC。即使有人直接改库并同步重算 head_hash / total，
+ *    也无法算出匹配的 head_hmac（密钥不随接口或数据库暴露），从而发现删改（验收反馈第 46 条）；
+ * 4. request_id 参与哈希，改一个字符链就断。
  */
+
+/**
+ * 链头校验和密钥：仅服务端使用，不写入数据库、不随接口返回。
+ * 优先从环境变量读取（生产），演示环境用一个内置默认值。
+ */
+function anchorKey(): string {
+  return process.env.AUDIT_ANCHOR_KEY || 'yaoyouju-demo-audit-anchor-key';
+}
+
+function anchorHmac(headHash: string, total: number): string {
+  return createHmac('sha256', anchorKey()).update(`${headHash}|${total}`).digest('hex');
+}
 @Injectable()
 export class AuditService {
   /** 事务嵌套深度：业务方法自身可能已开事务，这里只在最外层开 */
@@ -50,10 +65,10 @@ export class AuditService {
       const total = (this.db.app.prepare('SELECT COUNT(*) AS n FROM audit_log').get() as { n: number }).n;
       this.db.app
         .prepare(
-          `INSERT INTO audit_anchor (id, head_hash, total) VALUES (1, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET head_hash = excluded.head_hash, total = excluded.total`,
+          `INSERT INTO audit_anchor (id, head_hash, head_hmac, total) VALUES (1, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET head_hash = excluded.head_hash, head_hmac = excluded.head_hmac, total = excluded.total`,
         )
-        .run(hash, total);
+        .run(hash, anchorHmac(hash, total), total);
       this.commit(sp);
     } catch (err) {
       this.rollback(sp);
@@ -105,8 +120,8 @@ export class AuditService {
       expectedSeq += 1;
     }
     const anchor = this.db.app
-      .prepare('SELECT head_hash, total FROM audit_anchor WHERE id = 1')
-      .get() as { head_hash: string; total: number } | undefined;
+      .prepare('SELECT head_hash, head_hmac, total FROM audit_anchor WHERE id = 1')
+      .get() as { head_hash: string; head_hmac: string; total: number } | undefined;
     if (!anchor) {
       return { ok: false, broken_at: null, reason: '缺少链头锚点，无法证明审计未被删减' };
     }
@@ -116,6 +131,10 @@ export class AuditService {
     }
     if (anchor.total !== rows.length) {
       return { ok: false, broken_at: null, reason: '审计记录数量与锚点不一致，可能存在被删除的审计记录' };
+    }
+    // 链头校验和：即使有人直接改库并同步重算了 head_hash / total，也算不出匹配的 head_hmac
+    if (!anchor.head_hmac || anchor.head_hmac !== anchorHmac(anchor.head_hash, anchor.total)) {
+      return { ok: false, broken_at: null, reason: '链头校验和不匹配，审计记录可能被删改' };
     }
     return { ok: true, broken_at: null };
   }

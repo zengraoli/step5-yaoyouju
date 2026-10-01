@@ -21,6 +21,12 @@ class InviteUserDto {
   @IsString()
   @Matches(/^.{8,100}$/, { message: '初始口令至少 8 位' })
   password!: string;
+
+  @ApiProperty({ description: '双人确认单 ID（邀请超级管理员需另一名超级管理员确认）', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  confirmation_id?: string;
 }
 
 class StatusDto {

@@ -14,6 +14,7 @@ export interface InviteUserInput {
   name: string;
   role: string;
   password: string;
+  confirmation_id?: string;
 }
 
 export interface SetStatusInput {
@@ -89,15 +90,73 @@ export class AdminUsersService {
     if (dup) {
       throw new ApiException(ErrorCode.CONFLICT, `已存在同名账号「${name}」，请换一个账号名`);
     }
+    // 邀请超级管理员属于最高风险，必须另请一名超级管理员双人确认（验收反馈第 6 条）
+    if (input.role === '超级管理员') {
+      const invitationId = (input as { confirmation_id?: string }).confirmation_id;
+      const gate = this.confirmations.prepare(
+        'user.invite_super',
+        name,
+        `邀请超级管理员「${name}」`,
+        invitationId ? `另一人已确认邀请超级管理员「${name}」` : `邀请超级管理员「${name}」`,
+        admin,
+        invitationId,
+        { name, role: input.role, password_hash: hashAdminPassword(input.password) },
+      );
+      if (!gate.proceed) {
+        throw new ApiException(
+          ErrorCode.CONFLICT,
+          `已提交「邀请超级管理员」双人确认申请（需${gate.confirmation?.requirement ?? '另一名超级管理员'}确认后生效）`,
+          { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
+        );
+      }
+      return this.createInvitedSuper(name, gate.confirmation!.id, gate.confirmation!.payload, admin.id);
+    }
     const id = randomUUID();
     this.db.app
       .prepare(
-        'INSERT INTO admin_user (id, name, role_id, mfa_enabled, password_hash, status, mfa_bonded_at) VALUES (?, ?, ?, 0, ?, ?, ?)',
+        'INSERT INTO admin_user (id, name, role_id, mfa_enabled, password_hash, status, mfa_bonded_at, created_by) VALUES (?, ?, ?, 0, ?, ?, ?, ?)',
       )
-      .run(id, name, role.id, hashAdminPassword(input.password), 'active', null);
+      .run(id, name, role.id, hashAdminPassword(input.password), 'active', null, admin.id);
     this.audit.append(admin.id, 'admin_user.invite', `admin_user:${id}`, { name, role: input.role });
     this.logger.log(`[admin-users] ${admin.name} 邀请成员 ${name}（${input.role}，MFA 待绑定）`);
     return { id, name, role: input.role, mfa: '未绑定', mfa_required: true };
+  }
+
+  /** 邀请超级管理员：仅供双人确认通过后调用（payload 里是创建时确定的 name / role / password_hash） */
+  createInvitedSuper(
+    name: string,
+    confirmationId: string,
+    payload: Record<string, unknown>,
+    actorId: string,
+  ) {
+    const roleName = typeof payload.role === 'string' ? payload.role : '超级管理员';
+    const role = this.db.app.prepare('SELECT id, name FROM role WHERE name = ?').get(roleName) as
+      | { id: string; name: string }
+      | undefined;
+    if (!role) throw new ApiException(ErrorCode.BAD_REQUEST, '角色不存在');
+    const targetName = (typeof payload.name === 'string' ? payload.name : name).trim();
+    const passwordHash = typeof payload.password_hash === 'string' ? payload.password_hash : '';
+    if (!passwordHash) throw new ApiException(ErrorCode.BAD_REQUEST, '邀请参数不完整，请重新发起');
+    const dup = this.db.app.prepare('SELECT id FROM admin_user WHERE name = ?').get(targetName) as
+      | { id: string }
+      | undefined;
+    if (dup) {
+      throw new ApiException(ErrorCode.CONFLICT, `已存在同名账号「${targetName}」，请换一个账号名`);
+    }
+    const id = randomUUID();
+    this.db.app
+      .prepare(
+        'INSERT INTO admin_user (id, name, role_id, mfa_enabled, password_hash, status, mfa_bonded_at, created_by) VALUES (?, ?, ?, 0, ?, ?, ?, ?)',
+      )
+      .run(id, targetName, role.id, passwordHash, 'active', null, actorId);
+    this.confirmations.markApplied(confirmationId);
+    this.audit.append(actorId, 'admin_user.invite', `admin_user:${id}`, {
+      name: targetName,
+      role: role.name,
+      confirmation_id: confirmationId,
+    });
+    this.logger.log(`[admin-users] 双人确认后邀请超级管理员 ${targetName}（确认人 ${actorId}）`);
+    return { id, name: targetName, role: role.name, mfa: '未绑定', mfa_required: true };
   }
 
   /** 停用 / 启用成员（超级管理员需双人确认；写审计） */

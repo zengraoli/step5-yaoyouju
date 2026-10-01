@@ -87,6 +87,13 @@ export const CONFIRMATION_RULES: Record<string, ConfirmationRule> = {
     distinct_roles: false,
     requirement: '超级管理员发起 + 另一名超级管理员确认',
   },
+  'user.invite_super': {
+    label: '邀请超级管理员',
+    requester_roles: ['超级管理员'],
+    confirmer_roles: ['超级管理员'],
+    distinct_roles: false,
+    requirement: '超级管理员发起 + 另一名超级管理员确认',
+  },
   'feedback.report_handling': {
     label: '举报临床复核处置',
     requester_roles: ['临床审核', '超级管理员'],
@@ -352,6 +359,15 @@ export class ConfirmationService {
     if (row.requested_by === admin.id) {
       throw new ApiException(ErrorCode.CONFLICT, '双人确认不能由同一个人完成，请换一位具备权限的账号确认');
     }
+    // 防“养账号再自确认”：发起人与确认人不能有邀请创建关系（任一方向）（验收反馈第 6 条）
+    const confirmerCreatedBy = this.createdByOf(admin.id);
+    const requesterCreatedBy = this.createdByOf(row.requested_by);
+    if (confirmerCreatedBy === row.requested_by || requesterCreatedBy === admin.id) {
+      throw new ApiException(
+        ErrorCode.FORBIDDEN,
+        '发起人与确认人存在邀请创建关系，不能互相确认，请换一位与该申请无关的账号确认',
+      );
+    }
     if (!admin.mfa_enabled) {
       throw new ApiException(
         ErrorCode.FORBIDDEN,
@@ -437,6 +453,9 @@ export class ConfirmationService {
     const rule = CONFIRMATION_RULES[row.action];
     if (!rule) return false;
     if (row.requested_by === viewer.id) return false;
+    if (this.createdByOf(viewer.id) === row.requested_by || this.createdByOf(row.requested_by) === viewer.id) {
+      return false;
+    }
     if (!viewer.mfa_enabled) return false;
     if (!rule.confirmer_roles.includes(viewer.role.name)) return false;
     const requester = this.adminById(row.requested_by);
@@ -456,6 +475,7 @@ export class ConfirmationService {
       'dual_control.update': 'dual_control.manage',
       'feedback.authorize': 'feedback.handle',
       'user.status': 'user.manage',
+      'user.invite_super': 'user.manage',
       'feedback.report_handling': 'feedback.handle',
     };
     const need = requiredByAction[action];
@@ -470,6 +490,14 @@ export class ConfirmationService {
       | undefined;
     if (!row) throw new ApiException(ErrorCode.NOT_FOUND, '确认单不存在');
     return row;
+  }
+
+  /** 账号的邀请创建者（未记录时为 null） */
+  private createdByOf(id: string): string | null {
+    const row = this.db.app.prepare('SELECT created_by FROM admin_user WHERE id = ?').get(id) as
+      | { created_by: string | null }
+      | undefined;
+    return row?.created_by ?? null;
   }
 
   private adminById(id: string): AdminContext {

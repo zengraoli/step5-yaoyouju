@@ -38,6 +38,7 @@ export const AUDIT_ANCHOR_DDL = `
 CREATE TABLE IF NOT EXISTS audit_anchor (
   id        INTEGER PRIMARY KEY CHECK (id = 1),
   head_hash TEXT NOT NULL,
+  head_hmac TEXT NOT NULL DEFAULT '',
   total     INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL DEFAULT ''
 );
@@ -73,6 +74,28 @@ export function ensureAuditColumns(db: {
     db.exec(
       `UPDATE audit_log SET seq = (SELECT COUNT(*) FROM audit_log t2 WHERE t2.rowid <= audit_log.rowid)`,
     );
+  }
+}
+
+/**
+ * 既有库的列增量迁移（账号创建者、审计锚点校验和、导出标记）。
+ */
+export function ensureAdminColumns(db: {
+  exec(sql: string): unknown;
+  prepare(sql: string): { all(...args: unknown[]): unknown };
+}): void {
+  const userCols = db.prepare('PRAGMA table_info(admin_user)').all() as { name: string }[];
+  if (userCols.length > 0 && !userCols.some((c) => c.name === 'created_by')) {
+    db.exec('ALTER TABLE admin_user ADD COLUMN created_by TEXT');
+  }
+  const anchorCols = db.prepare('PRAGMA table_info(audit_anchor)').all() as { name: string }[];
+  if (anchorCols.length > 0 && !anchorCols.some((c) => c.name === 'head_hmac')) {
+    db.exec("ALTER TABLE audit_anchor ADD COLUMN head_hmac TEXT NOT NULL DEFAULT ''");
+  }
+  const exportCols = db.prepare('PRAGMA table_info(audit_export_request)').all() as { name: string }[];
+  if (exportCols.length > 0 && !exportCols.some((c) => c.name === 'exported_at')) {
+    db.exec('ALTER TABLE audit_export_request ADD COLUMN exported_at TEXT');
+    db.exec('ALTER TABLE audit_export_request ADD COLUMN exported_by TEXT');
   }
 }
 
@@ -270,7 +293,8 @@ CREATE TABLE IF NOT EXISTS admin_user (
   mfa_enabled INTEGER NOT NULL DEFAULT 1,
   password_hash TEXT NOT NULL,
   status      TEXT NOT NULL DEFAULT 'active',
-  mfa_bonded_at TEXT
+  mfa_bonded_at TEXT,
+  created_by  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -294,6 +318,8 @@ CREATE TABLE IF NOT EXISTS audit_export_request (
   status       TEXT NOT NULL DEFAULT '待审批',
   approver_id  TEXT,
   approved_at  TEXT,
+  exported_at  TEXT,
+  exported_by  TEXT,
   created_at   TEXT NOT NULL
 );
 

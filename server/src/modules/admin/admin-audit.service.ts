@@ -224,8 +224,14 @@ export class AdminAuditService {
    * 演示实现：把当前筛选范围内的审计日志导出为 JSON 文本（含哈希，便于外部校验）。
    */
   buildExport(actorId: string, requestId?: string): { filename: string; body: string } {
-    const request = requestId ? this.loadRequest(requestId) : null;
-    if (requestId && (!request || request.status !== '已审批')) {
+    if (!requestId) {
+      throw new ApiException(ErrorCode.CONFLICT, '请先提交审计导出申请，审批通过后才能下载');
+    }
+    const request = this.loadRequest(requestId);
+    if (request.status === '已导出') {
+      throw new ApiException(ErrorCode.CONFLICT, '该导出申请已下载过一次，不能重复下载');
+    }
+    if (request.status !== '已批准') {
       throw new ApiException(ErrorCode.CONFLICT, '导出申请还没有通过审批，暂不能下载');
     }
     const rows = this.db.app
@@ -239,7 +245,7 @@ export class AdminAuditService {
       {
         exported_at: exportedAt,
         exported_by: actorId,
-        request: request ? { id: request.id, reason: request.reason, approver: request.approver_name } : null,
+        request: { id: request.id, reason: request.reason, approver: request.approver_name },
         total: rows.length,
         items: rows,
         note: '审计日志只追加；每条记录带哈希与前向哈希，可用 /admin/audit/verify 校验完整性。',
@@ -247,7 +253,11 @@ export class AdminAuditService {
       null,
       2,
     );
-    this.audit.append(actorId, 'audit.export', `audit_export_request:${requestId ?? 'none'}`, {
+    // 一次性消费：下载后标记为已导出，不能重复下载
+    this.db.app
+      .prepare(`UPDATE audit_export_request SET status = '已导出', exported_at = ?, exported_by = ? WHERE id = ?`)
+      .run(exportedAt, actorId, requestId);
+    this.audit.append(actorId, 'audit.export', `audit_export_request:${requestId}`, {
       total: rows.length,
     });
     return { filename: `yaoyouju-audit-${exportedAt.slice(0, 10)}.json`, body };
