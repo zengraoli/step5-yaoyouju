@@ -83,6 +83,7 @@ fun AnalysisScreen(
     analysisId: String = "",
 ) {
     val analysesApi: AnalysesApi = NetworkModule.api()
+    val feedbackApi: com.yaoyouju.android.core.net.FeedbackApi = NetworkModule.api()
     val episodesApi: EpisodesApi = NetworkModule.api()
     val scope = rememberCoroutineScope()
 
@@ -451,7 +452,29 @@ fun AnalysisScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(NeutralLight)
-                                .clickable { toastText = "已收到反馈：$label" }
+                                .clickable {
+                                    // 写入服务端（帮助类型反馈；不自动进入训练或内容库）
+                                    val id = analysis?.id ?: analysisId
+                                    if (id.isBlank()) {
+                                        toastText = "还没有可反馈的分析"
+                                    } else {
+                                        scope.launch {
+                                            try {
+                                                handleResponse(
+                                                    feedbackApi.help(
+                                                        com.yaoyouju.android.core.net.HelpFeedbackRequest(
+                                                            analysisId = id,
+                                                            helpType = label,
+                                                        ),
+                                                    ),
+                                                )
+                                                toastText = "已收到反馈：$label"
+                                            } catch (e: Exception) {
+                                                toastText = e.userMessage()
+                                            }
+                                        }
+                                    }
+                                }
                                 .padding(horizontal = 12.dp, vertical = 7.dp),
                         )
                     }

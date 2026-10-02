@@ -246,7 +246,7 @@ fun FeedbackScreen(
                                     handleResponse(
                                         feedbackApi.help(
                                             HelpFeedbackRequest(
-                                                analysisId = analysisId.ifBlank { return@launch },
+                                                analysisId = analysisId,
                                                 helpType = helpType,
                                                 unsolvedQuestion = unsolved.ifBlank { null },
                                             ),
@@ -337,6 +337,15 @@ fun FeedbackScreen(
                             submitting = true
                             scope.launch {
                                 try {
+                                    if (analysisId.isBlank()) {
+                                        // 没有可关联的分析：明确提示，不静默返回（验收反馈第 23 条）
+                                        toastText = "还没有可反馈的一页分析，请先生成分析"
+                                        return@launch
+                                    }
+                                    if (helpType.isBlank()) {
+                                        toastText = "请选择帮助类型（看懂了 / 知道下一步 / 都不好）"
+                                        return@launch
+                                    }
                                     handleResponse(
                                         feedbackApi.errorReport(
                                             ErrorReportRequest(

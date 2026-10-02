@@ -80,6 +80,7 @@ import kotlinx.coroutines.launch
 fun QaScreen(navController: NavHostController) {
     val qaApi: QaApi = NetworkModule.api()
     val episodesApi: EpisodesApi = NetworkModule.api()
+    val followupApi: com.yaoyouju.android.core.net.FollowupApi = NetworkModule.api()
     val reportsApi: ReportsApi = NetworkModule.api()
     val scope = rememberCoroutineScope()
 
@@ -263,7 +264,30 @@ fun QaScreen(navController: NavHostController) {
                         MessageBubble(
                             message = message,
                             onAddFollowup = { text ->
-                                toastText = "已加入复诊问题：$text"
+                                // 写入服务端复诊问题清单（没有病程时先创建一个）
+                                scope.launch {
+                                    try {
+                                        var episode = handleResponse(episodesApi.list()).firstOrNull()
+                                        if (episode == null) {
+                                            episode = handleResponse(
+                                                episodesApi.create(
+                                                    com.yaoyouju.android.core.net.CreateEpisodeRequest(
+                                                        title = "我的腰痛病程",
+                                                    ),
+                                                ),
+                                            )
+                                        }
+                                        handleResponse(
+                                            followupApi.addQuestion(
+                                                episode.id,
+                                                com.yaoyouju.android.core.net.AddFollowupQuestionRequest(text),
+                                            ),
+                                        )
+                                        toastText = "已加入复诊问题：$text"
+                                    } catch (e: Exception) {
+                                        toastText = e.userMessage()
+                                    }
+                                }
                             },
                         )
                     }
