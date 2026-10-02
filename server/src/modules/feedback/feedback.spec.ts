@@ -22,7 +22,7 @@ import { ResponseInterceptor } from '../../common/response.interceptor';
 import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { FeedbackController } from './feedback.controller';
 import { AdminFeedbackController } from './admin-feedback.controller';
-import { FeedbackService, SEVERITY_ORDER } from './feedback.service';
+import { FeedbackService, maskPhone, SEVERITY_ORDER } from './feedback.service';
 import { ConfirmationModule } from '../admin/confirmation.module';
 import { RULE_SET_VERSION } from '../safety/safety.rules';
 
@@ -585,5 +585,27 @@ describe('T12 反馈与错误举报（四类版本 / 严重度分级 / 单条授
     expect(mine.id).toBe(ownId);
     expect(mine.type).toBe('feedback');
     expect(mine.redline.auto_ingest).toBe(false);
+  });
+});
+
+describe('T12b 举报原文手机号脱敏（第六轮验收反馈第 20 条：汉字数字 / 混排 / 斜杠分隔都要脱敏）', () => {
+  const cases: [string, string][] = [
+    ['一三九一二三四零八七七', '139****0877'],
+    ['139一二三四9876', '139****9876'],
+    ['一三九 一二三四 九八七七', '139****9877'],
+    ['139/1234/9878', '139****9878'],
+    ['138-1234-9876', '138****9876'],
+    ['138 1234 9876', '138****9876'],
+    ['订单1380000111122', '订单138****111122'],
+  ];
+  for (const [input, expected] of cases) {
+    it('脱敏：' + input, () => {
+      const masked = maskPhone('联系电话 ' + input + ' 请回电');
+      expect(masked).toContain(expected);
+    });
+  }
+
+  it('已经脱敏的格式保持原样', () => {
+    expect(maskPhone('138****1234')).toBe('138****1234');
   });
 });
