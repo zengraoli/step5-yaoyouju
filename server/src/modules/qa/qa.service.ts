@@ -523,7 +523,7 @@ ${QA_DISCLAIMER}`,        refused: false,
       actions: [
         { type: 'call', label: '拨打 120 / 前往急诊' },
         { type: 'hospital', label: '查找附近医院' },
-        { type: 'doctor', label: '联系我的主治医生（已保存）' },
+        { type: 'doctor', label: '联系我的主治医生' },
       ],
       bring_list: ['已录入的检查报告原文', '症状开始时间与最近变化记录', '正在使用的药物与既有医嘱'],
       footer_note: '此提示由临床审定规则触发，不是诊断结论；请以医生的评估为准。',

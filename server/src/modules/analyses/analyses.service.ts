@@ -262,7 +262,7 @@ export class AnalysesService {
       actions: [
         { type: 'call', label: '拨打 120 / 前往急诊' },
         { type: 'hospital', label: '查找附近医院' },
-        { type: 'doctor', label: '联系我的主治医生（已保存）' },
+        { type: 'doctor', label: '联系我的主治医生' },
       ],
       bring_list: [
         '已录入的检查报告原文',
