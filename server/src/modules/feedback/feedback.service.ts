@@ -642,6 +642,13 @@ export class FeedbackService {
     if (!TRIAGE_ACTIONS.includes(input.action as (typeof TRIAGE_ACTIONS)[number])) {
       throw new ApiException(ErrorCode.BAD_REQUEST, `初筛结论必须是：${TRIAGE_ACTIONS.join(' / ')}`);
     }
+    // 已流转到临床复核 / 已处置的举报不能再被初筛改状态（验收反馈第 37 条）
+    if (['已处理', '无需处理', '已关闭', '待临床复核'].includes(row.status)) {
+      throw new ApiException(
+        ErrorCode.CONFLICT,
+        `该举报已流转到「${row.status}」，不能再初筛改状态；如需变更请走临床复核处置`,
+      );
+    }
     const status = input.action;
     this.db.app.prepare('UPDATE feedback SET status=? WHERE id=?').run(status, id);
     this.db.app

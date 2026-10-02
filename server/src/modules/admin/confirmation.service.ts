@@ -22,10 +22,12 @@ export interface ConfirmationRule {
   /** 可确认的角色 */
   confirmer_roles: string[];
   /**
-   * 发起人与确认人是否必须为不同角色（默认 true）。
-   * 验收反馈第 9 条：撤回 / 下线不能由两名临床审核（或两名超级管理员）完成。
+   * 允许确认人与发起人同角色的角色（默认都不允许）。
+   * 验收反馈第 6 条：超级管理员之间可以互相确认（停用 / 邀请 / 重置 MFA），
+   * 但必须由「另一名」超级管理员完成（同一人仍被拒绝），
+   * 且不能与自己邀请创建（含同根邀请）的账号互相确认。
    */
-  distinct_roles: boolean;
+  same_role_ok?: string[];
   /** 界面上对该动作的双人要求说明 */
   requirement: string;
 }
@@ -35,78 +37,85 @@ export const CONFIRMATION_RULES: Record<string, ConfirmationRule> = {
     label: '内容撤回',
     requester_roles: ['临床审核', '超级管理员'],
     confirmer_roles: ['超级管理员', '临床审核'],
-    distinct_roles: true,
+    same_role_ok: [],
     requirement: '临床审核 + 超级管理员（两人不能相同）',
   },
   'content.offline': {
     label: '一键下线 / 批量下线',
     requester_roles: ['临床审核', '超级管理员'],
     confirmer_roles: ['超级管理员', '临床审核'],
-    distinct_roles: true,
+    same_role_ok: [],
     requirement: '临床审核 + 超级管理员（两人不能相同）',
   },
   'switch.update': {
     label: '高危功能开关变更',
     requester_roles: ['技术负责人', '超级管理员'],
     confirmer_roles: ['超级管理员', '临床审核'],
-    distinct_roles: true,
+    same_role_ok: [],
     requirement: '技术负责人 + 临床审核 / 超级管理员（与发起人不同角色）',
   },
   'model.promote': {
     label: '模型发布提升 / 生效',
     requester_roles: ['技术负责人', '超级管理员'],
     confirmer_roles: ['超级管理员'],
-    distinct_roles: true,
+    same_role_ok: [],
     requirement: '技术负责人 + 超级管理员（两人不能相同）',
   },
   'model.rollback': {
     label: '模型发布回滚',
     requester_roles: ['技术负责人', '超级管理员'],
     confirmer_roles: ['超级管理员'],
-    distinct_roles: true,
+    same_role_ok: [],
     requirement: '技术负责人 + 超级管理员（两人不能相同）',
   },
   'dual_control.update': {
     label: '双人确认设置变更',
     requester_roles: ['合规支持', '超级管理员'],
     confirmer_roles: ['超级管理员'],
-    distinct_roles: true,
+    same_role_ok: [],
     requirement: '合规支持 / 超级管理员发起 + 另一角色确认',
   },
   'feedback.authorize': {
     label: '举报原文单条授权',
     requester_roles: ['临床审核'],
     confirmer_roles: ['超级管理员'],
-    distinct_roles: true,
+    same_role_ok: [],
     requirement: '临床审核发起 + 超级管理员审批（可撤回）',
   },
   'user.status': {
     label: '后台成员停用 / 启用',
     requester_roles: ['超级管理员'],
-    confirmer_roles: ['超级管理员'],
-    distinct_roles: false,
-    requirement: '超级管理员发起 + 另一名超级管理员确认',
+    confirmer_roles: ['超级管理员', '合规支持'],
+    same_role_ok: ['超级管理员'],
+    requirement: '超级管理员发起 + 另一名超级管理员确认（只有一名超管时可由合规支持确认）',
   },
   'user.invite_super': {
     label: '邀请超级管理员',
     requester_roles: ['超级管理员'],
-    confirmer_roles: ['超级管理员'],
-    distinct_roles: false,
-    requirement: '超级管理员发起 + 另一名超级管理员确认',
+    confirmer_roles: ['超级管理员', '合规支持'],
+    same_role_ok: ['超级管理员'],
+    requirement: '超级管理员发起 + 另一名超级管理员确认（全新部署只有一名超管时可由合规支持确认）',
   },
   'user.mfa_reset_super': {
     label: '重置超级管理员动态验证码',
     requester_roles: ['超级管理员'],
-    confirmer_roles: ['超级管理员'],
-    distinct_roles: false,
-    requirement: '超级管理员发起 + 另一名超级管理员确认',
+    confirmer_roles: ['超级管理员', '合规支持'],
+    same_role_ok: ['超级管理员'],
+    requirement: '超级管理员发起 + 另一名超级管理员确认（只有一名超管时可由合规支持确认）',
   },
   'feedback.report_handling': {
     label: '举报临床复核处置',
     requester_roles: ['临床审核', '超级管理员'],
     confirmer_roles: ['超级管理员', '临床审核'],
-    distinct_roles: true,
+    same_role_ok: [],
     requirement: '临床审核 + 超级管理员（两人不能相同）',
+  },
+  'content.publish': {
+    label: '内容发布（双人）',
+    requester_roles: ['运营编辑', '临床审核', '超级管理员'],
+    confirmer_roles: ['临床审核', '超级管理员'],
+    same_role_ok: [],
+    requirement: '运营编辑 / 临床审核发起 + 临床审核或超级管理员确认（与发起人不同角色）',
   },
 };
 
@@ -225,7 +234,7 @@ export class ConfirmationService {
   claim(id: string, admin: AdminContext): ClaimedConfirmation {
     const row = this.require(id);
     if (row.status !== '待确认') {
-      throw new ApiException(ErrorCode.CONFLICT, `该确认单已${row.status}，不能重复处理`);
+      throw new ApiException(ErrorCode.CONFLICT, `该确认单${row.status}，不能重复处理`);
     }
     this.assertCanConfirm(row, admin);
     const rule = this.rule(row.action);
@@ -255,7 +264,7 @@ export class ConfirmationService {
   reject(id: string, admin: AdminContext, reason: string): ConfirmationItem {
     const row = this.require(id);
     if (row.status !== '待确认') {
-      throw new ApiException(ErrorCode.CONFLICT, `该确认单已${row.status}，不能重复处理`);
+      throw new ApiException(ErrorCode.CONFLICT, `该确认单${row.status}，不能重复处理`);
     }
     // 只有该动作的合法确认人能驳回（反馈：运营 / 合规 / 技术不能驳回别人的高危开关申请）
     this.assertCanConfirm(row, admin);
@@ -323,7 +332,7 @@ export class ConfirmationService {
       } else {
         throw new ApiException(
           ErrorCode.CONFLICT,
-          row.applied_at ? '该确认单已执行，不能重复处理' : `该确认单已${row.status}，不能重复处理`,
+          row.applied_at ? '该确认单已执行，不能重复处理' : `该确认单${row.status}，不能重复处理`,
         );
       }
       if (row.action !== action || row.target_id !== targetId) {
@@ -359,20 +368,26 @@ export class ConfirmationService {
 
   /**
    * 校验当前账号是否可以确认 / 驳回某条确认单（claim / reject / 界面 can_confirm 共用）。
-   * 校验：不是发起人、已绑定 MFA、落在可确认角色、满足不同角色要求、具备基础权限。
+   * 校验：不是发起人、已绑定 MFA、落在可确认角色、满足不同角色要求、
+   *       **不与发起人同邀请根**（含 transitive）、具备基础权限。
    */
   private assertCanConfirm(row: ConfirmationRow, admin: AdminContext): void {
     const rule = this.rule(row.action);
     if (row.requested_by === admin.id) {
       throw new ApiException(ErrorCode.CONFLICT, '双人确认不能由同一个人完成，请换一位具备权限的账号确认');
     }
-    // 防“养账号再自确认”：发起人与确认人不能有邀请创建关系（任一方向）（验收反馈第 6 条）
-    const confirmerCreatedBy = this.createdByOf(admin.id);
-    const requesterCreatedBy = this.createdByOf(row.requested_by);
-    if (confirmerCreatedBy === row.requested_by || requesterCreatedBy === admin.id) {
+    // 防“养账号再自确认”：发起人与确认人不能有邀请创建关系（任一方向，含同根邀请）。
+    // 同一个人邀请的两个账号（技术 + 临床）也不能互相确认（验收反馈第 6 条）。
+    const confirmerRoot = this.invitationRoot(admin.id);
+    const requesterRoot = this.invitationRoot(row.requested_by);
+    const related =
+      this.createdByOf(admin.id) === row.requested_by ||
+      this.createdByOf(row.requested_by) === admin.id ||
+      (confirmerRoot !== null && confirmerRoot === requesterRoot);
+    if (related) {
       throw new ApiException(
         ErrorCode.FORBIDDEN,
-        '发起人与确认人存在邀请创建关系，不能互相确认，请换一位与该申请无关的账号确认',
+        '发起人与确认人存在邀请创建关系（含同一个人邀请的账号），不能互相确认，请换一位与该申请无关的账号确认',
       );
     }
     if (!admin.mfa_enabled) {
@@ -388,7 +403,8 @@ export class ConfirmationService {
       );
     }
     const requester = this.adminById(row.requested_by);
-    if (rule.distinct_roles !== false && requester.role.name === admin.role.name) {
+    const sameRoleOk = (rule.same_role_ok ?? []).includes(admin.role.name);
+    if (requester.role.name === admin.role.name && !sameRoleOk) {
       throw new ApiException(
         ErrorCode.CONFLICT,
         `「${rule.label}」的双人确认需要两名不同角色的账号（${requester.role.name} 不能确认自己的申请），${rule.requirement}`,
@@ -460,13 +476,17 @@ export class ConfirmationService {
     const rule = CONFIRMATION_RULES[row.action];
     if (!rule) return false;
     if (row.requested_by === viewer.id) return false;
+    const viewerRoot = this.invitationRoot(viewer.id);
+    const requesterRoot = this.invitationRoot(row.requested_by);
     if (this.createdByOf(viewer.id) === row.requested_by || this.createdByOf(row.requested_by) === viewer.id) {
       return false;
     }
+    if (viewerRoot !== null && viewerRoot === requesterRoot) return false;
     if (!viewer.mfa_enabled) return false;
     if (!rule.confirmer_roles.includes(viewer.role.name)) return false;
     const requester = this.adminById(row.requested_by);
-    if (rule.distinct_roles !== false && requester.role.name === viewer.role.name) return false;
+    const sameRoleOk = (rule.same_role_ok ?? []).includes(viewer.role.name);
+    if (requester.role.name === viewer.role.name && !sameRoleOk) return false;
     if (!viewer.permissions.includes('*') && !this.canPerform(viewer, row.action)) return false;
     return true;
   }
@@ -485,6 +505,7 @@ export class ConfirmationService {
       'user.invite_super': 'user.manage',
       'user.mfa_reset_super': 'user.manage',
       'feedback.report_handling': 'feedback.handle',
+      'content.publish': 'content.publish',
     };
     const need = requiredByAction[action];
     if (!need) return true;
@@ -506,6 +527,23 @@ export class ConfirmationService {
       | { created_by: string | null }
       | undefined;
     return row?.created_by ?? null;
+  }
+
+  /**
+   * 邀请链根节点（沿着 created_by 向上找到最开始邀请的人）。
+   * 超管 A 邀请的 B 与 C 同根（都是 A）：B、C 之间不能互相确认（验收反馈第 6 条）。
+   */
+  private invitationRoot(id: string): string | null {
+    let current: string | null = id;
+    const seen = new Set<string>();
+    for (let depth = 0; depth < 10 && current; depth += 1) {
+      if (seen.has(current)) break;
+      seen.add(current);
+      const parent: string | null = this.createdByOf(current);
+      if (!parent) return current;
+      current = parent;
+    }
+    return current;
   }
 
   private adminById(id: string): AdminContext {

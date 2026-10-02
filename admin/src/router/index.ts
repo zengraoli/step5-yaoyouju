@@ -124,6 +124,21 @@ router.beforeEach(async (to) => {
   if (!to.meta.public && !token) {
     return { name: 'login', query: to.fullPath === '/' ? undefined : { redirect: to.fullPath } }
   }
+  // MFA 强制：新邀请 / 重置 MFA 后的账号必须先绑定动态验证码，否则任何页面都进不去
+  if (to.name !== 'bind-mfa' && token) {
+    let mfaAuth = useAuthStore()
+    if (!mfaAuth.admin) {
+      try {
+        await mfaAuth.fetchMe()
+      } catch {
+        mfaAuth.logout()
+        return { name: 'login', query: { redirect: to.fullPath } }
+      }
+    }
+    if (mfaAuth.admin && mfaAuth.admin.mfa_enabled === false) {
+      return { path: '/bind-mfa', query: { redirect: to.fullPath } }
+    }
+  }
   const required = to.meta.permission as string | undefined
   if (!required) return true
   let auth = useAuthStore()

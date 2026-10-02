@@ -97,8 +97,9 @@ export class AdminAuthService {
       throw new ApiException(ErrorCode.UNAUTHORIZED, '账号、口令或验证码不正确，请重新输入');
     }
     if (row.status !== 'active') {
-      this.appendFailure(row.id, account, '账号已禁用');
-      throw new ApiException(ErrorCode.FORBIDDEN, '该账号已被停用，请联系超级管理员');
+      // 与「账号不存在」同一句提示：不向外泄露账号是否存在（验收反馈第 37 条）
+      this.appendFailure(row.id, account, '账号已停用');
+      throw new ApiException(ErrorCode.UNAUTHORIZED, '账号、口令或验证码不正确，请重新输入');
     }
     if (!safeEqual(this.hashPassword(password), row.password_hash)) {
       this.recordFailure(account);

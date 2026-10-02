@@ -31,6 +31,7 @@ npm run seed              # 写入演示种子数据（仅在库为空时写入�
 | ADMIN_TOTP_DEMO_CODE | 123456 | 后台 TOTP 演示固定码 |
 | ADMIN_DEMO_PASSWORD | 123456 | 后台演示账号登录密码（演示固定值） |
 | ADMIN_TOKEN_SECRET | 空 | 后台令牌签名密钥（HMAC-SHA256；未设置时用派生密钥，仅限本地演示） |
+| AUDIT_ANCHOR_KEY | 空 | 审计链头锚点校验和密钥（HMAC-SHA256；未设置时在 `DB_DIR/.audit-anchor-key` 生成随机密钥文件，生产必须显式配置） |
 | WORKER_POLL_INTERVAL_MS | 1500 | Worker 轮询间隔 |
 
 ## 演示账号

@@ -42,8 +42,15 @@ export class ConfirmationExecutor {
           reason: text(payload.reason) || '发现严重问题',
           confirmation_id: claimed.id,
         });
+      case 'content.publish':
+        // 运营编辑发起、临床审核 / 超级管理员确认后由确认人执行发布
+        return this.contents.publish(admin.id, claimed.target_id);
       case 'switch.update': {
-        const enabled = Boolean(payload.enabled);
+        if (typeof payload.enabled !== 'boolean') {
+          // 没有携带目标状态（旧确认单 / 手工构造）：拒绝执行，避免把开关改成错误状态
+          throw new ApiException(ErrorCode.CONFLICT, '该确认单没有记录目标开关状态，请撤销后重新发起');
+        }
+        const enabled = payload.enabled as boolean;
         const reason = text(payload.reason) || '后台变更';
         const result = this.switches.setEnabled(claimed.target_id, enabled, reason, admin.id);
         this.logger.log(`[confirm] 执行高危开关变更 ${claimed.target_id} → ${enabled ? '开启' : '关闭'}`);

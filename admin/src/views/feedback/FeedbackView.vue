@@ -311,6 +311,17 @@ function versionsText(item: QueueItem): string {
   return parts.join(' · ')
 }
 
+/** 授权后可见的用户原始内容（服务端已脱敏） */
+const rawContent = computed<{ records?: { source_type: string; occurred_at: string; raw_text: string }[]; reported_content?: { title: string; current_status: string } | null } | null>(() => {
+  const rc = detail.value?.raw_content as { records?: unknown } | null
+  if (!rc || typeof rc !== 'object' || !Array.isArray(rc.records)) return null
+  return rc as never
+})
+const rawRecords = computed(() => rawContent.value?.records ?? [])
+const rawReported = computed(() => {
+  const r = rawContent.value?.reported_content
+  return r ? `${r.title}（${r.current_status}）` : ''
+})
 const affectedText = computed<string>(() => {
   const users = detail.value?.affected_users ?? []
   if (users.length === 0) return '暂未关联到受影响用户'
@@ -433,6 +444,20 @@ const affectedText = computed<string>(() => {
             <div class="raw">
               <p class="raw__title">用户描述</p>
               <p class="raw__text">{{ detail.description ?? detail.unsolved_question ?? '—' }}</p>
+            </div>
+
+            <!-- 授权生效后：用户原始内容在这里看（手机号已脱敏；未授权时不展示） -->
+            <div v-if="detail.authorization.authorized && rawRecords.length > 0" class="raw">
+              <p class="raw__title">用户原始内容（授权后可见，已脱敏）</p>
+              <p v-for="(r, i) in rawRecords" :key="i" class="raw__text">
+                [{{ r.source_type }} · {{ String(r.occurred_at).slice(0, 10) }}] {{ r.raw_text }}
+              </p>
+              <p v-if="rawReported" class="raw__text">被举报内容：{{ rawReported }}</p>
+              <p class="raw__note">授权范围：{{ detail.authorization.scope ?? '本条举报的用户原始内容' }}；读取会写审计。</p>
+            </div>
+            <div v-else-if="detail.authorization.authorized" class="raw">
+              <p class="raw__title">用户原始内容（授权后可见）</p>
+              <p class="raw__text">该举报没有附带用户原始内容快照。</p>
             </div>
 
             <div class="authorize">

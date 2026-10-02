@@ -15,6 +15,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
+import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { useAuthStore } from '@/stores/auth'
 import { request } from '@/api/request'
@@ -28,6 +29,8 @@ const inviting = ref(false)
 /** 停用超级管理员的双人确认 */
 const dualUser = ref<AdminUser | null>(null)
 const dualRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
+/** 邀请超级管理员的双人确认 */
+const dualInviteRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
 
 /** 双人确认后停用成员 */
 async function submitUserDual(confirmationId: string): Promise<unknown> {
@@ -279,10 +282,37 @@ async function submitInvite() {
     inviteForm.value = { name: '', role: '运营编辑', password: '' }
     await load()
   } catch (e) {
+    // 邀请超级管理员需要双人确认：40900 时带上确认单 ID 由另一名账号确认
+    const err = e as { message?: string; data?: { confirmation_id?: string } }
+    if (inviteForm.value.role === '超级管理员' && err?.data?.confirmation_id) {
+      notify('已提交「邀请超级管理员」双人确认申请：请由另一名超级管理员（只有一名超管时可由合规支持）在「待我确认」里确认')
+      showInvite.value = false
+      await load()
+      return
+    }
     notify(e instanceof Error ? e.message : '邀请失败')
   } finally {
     inviting.value = false
   }
+}
+
+/** 带确认单 ID 再次提交邀请超级管理员（第二人确认后生效） */
+async function submitInviteSuperDual(confirmationId: string): Promise<unknown> {
+  const result = await request({
+    url: '/admin/users',
+    method: 'POST',
+    data: {
+      name: inviteForm.value.name.trim(),
+      role: '超级管理员',
+      password: inviteForm.value.password,
+      confirmation_id: confirmationId,
+    },
+  })
+  notify('已按双人确认结果邀请超级管理员（写入审计）')
+  showInvite.value = false
+  inviteForm.value = { name: '', role: '运营编辑', password: '' }
+  await load()
+  return result
 }
 </script>
 
@@ -464,14 +494,27 @@ async function submitInvite() {
       </AppCard>
     </div>
 
-    <!-- 停用成员双人确认弹层 -->
+    <!-- 停用成员双人确认弹层（按钮隐藏：由成员行的停用操作触发） -->
     <DualConfirm
       :ref="(el) => (dualRef = el as never)"
       action="user.status"
       :target-id="dualUser?.id ?? ''"
       :target-label="`停用 ${dualUser?.name ?? ''}（需另一名超级管理员确认）`"
+      :payload="{ active: false, reason: '双人确认后停用' }"
       :submit="submitUserDual"
-      button-text="占位"
+      :show-button="false"
+      @done="load()"
+    />
+
+    <!-- 邀请超级管理员双人确认弹层（只有一名超管时可由合规支持确认） -->
+    <DualConfirm
+      :ref="(el) => (dualInviteRef = el as never)"
+      action="user.invite_super"
+      :target-id="inviteForm.name.trim()"
+      :target-label="`邀请超级管理员「${inviteForm.name.trim()}」`"
+      :payload="{ name: inviteForm.name.trim(), role: '超级管理员', password: inviteForm.password }"
+      :submit="submitInviteSuperDual"
+      :show-button="false"
       @done="load()"
     />
   </div>

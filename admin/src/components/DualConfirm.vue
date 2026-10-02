@@ -29,10 +29,14 @@ const props = defineProps<{
   targetId: string
   /** 目标说明 */
   targetLabel?: string
+  /** 业务参数（发起时确定，确认后由服务端按此执行，确认人不能改值） */
+  payload?: Record<string, unknown>
   /** 确认后要提交的业务接口（PUT / POST） */
   submit: (confirmationId: string) => Promise<unknown>
   /** 按钮文字 */
   buttonText?: string
+  /** 是否显示触发按钮（false 时只能由父组件调用 start()） */
+  showButton?: boolean
   buttonType?: 'primary' | 'soft' | 'danger'
   disabled?: boolean
 }>()
@@ -76,6 +80,7 @@ async function submitInit() {
         action: props.action,
         target_id: props.targetId,
         target_label: props.targetLabel ?? extraLabel.value,
+        payload: JSON.stringify(props.payload ?? {}),
         note: note.value.trim(),
       },
     })
@@ -121,7 +126,7 @@ async function cancel() {
 defineExpose({ start })</script>
 
 <template>
-  <AppButton :type="buttonType ?? 'soft'" :disabled="disabled" @click="start">{{ title }}</AppButton>
+  <AppButton v-if="showButton !== false" :type="buttonType ?? 'soft'" :disabled="disabled" @click="start">{{ title }}</AppButton>
 
   <div v-if="open" class="dc-mask" @click.self="cancel">
     <AppCard class="dc">

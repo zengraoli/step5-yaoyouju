@@ -88,6 +88,10 @@ const canReview = computed<boolean>(() => auth.hasPermission('content.review'))
 const canPublish = computed<boolean>(() => auth.hasPermission('content.publish'))
 const canOffline = computed<boolean>(() => auth.hasPermission('content.offline'))
 const canDraft = computed<boolean>(() => auth.hasPermission('content.draft') || auth.hasPermission('*'))
+/** 可发起发布（运营编辑：发起后由另一名临床审核 / 超级管理确认） */
+const canInitiatePublish = computed<boolean>(() =>
+  auth.hasPermission('*') || auth.hasPermission('content.submit') || auth.hasPermission('content.publish'),
+)
 
 /** 状态判断（驱动可用动作，避免「什么状态都能发布」） */
 const isDraft = computed<boolean>(() => detail.value?.current_status === '草稿')
@@ -95,6 +99,18 @@ const isPending = computed<boolean>(() => detail.value?.current_status === '待�
 const isReviewed = computed<boolean>(() => detail.value?.current_status === '已审定')
 const isPublished = computed<boolean>(() => detail.value?.current_status === '已发布')
 const isCorrecting = computed<boolean>(() => detail.value?.current_status === '更正中')
+
+/** 版本徽标：当前版本号 + 真实「更正自」来源（没有上一版时不写） */
+const versionBadge = computed<string>(() => {
+  const versions = detail.value?.versions ?? []
+  const current = versions.find((v) => v.is_current) ?? versions[versions.length - 1]
+  const idx = versions.findIndex((v) => v === current)
+  const previous = idx > 0 ? versions[idx - 1] : null
+  const cur = current?.version ?? null
+  const base = cur ? `v${cur}` : '尚无版本'
+  if (detail.value?.current_status === '草稿' && !cur) return '草稿 · 尚无版本'
+  return previous ? `${base} · 更正自 v${previous.version}` : base
+})
 
 /** 编辑草稿表单 */
 const editing = ref(false)
@@ -320,7 +336,7 @@ function onBack() {
       <div class="breadcrumb__actions">
         <AppButton type="soft" size="sm">视频</AppButton>
         <StatusTag status="unconfirmed" :text="detail.current_status" />
-        <AppButton type="soft" size="sm">v{{ detail.current_version?.version ?? '—' }} · 更正自 v1</AppButton>
+        <AppButton type="soft" size="sm">{{ versionBadge }}</AppButton>
       </div>
     </div>
 
@@ -418,6 +434,7 @@ function onBack() {
             <AppButton v-if="canReview && isPending" type="primary" size="sm" :loading="submitting === 'approve'" @click="onApprove">✓ 审核通过</AppButton>
             <AppButton v-if="canReview && isPending" type="soft" size="sm" :loading="submitting === 'reject'" @click="onReject">× 退回修改</AppButton>
             <AppButton v-if="canPublish && isReviewed" type="primary" size="sm" :loading="submitting === 'publish'" @click="onPublish">发布（需双人确认）</AppButton>
+            <AppButton v-else-if="canInitiatePublish && isReviewed" type="primary" size="sm" :loading="submitting === 'publish'" @click="onPublish">发起发布（需双人确认）</AppButton>
             <AppButton v-if="canOffline && isPublished" type="soft" size="sm" :loading="submitting === 'withdraw'" @click="onWithdraw">撤回（需双人确认）</AppButton>
             <AppButton v-if="canDraft && isPublished" type="soft" size="sm" :loading="submitting === 'correcting'" @click="onMarkCorrecting">标记更正</AppButton>
             <AppButton v-if="canDraft && isCorrecting" type="primary" size="sm" :loading="submitting === 'resubmit'" @click="onResubmit">提交新版本</AppButton>

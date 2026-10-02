@@ -97,6 +97,10 @@ export function ensureAdminColumns(db: {
     db.exec('ALTER TABLE audit_export_request ADD COLUMN exported_at TEXT');
     db.exec('ALTER TABLE audit_export_request ADD COLUMN exported_by TEXT');
   }
+  const releaseCols = db.prepare('PRAGMA table_info(model_release)').all() as { name: string }[];
+  if (releaseCols.length > 0 && !releaseCols.some((c) => c.name === 'gray_traffic')) {
+    db.exec('ALTER TABLE model_release ADD COLUMN gray_traffic INTEGER NOT NULL DEFAULT 0');
+  }
 }
 
 export const APP_DDL = `
@@ -330,7 +334,24 @@ CREATE TABLE IF NOT EXISTS model_release (
   retrieval_strategy  TEXT,
   content_lib_version TEXT,
   status              TEXT NOT NULL DEFAULT '灰度',
+  gray_traffic        INTEGER NOT NULL DEFAULT 0,
   created_at          TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS confirmation_request (
+  id             TEXT PRIMARY KEY,
+  action         TEXT NOT NULL,
+  target_id      TEXT NOT NULL,
+  target_label   TEXT NOT NULL DEFAULT '',
+  payload        TEXT,
+  note           TEXT,
+  status         TEXT NOT NULL DEFAULT '待确认',
+  requested_by   TEXT NOT NULL,
+  requested_at   TEXT NOT NULL,
+  confirmed_by   TEXT,
+  confirmed_at   TEXT,
+  reject_reason  TEXT,
+  applied_at     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS eval_set (

@@ -18,7 +18,7 @@ npm run typecheck  # 仅类型检查
 - 账号：`editor01` / `clinician01` / `tech01` / `compliance01` / `super01`（五个角色各一个）
 - 口令：取 server `.env` 中 `ADMIN_DEMO_PASSWORD`（默认演示值见 `.env.example`）
 - TOTP：取 server `.env` 中 `ADMIN_TOTP_DEMO_CODE`（默认演示值见 `.env.example`）
-- 连续失败 5 次锁定 30 分钟；会话 30 分钟无操作过期（需重新登录）
+- 连续失败 5 次锁定 30 分钟；后台令牌 30 分钟有效（不是「无操作过期」：30 分钟内一直可用，过期后需重新登录）
 
 ## 页面与权限
 

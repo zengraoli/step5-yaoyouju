@@ -23,9 +23,10 @@ import { request } from '@/api/request'
 
 interface GateStatus {
   passed: boolean
-  missing_sets?: string[]
-  failed_sets?: string[]
-  detail?: string
+  /** 尚未运行的必需评测集 */
+  missing: string[]
+  /** 最近一次运行未通过的必需评测集 */
+  blocked: string[]
 }
 
 interface ReleaseItem {
@@ -35,6 +36,8 @@ interface ReleaseItem {
   retrieval_strategy: string | null
   content_lib_version: string | null
   status: string
+  /** 灰度流量（百分比） */
+  gray_traffic: number
   created_at: string
   /** 向量 / embedding 模型版本（模型表由服务端给出，不写死） */
   embedding?: string | null
@@ -123,7 +126,7 @@ async function submitCreate() {
   }
   creating.value = true
   try {
-    await request({
+    const created = await request<ReleaseItem>({
       url: '/admin/models',
       method: 'POST',
       data: { ...createForm.value, prompt_version: promptVersion },
@@ -137,6 +140,8 @@ async function submitCreate() {
       content_lib_version: 'content-lib-current',
     }
     await load()
+    // 选中新建的候选：门禁面板只看这个候选自己的运行
+    selectedReleaseId.value = created?.id ?? ''
   } catch (e) {
     notify(e instanceof Error ? e.message : '创建失败')
   } finally {
@@ -144,55 +149,57 @@ async function submitCreate() {
   }
 }
 
-/** 选中候选（查看门禁详情） */
-const selectedRelease = computed<ReleaseItem | undefined>(() =>
-  releases.value.find((r) => r.id === selectedReleaseId.value) ??
-  releases.value.find((r) => r.status === '候选' || r.status === '灰度'),
-)
+/** 选中候选（查看门禁详情）：默认选最新的候选 / 灰度发布 */
+const selectedRelease = computed<ReleaseItem | undefined>(() => {
+  const byId = releases.value.find((r) => r.id === selectedReleaseId.value)
+  if (byId) return byId
+  return (
+    releases.value.find((r) => r.status === '候选') ??
+    releases.value.find((r) => r.status === '灰度') ??
+    releases.value[0]
+  )
+})
 
-/** 候选发布的评测门禁项（取该候选的全部运行，按评测集汇总） */
-const gateRows = computed<
-  { set: string; threshold: string; result: string; cases: string; passed: boolean }[]
->(() => {
+/** 必需评测集（发布门禁；后台新建的同名评测集不算） */
+const REQUIRED_EVAL_SETS = ['错误安慰', '关键遗漏', '左右侧混淆', '隐私']
+
+interface GateRow {
+  set: string
+  threshold: string
+  result: string
+  cases: string
+  passed: boolean
+  state: '通过' | '未通过' | '未运行'
+}
+
+/**
+ * 候选发布的评测门禁项：以服务端返回的 gate（missing / blocked）为准，
+ * 只统计「这个候选」自己的运行，与其它模型无关（验收反馈第 19 条）。
+ */
+const gateRows = computed<GateRow[]>(() => {
   const target = selectedRelease.value
   if (!target) return []
-  const bySet = new Map<string, EvalRunItem[]>()
-  for (const run of runs.value) {
-    if (run.model_release_id !== target.id) continue
-    if (!bySet.has(run.eval_set_name)) bySet.set(run.eval_set_name, [])
-    bySet.get(run.eval_set_name)!.push(run)
-  }
-  const thresholds: Record<string, string> = {
-    危险遗漏: '= 0',
-    无依据保证: '= 0',
-    越界: '= 0',
-    左右侧混淆: '= 0',
-    引用支持率: '≥ 95%',
-    隐私: '= 0',
-  }
-  const rows: { set: string; threshold: string; result: string; cases: string; passed: boolean }[] = []
-  for (const [set, setRuns] of bySet) {
-    const latest = setRuns.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
-    const m = latest.metrics ?? {}
-    const entries = Object.entries(m)
-    if (entries.length === 0) continue
-    const [key, value] = entries[0]
-    const passed = latest.result === '通过'
-    rows.push({
-      set: `${set}（${setRuns[0].eval_set_name}）`.replace(/（.*）/, ''),
-      threshold: thresholds[key] ?? '—',
-      result: key === '引用支持率' ? `${Math.round(value * 1000) / 10}%` : String(value),
-      cases: `${latest.case_count}`,
-      passed,
-    })
-  }
-  // 必需评测集缺项时补充占位行
-  for (const required of ['危险遗漏', '无依据保证', '越界', '左右侧混淆', '引用支持率', '隐私']) {
-    if (!rows.some((r) => r.set.includes(required))) {
-      rows.push({ set: required, threshold: required === '引用支持率' ? '≥ 95%' : '= 0', result: '—', cases: '—', passed: false })
+  const gate = target.gate ?? { passed: false, missing: REQUIRED_EVAL_SETS, blocked: [] }
+  const runOf = (name: string): EvalRunItem | undefined =>
+    runs.value
+      .filter((r) => r.model_release_id === target.id && r.eval_set_name === name)
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]
+  return REQUIRED_EVAL_SETS.map((name) => {
+    const run = runOf(name)
+    const state: GateRow['state'] = gate.missing.includes(name)
+      ? '未运行'
+      : gate.blocked.includes(name)
+        ? '未通过'
+        : '通过'
+    return {
+      set: name,
+      threshold: '= 0',
+      result: state,
+      cases: run ? `${run.case_count}` : '—',
+      passed: state === '通过',
+      state,
     }
-  }
-  return rows
+  })
 })
 
 const gateAllPassed = computed<boolean>(() => gateRows.value.length > 0 && gateRows.value.every((r) => r.passed))
@@ -214,14 +221,14 @@ const dualAction = ref<'promote' | 'rollback'>('promote')
 async function onPromote(release: ReleaseItem) {
   dualAction.value = 'promote'
   dualModel.value = release
-  dualRef.value?.start("", `模型 ${release.prompt_version} 提升`)
+  dualRef.value?.start('', `模型发布提升（双人确认）：${release.model_name} ${release.prompt_version}`)
 }
 
 /** 回滚：技术负责人发起 + 超级管理员确认 */
 async function onRollback(release: ReleaseItem) {
   dualAction.value = 'rollback'
   dualModel.value = release
-  dualRef.value?.start("", `模型 ${release.prompt_version} 回滚`)
+  dualRef.value?.start('', `模型发布回滚（双人确认）：${release.model_name} ${release.prompt_version}`)
 }
 
 async function submitModelDual(confirmationId: string): Promise<unknown> {
@@ -243,6 +250,47 @@ async function submitModelDual(confirmationId: string): Promise<unknown> {
 }
 
 const dualRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
+
+/** 重跑全部必需评测集（对该候选逐个运行，结果与被测模型绑定） */
+const rerunning = ref(false)
+const evalSets = ref<{ id: string; name: string; case_count: number }[]>([])
+
+async function onRerunAllEvals() {
+  const target = selectedRelease.value
+  if (!target) {
+    notify('请先选择一个候选发布')
+    return
+  }
+  rerunning.value = true
+  try {
+    if (evalSets.value.length === 0) {
+      const sets = await request<{ id: string; name: string; case_count: number }[]>({ url: '/admin/eval/sets' })
+      evalSets.value = sets
+    }
+    const required = evalSets.value.filter((s) => REQUIRED_EVAL_SETS.includes(s.name))
+    if (required.length === 0) {
+      notify('没有找到必需评测集，请先在评测集页面确认')
+      return
+    }
+    for (const set of required) {
+      await request({
+        url: '/admin/eval/runs',
+        method: 'POST',
+        data: {
+          model_release_id: target.id,
+          eval_set_id: set.id,
+          trigger_reason: '后台重跑全部评测',
+        },
+      })
+    }
+    notify(`已对该候选重跑 ${required.length} 个必需评测集`)
+    await load()
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '重跑失败')
+  } finally {
+    rerunning.value = false
+  }
+}
 
 function statusKey(status: string): 'confirmed' | 'unconfirmed' | 'unverified' | 'offline' | 'self' {
   if (status === '生效') return 'confirmed'
@@ -277,7 +325,8 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
       </div>
 
       <div v-if="loading" class="panel__loading">正在加载…</div>
-      <table v-else class="table">
+      <div v-else class="table-wrap">
+        <table class="table">
         <thead>
           <tr>
             <th>发布</th>
@@ -308,7 +357,7 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
               <StatusTag :status="statusKey(r.status)" :text="r.status" />
               <p class="table__eval">{{ evalResultText(r) }}</p>
             </td>
-            <td>{{ r.status === '生效' ? '100%' : r.status === '灰度' ? '0%' : '—' }}</td>
+            <td>{{ r.status === '生效' ? '100%' : r.status === '灰度' ? `${r.gray_traffic ?? 10}%` : '0%' }}</td>
             <td class="table__ops">
               <button
                 v-if="r.status === '候选' || r.status === '灰度' || r.status === '已回滚'"
@@ -339,6 +388,7 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
           </tr>
         </tbody>
       </table>
+      </div>
     </AppCard>
 
     <div class="models-grid" v-if="selectedRelease">
@@ -351,7 +401,7 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
           <div class="panel__head-right">
             <StatusTag v-if="gateAllPassed" status="confirmed" text="门禁通过" />
             <StatusTag v-else status="conflict" text="阻断发布" />
-            <AppButton type="soft" size="sm" @click="notify('重跑全部评测将在后续版本提供')">重跑全部评测</AppButton>
+            <AppButton type="soft" size="sm" :loading="rerunning" @click="onRerunAllEvals">重跑全部评测</AppButton>
           </div>
         </div>
         <table class="table">
@@ -554,6 +604,11 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
 }
 
 /* ---------- 表格 ---------- */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;

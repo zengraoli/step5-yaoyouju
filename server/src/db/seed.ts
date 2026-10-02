@@ -258,10 +258,10 @@ function seedAll(app: DatabaseSync, identity: DatabaseSync, crypto: FieldCrypto)
   // ---------- 模型发布与评测（T13：门禁要求覆盖全部必需评测集） ----------
   const mr1 = uid();
   const mr2 = uid();
-  app.prepare('INSERT INTO model_release (id,model_name,prompt_version,retrieval_strategy,content_lib_version,status,created_at) VALUES (?,?,?,?,?,?,?)')
-    .run(mr1, '本地模拟模型', 'prompt-v1', '关键词 + 本地向量混合检索（证据库内）', 'content-lib-v1', '生效', t);
-  app.prepare('INSERT INTO model_release (id,model_name,prompt_version,retrieval_strategy,content_lib_version,status,created_at) VALUES (?,?,?,?,?,?,?)')
-    .run(mr2, '本地模拟模型', 'prompt-v2', '关键词 + 本地向量混合检索（证据库内）', 'content-lib-v2', '灰度', t);
+  app.prepare('INSERT INTO model_release (id,model_name,prompt_version,retrieval_strategy,content_lib_version,status,gray_traffic,created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .run(mr1, '本地模拟模型', 'prompt-v1', '关键词 + 本地向量混合检索（证据库内）', 'content-lib-v1', '生效', 100, t);
+  app.prepare('INSERT INTO model_release (id,model_name,prompt_version,retrieval_strategy,content_lib_version,status,gray_traffic,created_at) VALUES (?,?,?,?,?,?,?,?)')
+    .run(mr2, '本地模拟模型', 'prompt-v2', '关键词 + 本地向量混合检索（证据库内）', 'content-lib-v2', '灰度', 10, t);
 
   // 演示评测用例（全部虚构；actual 为本地模拟输出，真实实现由大模型适配层生成）
   const evalSets: { name: string; cases: EvalCase[] }[] = [

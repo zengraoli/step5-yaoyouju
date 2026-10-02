@@ -38,6 +38,18 @@ export function setAdminToken(token: string): void {
   else sessionStorage.removeItem(STORAGE_KEYS.adminToken)
 }
 
+/** 带业务数据的接口错误（确认单 ID 等随 40900 返回，前端据此继续双人确认流程） */
+export class ApiError extends Error {
+  code: number
+  data: unknown
+  constructor(message: string, code: number, data: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+    this.data = data
+  }
+}
+
 export async function request<T>(options: RequestOptions): Promise<T> {
   const { url, method = 'GET', data, auth = true } = options
   const token = getAdminToken()
@@ -76,7 +88,7 @@ export async function request<T>(options: RequestOptions): Promise<T> {
   }
   if (body && typeof body === 'object' && typeof body.code === 'number') {
     if (body.code === 0) return body.data
-    throw new Error(body.message || '请求失败，请稍后重试')
+    throw new ApiError(body.message || '请求失败，请稍后重试', body.code, body.data)
   }
   throw new Error(`服务暂时不可用（${res.status}），请稍后重试`)
 }

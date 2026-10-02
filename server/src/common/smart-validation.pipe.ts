@@ -26,9 +26,11 @@ export class SmartValidationPipe implements PipeTransform<unknown> {
     });
     const errors: ValidationError[] = await validate(entity as object, this.options ?? {});
     if (errors.length > 0) {
-      // 每个字段只取「最相关」的一条提示（类型错误优先），且只报第一个出错字段，
+      // 每个字段只取「最相关」的一条提示（类型错误优先），且只报一个出错字段，
       // 避免把同一字段的多条约束、或其它字段的提示拼成一长串（验收反馈第 34 条）。
-      const first = this.pickFieldMessage(errors[0]);
+      // 用户确实传了但不合法的字段优先于「没传」的字段（help_type 传错时提示 help_type）。
+      const provided = errors.filter((e) => e.value !== undefined && e.value !== null);
+      const first = this.pickFieldMessage((provided.length > 0 ? provided : errors)[0]);
       throw new BadRequestException(translateValidationMessage(first));
     }
     // 查询参数是普通对象：把转换后的值写回，控制器才能读到数字

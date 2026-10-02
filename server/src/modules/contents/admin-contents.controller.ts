@@ -6,6 +6,7 @@ import { RequirePermission } from '../admin/permission.decorator';
 import { AdminContext } from '../admin/admin-auth.service';
 import { CurrentAdmin } from '../../common/current-admin.decorator';
 import { ContentsService, ContentDetail } from './contents.service';
+import { ConfirmationService } from '../admin/confirmation.service';
 
 class DraftDto {
   @ApiProperty()
@@ -190,10 +191,23 @@ export class AdminContentsController {
     return this.contents.reject(admin.id, id, dto);
   }
 
+  /**
+   * 发布（已审定 → 已发布；需双人确认）。
+   * - 有 content.publish（临床审核 / 超级管理）的账号：沿用「审核人与发布人不能是同一人」的双人规则；
+   * - 只有 content.submit（运营编辑）的账号：只能「发起发布」，由另一名临床审核 / 超级管理确认后执行。
+   */
   @ApiOperation({ summary: '发布（已审定 → 已发布；需双人确认）' })
-  @RequirePermission('content.publish')
   @Post(':id/publish')
-  publish(@CurrentAdmin() admin: AdminContext, @Param('id') id: string): ContentDetail {
+  publish(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
+    const canPublish = admin.permissions.includes('*') || admin.permissions.includes('content.publish');
+    const canInitiate = admin.permissions.includes('*') || admin.permissions.includes('content.submit');
+    if (!canPublish && !canInitiate) {
+      throw new ApiException(ErrorCode.FORBIDDEN, '没有权限执行该操作');
+    }
+    if (!canPublish) {
+      // 运营编辑：只能发起，等另一名具备发布权限的账号确认后生效
+      throw new ApiException(ErrorCode.CONFLICT, '该操作需要双人确认后才能生效');
+    }
     return this.contents.publish(admin.id, id);
   }
 

@@ -129,7 +129,7 @@ export class DashboardService {
     ).n;
     const todos: { text: string; kind: string }[] = [];
     if (pendingReview > 0) todos.push({ text: `${pendingReview} 条内容待医学审核`, kind: '内容审核' });
-    if (openReports.length > 0) todos.push({ text: `${openReports.length} 条举报待复核`, kind: '举报复核' });
+    if (pendingOnly > 0) todos.push({ text: `${pendingOnly} 条举报待复核`, kind: '举报复核' });
     if (pendingExports > 0) todos.push({ text: `${pendingExports} 条审计导出申请待审批`, kind: '审计导出' });
     if (licensePending > 0) todos.push({ text: `${licensePending} 条证据许可待核实`, kind: '证据核实' });
     const pendingConfirmations = (

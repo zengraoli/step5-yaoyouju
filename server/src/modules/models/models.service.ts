@@ -24,6 +24,8 @@ export interface ReleaseItem {
   retrieval_strategy: string | null;
   content_lib_version: string | null;
   status: string;
+  /** 灰度流量（百分比：候选 0 / 灰度 10 / 生效 100 / 已回滚 0） */
+  gray_traffic: number;
   created_at: string;
   /** 向量 / embedding 模型版本（演示实现：与检索策略一致的本地向量） */
   embedding: string;
@@ -46,6 +48,7 @@ type ReleaseRow = {
   retrieval_strategy: string | null;
   content_lib_version: string | null;
   status: string;
+  gray_traffic?: number;
   created_at: string;
 };
 
@@ -83,7 +86,7 @@ export class ModelReleasesService {
   list(): ReleaseItem[] {
     const rows = this.db.app
       .prepare(
-        `SELECT id, model_name, prompt_version, retrieval_strategy, content_lib_version, status, created_at
+        `SELECT id, model_name, prompt_version, retrieval_strategy, content_lib_version, status, gray_traffic, created_at
          FROM model_release ORDER BY created_at DESC, rowid DESC`,
       )
       .all() as ReleaseRow[];
@@ -148,7 +151,8 @@ export class ModelReleasesService {
     }
 
     const to = row.status === '候选' ? '灰度' : '生效';
-    this.db.app.prepare('UPDATE model_release SET status=? WHERE id=?').run(to, id);
+    const traffic = to === '灰度' ? 10 : 100;
+    this.db.app.prepare('UPDATE model_release SET status=?, gray_traffic=? WHERE id=?').run(to, traffic, id);
 
     if (to === '生效') {
       // 顶替：原「生效」发布自动回滚（演示流程中同一时刻只有一个生效发布）
@@ -231,7 +235,7 @@ export class ModelReleasesService {
       }
     }
 
-    this.db.app.prepare(`UPDATE model_release SET status='已回滚' WHERE id=?`).run(id);
+    this.db.app.prepare(`UPDATE model_release SET status='已回滚', gray_traffic=0 WHERE id=?`).run(id);
     this.audit.append(actorId, 'model_release.rollback', `model_release:${id}`, {
       from: row.status,
       to: '已回滚',
@@ -246,7 +250,7 @@ export class ModelReleasesService {
   private require(id: string): ReleaseRow {
     const row = this.db.app
       .prepare(
-        `SELECT id, model_name, prompt_version, retrieval_strategy, content_lib_version, status, created_at
+        `SELECT id, model_name, prompt_version, retrieval_strategy, content_lib_version, status, gray_traffic, created_at
          FROM model_release WHERE id=?`,
       )
       .get(id) as ReleaseRow | undefined;
@@ -262,6 +266,7 @@ export class ModelReleasesService {
       retrieval_strategy: row.retrieval_strategy,
       content_lib_version: row.content_lib_version,
       status: row.status,
+      gray_traffic: Number(row.gray_traffic ?? 0),
       created_at: row.created_at,
       embedding: `local-16d（${row.model_name} ${row.prompt_version}）`,
       latest_eval: this.latestEval(row.id),

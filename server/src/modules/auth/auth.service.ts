@@ -430,6 +430,16 @@ export class AuthService {
     const removed: Record<string, number> = {};
     this.app.exec('BEGIN IMMEDIATE');
     try {
+      // 先撤销引用该用户举报的待确认单（举报随后被硬删，确认单不能再被执行，反馈第 32 条）
+      const stale = this.app
+        .prepare(
+          `UPDATE confirmation_request
+           SET status = '已撤销', reject_reason = '目标举报已被用户删除，确认单自动撤销'
+           WHERE status = '待确认' AND action IN ('feedback.authorize', 'feedback.report_handling')
+             AND target_id IN (SELECT id FROM feedback WHERE user_id = ?)`,
+        )
+        .run(userId);
+      if (stale.changes) removed['confirmation_request'] = stale.changes as number;
       for (const sql of summary) {
         const table = /DELETE FROM (\w+)/.exec(sql)![1];
         const res = this.app.prepare(sql).run(userId) as { changes?: number };

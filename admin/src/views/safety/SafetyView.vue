@@ -75,11 +75,13 @@ const ruleSet = ref<RuleSet | null>(null)
 const loading = ref(true)
 const filters = ref({ rule: '全部', severity: '全部', hours: '168' })
 const updating = ref('')
-/** 双人确认弹层引用（高危开关） */
-const dualRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
-const dualTarget = ref<{ enabled: boolean; label: string }>({ enabled: false, label: '' })
+/** 双人确认弹层引用（高危开关：每个开关各一个，互不串台） */
+const dualRefs = ref<Record<string, { start: (target?: unknown, label?: string) => void } | null>>({})
+const dualTarget = ref<{ key: string; enabled: boolean; label: string }>({ key: '', enabled: false, label: '' })
 
-const dualSwitch = computed<SwitchItem | undefined>(() => switches.value.find((s) => HIGH_RISK.includes(s.key)))
+const dualSwitch = computed<SwitchItem | undefined>(() =>
+  switches.value.find((s) => s.key === dualTarget.value.key),
+)
 
 /** 带确认单 ID 提交开关变更（第二人确认后生效） */
 async function submitSwitchWithConfirm(confirmationId: string): Promise<unknown> {
@@ -95,6 +97,7 @@ async function submitSwitchWithConfirm(confirmationId: string): Promise<unknown>
     },
   })
   notify('已按双人确认结果变更并写入审计')
+  await loadAll()
   return result
 }
 
@@ -113,7 +116,12 @@ const SWITCH_LABELS: Record<string, string> = {
   案例卡片: '案例卡片（二期）',
 }
 
-const canManage = computed<boolean>(() => auth.hasPermission('switch.manage'))
+/** 单个开关是否可改：高危开关要 switch.manage，其余 switch.manage_low 即可（临床审核可改非高危） */
+function canManageSwitch(key: string): boolean {
+  return HIGH_RISK.includes(key)
+    ? auth.hasPermission('switch.manage')
+    : auth.hasPermission('switch.manage_low')
+}
 
 onMounted(async () => {
   await loadAll()
@@ -151,16 +159,16 @@ function confirmAction(message: string): boolean {
 
 /** 变更开关（需确认；立即生效，写审计） */
 async function onToggleSwitch(item: SwitchItem) {
-  if (!canManage.value) {
-    notify('当前角色无开关管理权限')
+  if (!canManageSwitch(item.key)) {
+    notify('当前角色没有该开关的变更权限')
     return
   }
   const next = !item.enabled
   const label = SWITCH_LABELS[item.key] ?? item.key
   // 高危开关（个性化分析 / 案例卡片）必须双人确认：先发起确认单，另一人确认后生效
   if (HIGH_RISK.includes(item.key)) {
-    dualTarget.value = { enabled: next, label }
-    dualRef.value?.start(next, label)
+    dualTarget.value = { key: item.key, enabled: next, label }
+    dualRefs.value[item.key]?.start(next, label)
     return
   }
   const ok = confirmAction(`确认${next ? '开启' : '关闭'}「${label}」？确认要求：${item.requirement}。变更立即生效并写入审计。`)
@@ -237,17 +245,20 @@ const headerSummary = computed<string>(() => {
             关闭后：不做个性化分析与对话任务；用户端显示回退页；已审核科普与摘要仍可用。
           </p>
 
-          <!-- 高危开关双人确认弹层：一个人改不了，必须另一名具备权限的账号确认 -->
-          <DualConfirm
-            v-if="dualSwitch"
-            :ref="(el) => (dualRef = el as never)"
-            action="switch.update"
-            :target-id="dualSwitch.key"
-            :target-label="`开关 ${SWITCH_LABELS[dualSwitch.key] ?? dualSwitch.key} → ${dualTarget.enabled ? '开启' : '关闭'}`"
-            :submit="submitSwitchWithConfirm"
-            button-text="占位"
-            @done="loadAll()"
-          />
+          <!-- 高危开关双人确认弹层：一个人改不了，必须另一名具备权限的账号确认（每个开关一个） -->
+          <template v-for="s in switches.filter((x) => HIGH_RISK.includes(x.key))" :key="s.key">
+            <DualConfirm
+              v-if="s.key === dualTarget.key"
+              :ref="(el) => (dualRefs[s.key] = el as never)"
+              action="switch.update"
+              :target-id="s.key"
+              :target-label="`开关 ${SWITCH_LABELS[s.key] ?? s.key} → ${dualTarget.enabled ? '开启' : '关闭'}`"
+              :payload="{ enabled: dualTarget.enabled, reason: '双人确认后变更' }"
+              :submit="submitSwitchWithConfirm"
+              :show-button="false"
+              @done="loadAll()"
+            />
+          </template>
         </AppCard>
 
         <AppCard class="panel">
