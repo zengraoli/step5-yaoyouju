@@ -108,3 +108,11 @@ export function addFollowupQuestion(episodeId: string, question: string): Promis
     data: { question },
   })
 }
+
+export function getFollowupQuestions(
+  episodeId: string,
+): Promise<{ count: number; items: { text: string; source: string; verify_status: string }[] }> {
+  return request<{ count: number; items: { text: string; source: string; verify_status: string }[] }>({
+    url: `/episodes/${encodeURIComponent(episodeId)}/followup-questions`,
+  })
+}

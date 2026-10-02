@@ -25,7 +25,7 @@ import {
   type CareEventView,
   type EpisodeDetail,
 } from '../../api/episodes'
-import { getLatestFollowup } from '../../api/followup'
+import { getFollowupQuestions } from '../../api/followup'
 import { beijingDate, getStatusBarHeight, relativeDayLabel } from '../../utils/system'
 
 /** 事件类型 → 展示标签（与设计稿一致） */
@@ -85,10 +85,9 @@ async function loadTimeline(episodeId: string): Promise<{ date: string; events: 
 
 async function loadFollowupCount(episodeId: string) {
   try {
-    // 尚未生成过摘要时接口返回 null（不是错误），不计问题数
-    const summary = await getLatestFollowup(episodeId)
-    const section = summary?.content.sections.find((s) => s.key === 'questions')
-    followupQuestionCount.value = section ? section.items.length : 0
+    // 实时统计复诊问题条数（不依赖是否已生成摘要；验收反馈第 35 条）
+    const res = await getFollowupQuestions(episodeId)
+    followupQuestionCount.value = res?.count ?? 0
   } catch {
     followupQuestionCount.value = 0
   }

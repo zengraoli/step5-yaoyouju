@@ -300,6 +300,13 @@ export class FollowupService {
     return { id };
   }
 
+  /** 实时复诊问题清单（不依赖是否已生成摘要）：用于病程页统计条数（验收反馈第 35 条） */
+  listUserQuestions(userId: string, episodeId: string): { count: number; items: FollowupItem[] } {
+    this.ownedEpisode(userId, episodeId);
+    const items = this.buildQuestions(episodeId);
+    return { count: items.length, items };
+  }
+
   /** 起病与时间：优先病程起病信息；缺失显示「尚未确认」，不默认阴性 */
   private buildOnset(ep: EpisodeRow, events: EventRow[]): FollowupItem[] {
     if (ep.onset_date) {

@@ -76,6 +76,13 @@ addQuestion(@CurrentUser() user: { id: string }, @Param('id') id: string, @Body(
   return this.followup.addUserQuestion(user.id, id, dto.question);
 }
 
+/** 实时复诊问题清单与条数（不依赖是否已生成摘要；病程页统计用） */
+@ApiOperation({ summary: '实时复诊问题清单与条数（病程页统计用）' })
+@Get(':id/followup-questions')
+listQuestions(@CurrentUser() user: { id: string }, @Param('id') id: string) {
+  return this.followup.listUserQuestions(user.id, id);
+}
+
   /** 导出：文本返回纯文本（带头部与水印脚注）；PDF / 图片由浏览器打印生成 */
   @ApiOperation({ summary: '导出复诊摘要（文本返回纯文本 + 水印脚注；PDF / 图片浏览器打印生成）' })
   @Post(':id/followup/:summaryId/export')
