@@ -272,7 +272,7 @@ fun HomeScreen(navController: NavHostController) {
                         Spacer(modifier = Modifier.height(16.dp))
                         RecommendationsCard(
                             items = recommendations,
-                            onOpenContent = { navController.navigate(Routes.CONTENT_DETAIL) },
+                            onOpenContent = { id -> navController.navigate(Routes.CONTENT_DETAIL + "?contentId=" + id) },
                         )
                     }
 
@@ -529,7 +529,7 @@ private fun FollowupCountdownCard(followup: FollowupSummaryView?) {
 @Composable
 private fun RecommendationsCard(
     items: List<ContentListItem>,
-    onOpenContent: () -> Unit,
+    onOpenContent: (String) -> Unit,
 ) {
     AppCard {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -545,7 +545,7 @@ private fun RecommendationsCard(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onOpenContent() }
+                        .clickable { onOpenContent(item.id) }
                         .padding(vertical = 6.dp),
                 ) {
                     Text(

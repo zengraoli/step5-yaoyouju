@@ -2,6 +2,8 @@ package com.yaoyouju.android.core.net
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -62,5 +64,65 @@ class ApiResponseTest {
         assertEquals(true, item.granted)
         assertEquals("2026-09-01T10:12:00.000Z", item.grantedAt)
         assertNull(item.revokedAt)
+    }
+}
+
+/**
+ * 第六轮验收反馈第 9 / 24 / 28 条：HTTP 4xx 的业务错误必须保留服务端的错误码与中文提示
+ * （Retrofit 把错误响应体放在 errorBody()、body() 为 null，只读 body 会退化成
+ * 「服务暂时不可用（409）」）；真实服务端 JSON（导出数据 / 内容详情）要能解析。
+ */
+class ApiErrorHandlingTest {
+
+    private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+
+    @Test
+    fun `解析 HTTP 409 的 errorBody（业务错误不走兜底文案）`() {
+        // 服务端真实返回体（安全规则命中：40911 + 就医提示）
+        val raw = """{"code":40911,"data":{"title":"需要及时寻求专业帮助","headline":"建议尽快就医","body":"你提交的内容包含需要尽快就医的信号：大小便控制变化。","matched":[{"rule_code":"RF-03","label":"大小便控制变化","severity":"high","action":"停止个性化分析","advice":"大小便控制出现变化需要尽快由医生评估，请立即就医。","excerpt":"大小便控制变化"}]},"message":"大小便控制出现变化需要尽快由医生评估，请立即就医。"}"""
+        val obj = json.parseToJsonElement(raw).jsonObject
+        val code = obj["code"]!!.jsonPrimitive.content.toInt()
+        val message = obj["message"]!!.jsonPrimitive.content
+        assertEquals(40911, code)
+        assertTrue(message.contains("立即就医"))
+        val notice = json.decodeFromString<EmergencyNotice>(obj["data"]!!.jsonObject.toString())
+        assertEquals("RF-03", notice.matched[0].ruleCode)
+        assertEquals("high", notice.matched[0].severity)
+    }
+
+    @Test
+    fun `解析 HTTP 409 的 errorBody（冷静期未到）`() {
+        val raw = """{"code":40900,"data":null,"message":"还在冷静期内（2026-10-04 10:00 之后才能确认删除），可以取消删除"}"""
+        val obj = json.parseToJsonElement(raw).jsonObject
+        assertEquals(40900, obj["code"]!!.jsonPrimitive.content.toInt())
+        assertTrue(obj["message"]!!.jsonPrimitive.content.contains("冷静期"))
+    }
+
+    @Test
+    fun `解析 HTTP 400 的 errorBody（能坐时长超限）`() {
+        val raw = """{"code":40000,"data":null,"message":"能坐时长不能大于 1440"}"""
+        val obj = json.parseToJsonElement(raw).jsonObject
+        assertEquals("能坐时长不能大于 1440", obj["message"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `解析真实导出数据（consents 等字段是数组）`() {
+        val raw = """{"code":0,"data":{"exported_at":"2026-10-03T02:00:00.000Z","user":{"id":"u1","created_at":"2026-09-01T00:00:00.000Z","phone_masked":"138****1234"},"consents":[{"id":"c1","scope":"健康信息处理","granted":true,"granted_at":"2026-09-01T10:12:00.000Z","revoked_at":null}],"episodes":[],"analyses":[],"followup_summaries":[],"followup_questions":[],"qa_sessions":[],"feedback":[],"safety_events":[],"note":"n"},"message":"ok"}"""
+        val resp = json.decodeFromString<ApiResponse<AccountExport>>(raw)
+        val data = resp.data!!
+        assertEquals(1, data.consents.size)
+        assertTrue(data.consents[0].toString().contains("健康信息处理"))
+        assertEquals("138****1234", data.user.phoneMasked)
+    }
+
+    @Test
+    fun `解析内容详情（reviewer_role 缺省为空，不抛错）`() {
+        val raw = """{"code":0,"data":{"id":"c1","type":"视频","title":"看懂腰椎 MRI 报告","applicable_scope":"a","not_applicable":"b","current_status":"已发布","offline":false,"current_version":{"version":1,"script":"s","subtitle_text":"t","asset_key":null,"published_at":"2026-07-01T00:00:00.000Z"},"versions":[],"review_records":[{"id":"r1","decision":"通过","review_scope":"医学准确性","comment":"ok","reviewer_name":"clinician01","reviewed_at":"2026-07-01T00:00:00.000Z"}],"disclaimer":"d"},"message":"ok"}"""
+        val resp = json.decodeFromString<ApiResponse<ContentDetail>>(raw)
+        val detail = resp.data!!
+        assertEquals(1, detail.reviewRecords.size)
+        assertEquals("", detail.reviewRecords[0].reviewerRole)
+        assertEquals("clinician01", detail.reviewRecords[0].reviewerName)
+        assertEquals("通过", detail.reviewRecords[0].decision)
     }
 }

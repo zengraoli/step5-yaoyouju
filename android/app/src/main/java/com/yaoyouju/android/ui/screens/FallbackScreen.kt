@@ -92,7 +92,7 @@ fun FallbackScreen(
      * 错误码：从服务端 / 任务失败原因派生，不写死 ANL-503。
      * 分析任务失败时服务端返回 50300（SERVICE_UNAVAILABLE），展示为「服务码 50300」。
      */
-    val codeText = errorCode.ifBlank { "服务码 50300" }
+    val codeText = errorCode.ifBlank { "服务码以服务端返回为准" }
 
     LaunchedEffect(Unit) {
         loading = true

@@ -479,7 +479,7 @@ private suspend fun writeEvents(
 ) {
     val now = java.time.Instant.now().toString()
     // 紧凑单行记录：不在病程 / 一页分析里堆放问卷原文；未回答的记为「尚未确认」
-    val parts = mutableListOf("关键变化确认（自述，尚未确认）：")
+    val parts = mutableListOf("关键变化确认（自述，尚未确认）")
     parts.add("与上次相比：${change ?: "尚未确认"}")
     val flagText = if (flagLabels.isEmpty()) "尚未确认" else flagLabels.joinToString("、")
     parts.add("需医生及时评估的情况：${flagText}")

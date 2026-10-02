@@ -27,6 +27,8 @@ import com.yaoyouju.android.ui.theme.YaoyoujuTheme
 class MainActivity : ComponentActivity() {
 
     private val deepLinkRoute = mutableStateOf<String?>(null)
+    /** deep link 序号：同一页面重复打开也要能重新跳转（结构相等不会触发重组，验收反馈第 39 条） */
+    private val deepLinkNonce = mutableStateOf(0L)
     /** 本地令牌（null = 尚未读取；空串 = 未登录） */
     private val savedToken = mutableStateOf<String?>(null)
 
