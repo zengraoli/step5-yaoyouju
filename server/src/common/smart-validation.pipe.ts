@@ -26,8 +26,10 @@ export class SmartValidationPipe implements PipeTransform<unknown> {
     });
     const errors: ValidationError[] = await validate(entity as object, this.options ?? {});
     if (errors.length > 0) {
-      const messages = errors.flatMap((e: ValidationError) => Object.values(e.constraints ?? {}));
-      throw new BadRequestException(messages.map((m) => translateValidationMessage(String(m))).join('；'));
+      // 每个字段只取「最相关」的一条提示（类型错误优先），且只报第一个出错字段，
+      // 避免把同一字段的多条约束、或其它字段的提示拼成一长串（验收反馈第 34 条）。
+      const first = this.pickFieldMessage(errors[0]);
+      throw new BadRequestException(translateValidationMessage(first));
     }
     // 查询参数是普通对象：把转换后的值写回，控制器才能读到数字
     if (source === 'query' || source === 'param') {
@@ -42,5 +44,18 @@ export class SmartValidationPipe implements PipeTransform<unknown> {
   private isDto(metatype: unknown): boolean {
     if (typeof metatype !== 'function') return false;
     return ![String, Boolean, Number, Array, Object].includes(metatype as never);
+  }
+
+  /** 取一个字段最相关的校验提示：类型类约束优先，其次取第一条 */
+  private pickFieldMessage(error: ValidationError): string {
+    const constraints = error.constraints ?? {};
+    const keys = Object.keys(constraints);
+    if (keys.length === 0) return '请求参数不正确';
+    const typeKeys = [
+      'isString', 'isNumber', 'isInt', 'isBoolean', 'isDate', 'isArray', 'isObject',
+      'isEnum', 'isIn', 'isUUID', 'isEmail', 'isNotEmpty', 'isDefined', 'whitelist',
+    ];
+    const preferred = typeKeys.find((k) => keys.includes(k));
+    return String(constraints[preferred ?? keys[0]]);
   }
 }

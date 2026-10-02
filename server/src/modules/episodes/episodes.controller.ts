@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 import { EpisodesService } from './episodes.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { RequireConsent } from '../../common/require-consent.decorator';
@@ -98,6 +98,7 @@ class LogTodayDto {
 
   @ApiProperty({ description: '今天能坐多久（分钟），缺失=尚未确认', required: false, nullable: true })
   @IsOptional()
+  @IsNumber({}, { message: '能坐时长应为数字' })
   @Min(0)
   @Max(1440)
   sit_minutes?: number | null;
@@ -109,6 +110,7 @@ class LogTodayDto {
 
   @ApiProperty({ description: '睡眠影响程度 0-3', required: false, nullable: true })
   @IsOptional()
+  @IsNumber({}, { message: '睡眠影响程度应为数字' })
   @Min(0)
   @Max(3)
   sleep_impact?: number | null;
