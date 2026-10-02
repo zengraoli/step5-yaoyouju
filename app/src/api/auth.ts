@@ -25,12 +25,22 @@ export interface LoginResult {
   consents: ConsentItem[]
 }
 
+export interface DeletionStatus {
+  status: string
+  requested_at: string
+  effective_at: string
+  executed_at: string | null
+  can_confirm: boolean
+}
+
 export interface MeResult {
   id: string
   phone_masked: string
   real_name_masked: string | null
   created_at: string
   consents: ConsentItem[]
+  /** 待执行的删除申请（没有则为 null） */
+  deletion?: DeletionStatus | null
 }
 
 /** 获取短信验证码（演示固定码 123456，手机号脱敏） */
@@ -71,14 +81,6 @@ export function logout(): Promise<{ ok: true }> {
 /** 导出我的数据（JSON 全文） */
 export function exportMyData(): Promise<unknown> {
   return request({ url: '/auth/export' })
-}
-
-export interface DeletionStatus {
-  status: string
-  requested_at: string
-  effective_at: string
-  executed_at: string | null
-  can_confirm: boolean
 }
 
 /** 申请删除账户（验证码二次确认 → 24 小时冷静期） */

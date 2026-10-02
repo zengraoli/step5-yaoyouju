@@ -74,6 +74,17 @@ function readStoredQuestions(): string[] {
   }
 }
 
+/** 当前进行中的病程 ID（没有则 null） */
+async function activeEpisodeId(): Promise<string | null> {
+  try {
+    const episodes = await listEpisodes()
+    const active = episodes.find((e) => e.status === '进行中') ?? episodes[0] ?? null
+    return active?.id ?? null
+  } catch {
+    return null
+  }
+}
+
 async function init() {
   try {
     const list = await listQaSessions()
@@ -82,7 +93,9 @@ async function init() {
       sessionId.value = list[0].id
       const detail = await getQaSession(sessionId.value)
       messages.value = detail.messages
-      episodeId.value = detail.episode_id ?? ''
+      // 会话先于病程创建时没有关联病程：退回当前进行中的病程，
+      // 否则「加入复诊问题」会带着空病程 ID 请求而失败（验收反馈第 14 条）
+      episodeId.value = detail.episode_id ?? (await activeEpisodeId()) ?? ''
     } else {
       const episodes = await listEpisodes()
       const active = episodes.find((e) => e.status === '进行中') ?? episodes[0] ?? null
@@ -111,12 +124,24 @@ async function loadContext() {
     const symptom = structured?.items.find((i) => i.event_type === '症状')
     if (symptom) {
       rows.push({ label: '当前情况', value: beijingDate(symptom.occurred_at), tag: 'confirmed' })
-      const line = symptom.raw_text?.split('\n').find((l) => l.trim().startsWith('3.'))
-      const side = line ? line.slice(line.indexOf('？') + 1).trim() : ''
+      // A02 摘要兼容「标签：答」与「1. …？答」两种写法（验收反馈第 12 条）
+      const segments = (symptom.raw_text ?? '').split(/[；;\n]/).map((l) => l.trim()).filter(Boolean)
+      const pick = (labels: string[]): string => {
+        for (const seg of segments) {
+          const hit = labels.find((l) => seg.includes(l))
+          if (!hit) continue
+          const idx = seg.search(/[：:]/)
+          const answer = idx >= 0 ? seg.slice(idx + 1).trim() : seg.slice(hit.length).trim()
+          return answer
+        }
+        return ''
+      }
+      const side = pick(['侧别'])
       if (side && side !== '尚未确认') rows.push({ label: '侧别', value: side, tag: 'confirmed' })
-      const legLine = symptom.raw_text?.split('\n').find((l) => l.trim().startsWith('2.'))
-      const leg = legLine ? legLine.slice(legLine.indexOf('？') + 1).trim() : ''
-      rows.push({ label: '腿部无力', value: leg || '尚未回答', tag: 'unconfirmed' })
+      const leg = pick(['需医生及时评估的情况', '下肢情况', '大小便控制'])
+      if (leg && leg !== '尚未确认') {
+        rows.push({ label: '需要医生及时评估的情况', value: leg, tag: 'confirmed' })
+      }
     }
     const report = structured?.items.find((i) => i.report)
     // 主要困惑只在用户真正选择过时展示（不再对所有用户显示同一句）
@@ -270,7 +295,7 @@ function citeTag(c: QaCitation): { key: 'quote' | 'self' | 'generated' | 'review
           本轮已解释 {{ answeredCount }} 个问题，行动计划已记录。若没有新信息，反复确认不会得到不同答案；出现新变化时我会重新评估。
         </AppNotice>
         <AppNotice v-else-if="answeredCount > 0" type="info">
-          已解释 {{ answeredCount }} 个问题。若没有新信息，反复确认不会得到不同答案。
+          本轮已回答 {{ answeredCount }} 个问题，可继续提问。
         </AppNotice>
 
         <!-- 输入区 -->

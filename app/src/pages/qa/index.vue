@@ -321,7 +321,7 @@ function onOpenHistory() {
       </view>
       <view v-else-if="answeredCount > 0" class="round-note">
         <AppNotice type="info">
-          已解释 {{ answeredCount }} 个问题。若没有新信息，反复确认不会得到不同答案。
+          本轮已回答 {{ answeredCount }} 个问题，可继续提问。
         </AppNotice>
       </view>
 

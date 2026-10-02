@@ -56,6 +56,15 @@ async function load() {
     const profile = await me()
     phoneMasked.value = profile.phone_masked
     consents.value = await listConsents()
+    // 待执行的删除申请：刷新 / 重启后仍要能看到生效时间（可取消）
+    const pending = profile.deletion ?? null
+    if (pending && (pending.status === '冷静期中' || pending.status === '已申请')) {
+      deletion.value = pending
+      deleteStep.value = 'ready'
+    } else if (pending && pending.status !== '冷静期中') {
+      deletion.value = null
+      deleteStep.value = 'idle'
+    }
   } catch {
     // 保留已缓存的登录态信息
   } finally {
@@ -138,11 +147,19 @@ async function onGrantHealth() {
   })
 }
 
-/** 删除账户：验证码二次确认 → 24 小时冷静期 → 确认后硬删 */
+/**
+ * 删除账户：手机号 + 短信验证码二次确认 → 24 小时冷静期 → 确认后硬删。
+ * 用页面内弹层而不是嵌套 showModal（H5 上第二个弹窗不会弹出，验收反馈第 5 条）；
+ * 手机号与验证码都由用户自己输入，不预填。
+ */
 const deleteStep = ref<'idle' | 'requested' | 'ready'>('idle')
 const deletePhone = ref('')
-const deleteCode = ref('123456')
+const deleteCode = ref('')
 const deletion = ref<DeletionStatus | null>(null)
+const deleteDialog = ref<'none' | 'request' | 'confirm'>('none')
+const deletePhoneInput = ref('')
+const deleteCodeInput = ref('')
+const deleteBusy = ref(false)
 
 function onExportData() {
   uni.showModal({
@@ -159,7 +176,7 @@ function onExportData() {
         const url = URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        link.download = `yaoyouju-export-${new Date().toISOString().slice(0, 10)}.json`
+        link.download = 'yaoyouju-export-' + new Date().toISOString().slice(0, 10) + '.json'
         link.click()
         URL.revokeObjectURL(url)
         // #endif
@@ -175,100 +192,78 @@ function onDeleteAccount() {
   if (deleteStep.value === 'idle') {
     uni.showModal({
       title: '删除账户与数据',
-      content: '需要验证码二次确认，之后进入 24 小时冷静期（可取消）。删除会覆盖病程、报告、分析、问答与反馈。',
+           content: '需要手机号与短信验证码二次确认，之后进入 24 小时冷静期（可取消）。删除会覆盖病程、报告、分析、问答与反馈。',
       confirmText: '继续',
       confirmColor: '#D93B3B',
       success: () => {
-        deleteStep.value = 'requested'
+        deletePhoneInput.value = ''
+        deleteCodeInput.value = ''
+        deleteDialog.value = 'request'
       },
     })
     return
   }
   if (deleteStep.value === 'requested') {
-    // 手机号 + 验证码都要用户自己输入（演示验证码固定 123456，但不预填、不用假输入框）
-    uni.showModal({
-      title: '申请删除账户',
-      content: '请输入本账号绑定的手机号',
-      editable: true,
-      placeholderText: '11 位手机号',
-      success: async (r1) => {
-        if (!r1.confirm) {
-          deleteStep.value = 'idle'
-          return
-        }
-        const phone = (r1.content || '').trim()
-        if (!/^1\d{10}$/.test(phone)) {
-          toast('请输入正确的 11 位手机号')
-          return
-        }
-        uni.showModal({
-          title: '短信验证码',
-          content: '演示环境验证码固定 123456',
-          editable: true,
-          placeholderText: '6 位验证码',
-          success: async (r2) => {
-            if (!r2.confirm) {
-              deleteStep.value = 'idle'
-              return
-            }
-            const code = (r2.content || '').trim()
-            if (!/^\d{6}$/.test(code)) {
-              toast('请输入 6 位验证码')
-              return
-            }
-            deletePhone.value = phone
-            deleteCode.value = code
-            try {
-              deletion.value = await requestDelete(phone, code)
-              deleteStep.value = 'ready'
-              toast('删除申请已提交，24 小时冷静期内可取消')
-              await load()
-            } catch (e) {
-              deleteStep.value = 'idle'
-              toast(e instanceof Error ? e.message : '提交删除申请失败')
-            }
-          },
-        })
-      },
-    })
+    deletePhoneInput.value = ''
+    deleteCodeInput.value = ''
+    deleteDialog.value = 'request'
     return
   }
-  uni.showModal({
-    title: '确认删除',
-    content: deletion.value?.can_confirm
-      ? '冷静期已结束。确认后不可恢复，将清除全部个人数据。'
-      : `冷静期至 ${beijingDateTime(deletion.value?.effective_at ?? '')}（北京时间），现在还不能确认删除；可以先取消删除。`,
-    confirmText: deletion.value?.can_confirm ? '删除' : '知道了',
-    confirmColor: '#D93B3B',
-    success: async (res) => {
-      if (!res.confirm) return
-      if (!deletion.value?.can_confirm) return
-      uni.showModal({
-        title: '输入短信验证码',
-        content: '演示环境验证码固定 123456',
-        editable: true,
-        placeholderText: '6 位验证码',
-        success: async (r) => {
-          if (!r.confirm) return
-          const code = (r.content || '').trim()
-          if (!/^\d{6}$/.test(code)) {
-            toast('请输入 6 位验证码')
-            return
-          }
-          try {
-            await confirmDelete(deletePhone.value, code)
-            toast('账户与数据已删除')
-            auth.logout()
-            uni.reLaunch({ url: '/pages/login/login' })
-          } catch (e) {
-            toast(e instanceof Error ? e.message : '删除失败，请确认冷静期是否结束')
-          }
-        },
-      })
-    },
-  })
+  deleteDialog.value = 'confirm'
 }
 
+/** 提交删除申请（手机号 + 验证码都要用户自己输入，不预填） */
+async function submitDeleteRequest() {
+  const phone = deletePhoneInput.value.trim()
+  const code = deleteCodeInput.value.trim()
+  if (!/^1d{10}$/.test(phone)) {
+    toast('请输入正确的 11 位手机号')
+    return
+  }
+  if (!/^d{6}$/.test(code)) {
+    toast('请输入 6 位验证码')
+    return
+  }
+  deleteBusy.value = true
+  try {
+    deletion.value = await requestDelete(phone, code)
+    deletePhone.value = phone
+    deleteCode.value = code
+    deleteStep.value = 'ready'
+    deleteDialog.value = 'none'
+    toast('删除申请已提交，' + beijingDateTime(deletion.value.effective_at) + '（北京时间）之后才能确认删除')
+    await load()
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '提交删除申请失败')
+  } finally {
+    deleteBusy.value = false
+  }
+}
+
+/** 冷静期结束后确认删除（再次输入手机号与验证码） */
+async function submitDeleteConfirm() {
+  const phone = deletePhoneInput.value.trim() || deletePhone.value
+  const code = deleteCodeInput.value.trim()
+  if (!/^1d{10}$/.test(phone)) {
+    toast('请输入正确的 11 位手机号')
+    return
+  }
+  if (!/^d{6}$/.test(code)) {
+    toast('请输入 6 位验证码')
+    return
+  }
+  deleteBusy.value = true
+  try {
+    await confirmDelete(phone, code)
+    toast('账户与数据已删除')
+    auth.logout()
+    uni.reLaunch({ url: '/pages/login/login' })
+  } catch (e) {
+    toast(e instanceof Error ? e.message : '删除失败，请确认冷静期是否结束')
+  } finally {
+    deleteBusy.value = false
+  }
+}
 async function doCancelDelete() {
   try {
     await cancelDelete()
@@ -406,6 +401,49 @@ function onSettings() {
           <AppIcon name="arrow-right" :size="16" />
         </view>
 
+      <!-- 删除账户弹层：手机号 + 短信验证码二次确认（不预填任何内容） -->
+      <view v-if="deleteDialog !== 'none'" class="mask" @click="deleteDialog = 'none'">
+        <view class="dialog" @click.stop>
+          <text class="dialog__title">{{ deleteDialog === 'request' ? '申请删除账户' : '确认删除（不可恢复）' }}</text>
+          <text v-if="deleteDialog === 'request'" class="dialog__desc">
+            请输入本账号绑定的手机号与短信验证码。演示环境验证码固定 123456。
+          </text>
+          <text v-else class="dialog__desc">
+            冷静期{{ deletion?.can_confirm ? '已结束' : '至 ' + beijingDateTime(deletion?.effective_at ?? '') + '（北京时间）' }}。
+            {{ deletion?.can_confirm ? '确认后不可恢复，将清除全部个人数据。' : '现在还不能确认删除；可以先取消删除。' }}
+          </text>
+          <view class="dialog__field">
+            <text class="dialog__label">手机号</text>
+            <input v-model="deletePhoneInput" class="dialog__input" type="number" maxlength="11" placeholder="请输入 11 位手机号" />
+          </view>
+          <view class="dialog__field">
+            <text class="dialog__label">短信验证码</text>
+            <input v-model="deleteCodeInput" class="dialog__input" type="number" maxlength="6" placeholder="请输入 6 位验证码" />
+          </view>
+          <view class="dialog__actions">
+            <AppButton
+              v-if="deleteDialog === 'request'"
+              type="primary"
+              block
+              :loading="deleteBusy"
+              @click="submitDeleteRequest"
+            >
+              提交删除申请
+            </AppButton>
+            <AppButton
+              v-else
+              type="danger"
+              block
+              :loading="deleteBusy"
+              :disabled="!deletion?.can_confirm"
+              @click="submitDeleteConfirm"
+            >
+              确认删除（不可恢复）
+            </AppButton>
+            <AppButton type="soft" block @click="deleteDialog = 'none'">取消</AppButton>
+          </view>
+        </view>
+      </view>
         <view class="row" hover-class="row--hover" :hover-stay-time="80" @click="onDeleteAccount">
           <view class="row__icon row__icon--delete">
             <AppIcon name="trash" :size="20" />
@@ -689,5 +727,69 @@ function onSettings() {
 .logout__text {
   font-size: $font-size-body;
   color: $color-primary;
+}
+
+/* ---------- 删除账户弹层 ---------- */
+.mask {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(27, 34, 48, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-page;
+  z-index: 100;
+}
+
+.dialog {
+  width: 100%;
+  max-width: 640rpx;
+  background-color: $color-surface;
+  border-radius: $radius-card;
+  padding: $spacing-lg;
+}
+
+.dialog__title {
+  display: block;
+  font-size: $font-size-card-title;
+  font-weight: $font-weight-medium;
+  color: $color-text-1;
+}
+
+.dialog__desc {
+  display: block;
+  margin-top: $spacing-xs;
+  font-size: $font-size-aux;
+  color: $color-text-2;
+  line-height: $line-height-body;
+}
+
+.dialog__field {
+  margin-top: $spacing-md;
+}
+
+.dialog__label {
+  display: block;
+  font-size: $font-size-aux;
+  color: $color-text-2;
+  margin-bottom: $spacing-xs;
+}
+
+.dialog__input {
+  width: 100%;
+  height: 88rpx;
+  padding: 0 $spacing-md;
+  border: 2rpx solid $color-border;
+  border-radius: $radius-button;
+  font-size: $font-size-body;
+  color: $color-text-1;
+  background-color: $color-surface;
+}
+
+.dialog__actions {
+  margin-top: $spacing-lg;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
 }
 </style>

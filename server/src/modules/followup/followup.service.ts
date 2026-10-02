@@ -264,7 +264,11 @@ export class FollowupService {
 
     const symptoms = events.filter((e) => e.event_type === '症状');
     const reports = events.filter((e) => e.event_type === '报告');
-    const advices = events.filter((e) => e.event_type === '医嘱' || e.event_type === '行动');
+    // 「既往医嘱与行动」只收用户 / 医生的实际医嘱与行动；
+    // 系统生成的「保存了一页分析」带版本号、不是事实来源，不进这一段（验收反馈第 36 条）
+    const advices = events.filter(
+      (e) => (e.event_type === '医嘱' || e.event_type === '行动') && !(e.raw_text ?? '').trimStart().startsWith('【系统生成'),
+    );
 
     const sections: FollowupSection[] = [
       { key: 'onset', title: '起病与时间', items: this.buildOnset(ep, events) },

@@ -11,6 +11,7 @@
  * - GET /episodes/{id}/today   今天是否已记录
  */
 import { computed, onMounted, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import AppButton from '../../components/AppButton.vue'
 import AppCard from '../../components/AppCard.vue'
 import AppIcon from '../../components/AppIcon.vue'
@@ -54,6 +55,13 @@ onMounted(async () => {
     loading.value = false
     return
   }
+  await load()
+})
+
+// Tab 页会保留状态：每次显示都重新拉一次，分析条数 / 复诊问题数才不会停在旧值
+// （验收反馈第 35 条：375 宽下生成分析后回到病程 Tab 显示「0 次分析」）
+onShow(async () => {
+  if (!auth.isLoggedIn) return
   await load()
 })
 

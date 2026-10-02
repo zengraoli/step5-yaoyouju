@@ -305,12 +305,28 @@ function buildKnown(db: DatabaseSync, episodeId: string): KnownItem[] {
     verify_status: string;
   }[];
   return events.map((e) => ({
-    text: `${beijingDate(e.occurred_at)} ${e.raw_text?.trim() || `（${e.event_type}，无原文）`}（${e.source_type}，${e.verify_status}）`,
+    text: `${beijingDate(e.occurred_at)} ${compactKnownText(e.raw_text)}（${e.source_type}，${e.verify_status}）`,
     source: e.source_type,
     occurred_at: e.occurred_at,
     verify_status: e.verify_status,
     care_event_id: e.id,
   }));
+}
+
+/**
+ * 已知段文案：A02 的结构化摘要按「；」拆开，只保留已回答的项，
+ * 不再把整份问卷原文堆在一页分析里（验收反馈第 30 条）。
+ */
+function compactKnownText(raw: string | null): string {
+  const text = (raw ?? '').trim();
+  if (!text) return '（无原文）';
+  if (!text.startsWith('关键变化确认')) return text;
+  const parts = text
+    .split('；')
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  const kept = parts.filter((p) => !p.endsWith('：尚未确认'));
+  return kept.length > 0 ? kept.join('；') : text;
 }
 
 /** 候选视频：已发布且未下线的视频内容 */

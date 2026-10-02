@@ -150,7 +150,9 @@ const events = computed<CareEventView[]>(() => episode.value?.events ?? [])
 
 /** 病程中尚未确认的事件（产品红线：缺失不默认阴性） */
 const unconfirmedEvents = computed<CareEventView[]>(() =>
-  events.value.filter((e) => e.verify_status === '尚未确认'),
+  // 系统生成的内容（「保存到病程」写的一页分析）标注了版本号、不是用户自述，
+  // 不当作「待用户确认」的信息（验收反馈第 36 条）
+  events.value.filter((e) => e.verify_status === '尚未确认' && !isSystemGenerated(e)),
 )
 
 /** 今天是否还没记录（不复用昨日答案，未记录则给「记录今天」入口） */
@@ -453,6 +455,11 @@ function onBell() {
 }
 
 /** 事件文字：原文优先；无原文时用症状记录字段兜底（不写「无」） */
+/** 是否系统生成的事件（原文以【系统生成 开头） */
+function isSystemGenerated(e: CareEventView): boolean {
+  return (e.raw_text ?? '').trimStart().startsWith('【系统生成')
+}
+
 function eventText(event: CareEventView): string {
   const raw = excerpt(event.raw_text, 30)
   if (raw) return raw

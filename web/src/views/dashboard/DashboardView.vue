@@ -130,15 +130,31 @@ const latestSymptom = computed<CareEventView | undefined>(
   () => events.value.find((e) => e.event_type === '症状') ?? undefined,
 )
 
+/** 症状摘要（A02 写入）题号 → 行标签（兼容「1. …？答」与「标签：答」两种写法） */
+const SUMMARY_LABELS: Record<string, string[]> = {
+  '1.': ['与上次相比', '最近变化'],
+  '2.': ['需医生及时评估的情况', '下肢情况', '大小便控制'],
+  '3.': ['侧别', '主要涉及侧别'],
+  '4.': ['起病', '症状开始'],
+}
+
 /** 症状摘要中某题的答案（格式与 App 端一致） */
 function answerOf(prefix: string): string {
   const text = latestSymptom.value?.raw_text
   if (!text) return '尚未确认'
-  const line = text.split('\n').find((l) => l.trim().startsWith(prefix))
-  if (!line) return '尚未确认'
-  const idx = line.indexOf('？')
-  const answer = idx >= 0 ? line.slice(idx + 1).trim() : ''
-  return answer || '尚未确认'
+  const labels = SUMMARY_LABELS[prefix] ?? []
+  const segments = text
+    .split(/[；;\n]/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+  for (const seg of segments) {
+    const hit = labels.find((l) => seg.includes(l))
+    if (!hit) continue
+    const idx = seg.search(/[：:]/)
+    const answer = idx >= 0 ? seg.slice(idx + 1).trim() : seg.slice(hit.length).trim()
+    return answer || '尚未确认'
+  }
+  return '尚未确认'
 }
 
 /** 待确认项（未回答的问题；缺失不默认阴性） */
@@ -147,10 +163,20 @@ const pendingQuestions = computed<{ key: string; title: string; options: string[
   if (answerOf('2.') === '尚未确认') {
     list.push({ key: 'leg', title: '今天有腿部麻木或无力吗？', options: ['有', '没有', '尚未确认'] })
   }
-  // 侧别冲突只在真实存在冲突时提示（来源是核对页写回的冲突事件）
-  const sideConflict = latestSymptom.value?.raw_text?.match(/侧别[^左右]{0,4}([左右])/)?.[1]
-  if (answerOf('3.') === '尚未确认' && sideConflict) {
-    list.push({ key: 'side', title: `报告写“${sideConflict}侧”，你的描述是另一侧，以你的症状为准？`, options: ['左侧', '右侧', '都有 / 不确定'] })
+  // 侧别冲突：报告里的侧别与用户描述的侧别都明确存在且不一致时才提示
+  const reportSide = (() => {
+    const report = events.value.find((e) => e.event_type === '报告')
+    const m = report?.raw_text?.match(/(左|右)侧/)
+    return m ? m[1] : ''
+  })()
+  const selfSide = (() => {
+    const answer = answerOf('3.')
+    if (answer === '尚未确认') return ''
+    const m = /(左|右)侧/.exec(answer)
+    return m ? m[1] : ''
+  })()
+  if (reportSide && selfSide && reportSide !== selfSide) {
+    list.push({ key: 'side', title: `报告写“${reportSide}侧”，你的描述是另一侧，以你的症状为准？`, options: ['左侧', '右侧', '都有 / 不确定'] })
   }
   if (answerOf('1.') === '尚未确认') {
     list.push({ key: 'change', title: '与上次相比，症状有变化吗？', options: ['加重', '差不多', '减轻', '尚未确认'] })

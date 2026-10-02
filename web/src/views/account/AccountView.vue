@@ -74,9 +74,9 @@ async function load() {
     // 待执行的删除申请要能在刷新后继续看到（可取消）
     const pending = meRes?.deletion ?? null
     if (pending && (pending.status === '冷静期中' || pending.status === '已申请')) {
+      // 刷新后仍能看到待执行的删除申请与生效时间；手机号框保留用户输入，不用脱敏号覆盖
       deletion.value = pending
       deleteStep.value = 'ready'
-      deletePhone.value = profile.value?.phone_masked ?? deletePhone.value
     } else if (!deletion.value || (pending && pending.status !== '冷静期中')) {
       deletion.value = null
       deleteStep.value = 'idle'
@@ -148,7 +148,7 @@ async function onRevoke(scope: string) {
 const lastExport = ref<string | null>(null)
 const deleteStep = ref<'idle' | 'requested' | 'ready'>('idle')
 const deletePhone = ref('')
-const deleteCode = ref('123456')
+const deleteCode = ref('')
 const deletion = ref<DeletionStatus | null>(null)
 
 async function onRequestExport() {
@@ -189,7 +189,7 @@ async function onDeleteAccount() {
     try {
       deletion.value = await requestDelete(deletePhone.value.trim(), deleteCode.value.trim())
       deleteStep.value = 'ready'
-      toast('删除申请已提交，24 小时冷静期内可取消')
+      toast(`删除申请已提交，${beijingDateTime(deletion.value.effective_at)}（北京时间）之后才能确认删除；冷静期内可取消`)
       await load()
     } catch (e) {
       toast(e instanceof Error ? e.message : '提交删除申请失败')

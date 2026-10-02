@@ -116,15 +116,29 @@ async function load() {
 
 /* ---------- 解析症状摘要（A02 写入的固定格式） ---------- */
 
+/** 症状摘要（A02 写入）题号 → 行标签（兼容「1. …？答」与「标签：答」两种写法） */
+const SUMMARY_LABELS: Record<string, string[]> = {
+  '1.': ['与上次相比', '最近变化'],
+  '2.': ['需医生及时评估的情况', '下肢情况', '大小便控制'],
+  '3.': ['侧别', '主要涉及侧别'],
+  '4.': ['起病', '症状开始'],
+}
+
 function answerOf(item: StructuredItem | undefined, prefix: string): string {
   if (!item?.raw_text) return UNCONFIRMED
-  const line = item.raw_text
-    .split('\n')
-    .find((l) => l.trim().startsWith(prefix))
-  if (!line) return UNCONFIRMED
-  const idx = line.indexOf('？')
-  const answer = idx >= 0 ? line.slice(idx + 1).trim() : ''
-  return answer || UNCONFIRMED
+  const labels = SUMMARY_LABELS[prefix] ?? []
+  const segments = item.raw_text
+    .split(/[；;\n]/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+  for (const seg of segments) {
+    const hit = labels.find((l) => seg.includes(l))
+    if (!hit) continue
+    const idx = seg.search(/[：:]/)
+    const answer = idx >= 0 ? seg.slice(idx + 1).trim() : seg.slice(hit.length).trim()
+    return answer || UNCONFIRMED
+  }
+  return UNCONFIRMED
 }
 
 function reportTextOf(item: StructuredItem): string {
