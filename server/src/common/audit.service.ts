@@ -203,6 +203,15 @@ export class AuditService {
     if (!anchor.head_hmac || anchor.head_hmac !== anchorHmac(anchor.head_hash, anchor.total)) {
       return { ok: false, broken_at: null, reason: '链头校验和不匹配，审计记录可能被删改' };
     }
+    // 锚点流水账：库里的锚点不能早于账本最后一行（否则说明删了尾记录又把锚点换回旧值）
+    const tail = journalTail();
+    if (tail && (anchor.total < tail.total || anchor.head_hash !== tail.head_hash)) {
+      return {
+        ok: false,
+        broken_at: null,
+        reason: '链头锚点与锚点流水账不一致（库内锚点被回滚，可能存在被删除的审计记录）',
+      };
+    }
     return { ok: true, broken_at: null };
   }
 
