@@ -228,6 +228,13 @@ export class AdminAuditService {
       throw new ApiException(ErrorCode.CONFLICT, '请先提交审计导出申请，审批通过后才能下载');
     }
     const request = this.loadRequest(requestId);
+    // 下载绑定申请人：审批人不能顶替申请人把这次机会用掉（验收反馈第 37 条）
+    if (request.applicant_id && request.applicant_id !== actorId) {
+      throw new ApiException(
+        ErrorCode.FORBIDDEN,
+        '导出文件只能由申请人本人下载，请让提交申请的账号登录后下载',
+      );
+    }
     if (request.status === '已导出') {
       throw new ApiException(ErrorCode.CONFLICT, '该导出申请已下载过一次，不能重复下载');
     }

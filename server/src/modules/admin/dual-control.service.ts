@@ -98,14 +98,18 @@ export class DualControlService {
         .get(targetId) as { reviewer_id: string } | undefined;
       const confirmedBy = approver?.reviewer_id ?? null;
       const confirmed = !!confirmedBy && confirmedBy !== actorId;
+      // 双人确认不能由「同一个人邀请的账号」完成（验收反馈第 6 条）
+      const sameRoot = !!confirmedBy && !!actorId && this.sameInvitationRoot(confirmedBy, actorId);
       return {
         action,
         required,
-        confirmed,
+        confirmed: confirmed && !sameRoot,
         confirmed_by: confirmedBy,
-        message: confirmed
-          ? null
-          : '发布需双人确认：审核人与发布人不能是同一人，请换一位临床审核角色发布',
+        message: sameRoot
+          ? '发布需双人确认：审核人与发布人存在邀请创建关系（含同一个人邀请的账号），请换一位与该申请无关的账号发布'
+          : confirmed
+            ? null
+            : '发布需双人确认：审核人与发布人不能是同一人，请换一位临床审核角色发布',
       };
     }
     return {
@@ -124,5 +128,31 @@ export class DualControlService {
       throw new ApiException(ErrorCode.CONFLICT, result.message ?? '该操作需要双人确认');
     }
     return result;
+  }
+
+  /** 两个后台账号是否同邀请根（含直接邀请关系；同一人视为同根） */
+  sameInvitationRoot(a: string, b: string): boolean {
+    if (a === b) return true;
+    const createdBy = (id: string): string | null => {
+      const row = this.db.app.prepare('SELECT created_by FROM admin_user WHERE id = ?').get(id) as
+        | { created_by: string | null }
+        | undefined;
+      return row?.created_by ?? null;
+    };
+    const rootOf = (id: string): string | null => {
+      let current: string | null = id;
+      const seen = new Set<string>();
+      for (let depth = 0; depth < 10 && current; depth += 1) {
+        if (seen.has(current)) break;
+        seen.add(current);
+        const parent = createdBy(current);
+        if (!parent) return current;
+        current = parent;
+      }
+      return current;
+    };
+    if (createdBy(a) === b || createdBy(b) === a) return true;
+    const ra = rootOf(a);
+    return ra !== null && ra === rootOf(b);
   }
 }

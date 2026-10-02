@@ -411,8 +411,26 @@ export class ConfirmationService {
       );
     }
     if (!admin.permissions.includes('*') && !this.canPerform(admin, row.action)) {
-      throw new ApiException(ErrorCode.FORBIDDEN, '没有权限执行该操作');
+      // 引导例外：全新部署只有一名超级管理员时，邀请第二名超管可由合规支持确认
+      // （合规没有成员管理权限，但这是唯一能把第二名超管建出来的路径）
+      const onlyOneSuper = this.activeSuperCount() <= 1;
+      const bootstrap =
+        row.action === 'user.invite_super' && onlyOneSuper && admin.role.name === '合规支持';
+      if (!bootstrap) {
+        throw new ApiException(ErrorCode.FORBIDDEN, '没有权限执行该操作');
+      }
     }
+  }
+
+  /** 当前启用中的超级管理员数量（引导判断用） */
+  private activeSuperCount(): number {
+    const row = this.db.app
+      .prepare(
+        `SELECT COUNT(*) AS n FROM admin_user u JOIN role r ON r.id = u.role_id
+          WHERE r.name = '超级管理员' AND u.status = 'active'`,
+      )
+      .get() as { n: number };
+    return row?.n ?? 0;
   }
 
   /** 执行业务失败时确认单回退为待确认（清空确认人），供另一人重试 */

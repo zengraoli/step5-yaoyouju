@@ -478,12 +478,10 @@ export class ContentsService {
       throw new ApiException(ErrorCode.CONFLICT, '发布需双人确认：未找到临床审核通过记录');
     }
     // 「发布双人确认」设置关闭时，允许审定的同一人发布（不必换另一角色）；
-    // 开启时必须与最近的审核通过人不是同一人。
-    if (this.dualControl.getSettings().enabled && approver === publisherId) {
-      throw new ApiException(
-        ErrorCode.CONFLICT,
-        '发布需双人确认：审核人与发布人不能是同一人，请换一位临床审核角色发布',
-      );
+    // 开启时必须与最近的审核通过人不是同一人，也不能是同一个人邀请的账号（含同根邀请）。
+    const dual = this.dualControl.check(publisherId, itemId, 'content.publish');
+    if (dual.required && !dual.confirmed) {
+      throw new ApiException(ErrorCode.CONFLICT, dual.message ?? '发布需双人确认');
     }
     let version = 0;
     this.withTx(() => {
