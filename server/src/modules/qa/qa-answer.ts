@@ -118,16 +118,21 @@ export function buildQaAnswer(input: QaAnswerInput): QaAnswer {
     });
   }
 
-  const contextLabel = input.analysis ? `一页分析 v${input.analysis.version}` : '你的病程记录';
+  const hasEvents = input.events.some((e) => Boolean(e.raw_text));
+  const sources: string[] = [];
+  if (input.analysis) sources.push(`一页分析 v${input.analysis.version}`);
+  if (hasEvents) sources.push('你的病程记录');
+  if (input.evidence.length > 0) sources.push('已审核证据');
+  const contextLabel = sources.length > 0 ? sources.join('、') : '你已核对的信息';
   const header = `基于你当前已核对的信息（${contextLabel}），关于「${input.question.trim()}」：`;
   const lines = picked.map((p) => `- ${p.text}（来源：${p.citation.source_label}）`);
   const body =
     picked.length === 0
-      ? `关于这个问题，我已核对的报告原文、病程记录和已审核资料里还没有可引用的内容（${UNCONFIRMED}）。我不会替你推测，建议把这个问题加入复诊问题，请医生帮你确认。`
+      ? `关于这个问题，我已核对的资料里还没有可引用的内容（${UNCONFIRMED}）。我不会替你推测，建议把这个问题加入复诊问题，请医生帮你确认。`
       : [
           ...lines,
           '',
-          '以上解释整理自你的报告原文、病程记录与已审核证据；资料未覆盖的问题会标注「尚未确认」，不作诊断。',
+          `以上解释整理自${contextLabel}；资料未覆盖的问题会标注「尚未确认」，不作诊断。`,
         ].join('\n');
   const reply = `${header}\n${body}\n\n${QA_DISCLAIMER}`;
   return { reply, citations: picked.map((p) => p.citation), unconfirmed: picked.length === 0 };

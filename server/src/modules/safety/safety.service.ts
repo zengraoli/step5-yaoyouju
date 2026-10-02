@@ -127,6 +127,34 @@ export class SafetyService {
     }));
   }
 
+  /**
+   * 还没有任何病历时（先开问答 / 记录今天）命中的高危红旗：未关联病程。
+   * 生成分析前同样要复查，避免用户「先问一句再建病程」绕过产品红线第 3 条。
+   */
+  unlinkedHighEvents(userId: string): { rule_code: string; severity: string; label: string }[] {
+    const rows = this.db.app
+      .prepare(
+        `SELECT rule_code, severity FROM safety_event
+          WHERE user_id = ? AND episode_id IS NULL AND severity = 'high' ORDER BY created_at ASC`,
+      )
+      .all(userId) as { rule_code: string; severity: string }[];
+    return rows.map((r) => ({
+      rule_code: r.rule_code,
+      severity: r.severity,
+      label: RED_FLAG_RULES.find((x) => x.code === r.rule_code)?.label ?? r.rule_code,
+    }));
+  }
+
+  /** 新建病程时，把之前未关联病程的高危红旗挂到新病程上（红旗不被流程顺序绕过） */
+  attachUnlinkedEvents(userId: string, episodeId: string): number {
+    const res = this.db.app
+      .prepare(
+        `UPDATE safety_event SET episode_id = ? WHERE user_id = ? AND episode_id IS NULL AND severity = 'high'`,
+      )
+      .run(episodeId, userId);
+    return Number(res.changes ?? 0);
+  }
+
   private recordEvent(userId: string, episodeId: string | undefined, m: MatchedRule): void {
     this.db.app
       .prepare(

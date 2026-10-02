@@ -31,6 +31,9 @@ import { beijingDate } from '../../common/time.util';
 /** 最大尝试次数（达到后标记 failed，不再重试） */
 export const MAX_ATTEMPTS = 3;
 
+/** 「怎么看报告 / 报告术语」类证据片段：用户没有报告时不引用（避免解释段出现无关内容） */
+const REPORT_READING_CHUNK = /报告|影像|片子|MRI|CT|X 线|X线|术语|退行性/;
+
 /** 不可重试的流水线错误（校验失败，重试无意义） */
 export class PipelineError extends Error {
   constructor(message: string) {
@@ -145,8 +148,34 @@ function runPipeline(
   // 2. 受控检索：只在证据库内检索（调用 evidence 模块的检索服务，停用的证据立即不再被检索到）
   const query = buildQuery(db, episodeId, payload);
   const evidenceService = retriever ?? new LocalEvidenceRetriever(db);
-  const outcome = evidenceService.search(query, 5);
-  const evidence: RetrievedChunk[] = outcome.results;
+  let outcome = evidenceService.search(query, 5);
+  let evidence: RetrievedChunk[] = outcome.results;
+  // 兜底：报告原文 / 主诉与证据库词面差异大时（如「既往史：否认肿瘤」这类正常报告），
+  // 用病程标题 + 通用检索词再检索一次，避免常见内容被判成「未检索到相关片段」而任务失败
+  let fallbackQuery: string | null = null;
+  if (evidence.length === 0) {
+    const epTitle = db.prepare(`SELECT title FROM episode WHERE id=?`).get(episodeId) as
+      | { title: string }
+      | undefined;
+    fallbackQuery = `${epTitle?.title ?? '腰痛'} 腰痛 腰椎 椎间盘 久坐 报告 就医`;
+    const retry = evidenceService.search(fallbackQuery, 5);
+    if (retry.results.length > 0) {
+      outcome = retry;
+      evidence = retry.results;
+    }
+  }
+  // 用户没有报告时，不引用「怎么看报告 / 报告术语」类片段（第六轮验收反馈第 38 条）
+  const hasReport =
+    (
+      db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM report r JOIN care_event c ON c.id=r.care_event_id WHERE c.episode_id=?`,
+        )
+        .get(episodeId) as { n: number }
+    ).n > 0;
+  if (!hasReport) {
+    evidence = evidence.filter((c) => !REPORT_READING_CHUNK.test(c.content));
+  }
   if (evidence.length === 0) {
     throw new PipelineError('检索校验失败：证据库内未检索到相关片段');
   }
@@ -180,6 +209,7 @@ function runPipeline(
     ...outcome.retrieval_snapshot,
     strategy: modelRelease.retrieval_strategy ?? outcome.retrieval_snapshot.strategy ?? RETRIEVAL_STRATEGY,
     removed_statements: removed,
+    ...(fallbackQuery ? { fallback_query: fallbackQuery } : {}),
   };
 
   const generatedAt = now();

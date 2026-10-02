@@ -103,6 +103,9 @@ export class EpisodesService {
         '进行中',
         now,
       );
+    // 之前还没有病病程时（先开问答 / 记录今天）命中的高危红旗，挂到这个新病程上：
+    // 之后为该病程提交分析必须被红旗拦截（产品红线第 3 条：红旗不被流程顺序绕过）
+    this.safety.attachUnlinkedEvents(userId, id);
     return this.get(userId, id);
   }
 

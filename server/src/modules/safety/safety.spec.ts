@@ -18,6 +18,7 @@ import {
   REASSURANCE_STREAK,
   normalizeSafetyText,
 } from './safety.rules';
+import { NORMAL_REPORTS, SHOULD_NOT_TRIGGER, SHOULD_TRIGGER } from './safety.corpus';
 
 describe('T04 安全规则引擎', () => {
   let app: INestApplication;
@@ -252,5 +253,61 @@ describe('T04b 红旗说法覆盖面（验收反馈：口语 / 错别字 / 语�
     expect(isReassurance('我这应该没什么大事吧')).toBe(true);
     expect(normalizeSafetyText('大小便失禁')).toBe('大小便失禁');
     expect(REASSURANCE_STREAK).toBe(3);
+  });
+});
+
+describe('T04c 自编语料逐条核对（第六轮验收反馈：换一种说法也要命中，普通腰腿痛不能误判）', () => {
+  const flagged = (text: string) =>
+    RED_FLAG_RULES.filter((r) => matchesRedFlagRule(r, text)).map((r) => r.code);
+
+  it('应触发说法全部命中（口语 / 方言 / 错别字 / 语序变化）', () => {
+    const misses = SHOULD_TRIGGER.filter((c) => !flagged(c.text).includes(c.rule));
+    expect(misses.map((m) => `${m.rule} ${m.text}`)).toEqual([]);
+    expect(SHOULD_TRIGGER.length).toBeGreaterThanOrEqual(50);
+  });
+
+  it('普通腰腿痛 / 日常 / 否定 / 第三方 / 报告原文不误判', () => {
+    const ordinary = SHOULD_NOT_TRIGGER.filter((t) => /腰|腿|屁股/.test(t));
+    // 普通腰腿痛加重 / 发麻 / 放射痛说法不少于 20 条
+    expect(ordinary.length).toBeGreaterThanOrEqual(20);
+    const wrong = [...SHOULD_NOT_TRIGGER, ...NORMAL_REPORTS].filter((t) => flagged(t).length > 0);
+    expect(wrong).toEqual([]);
+    expect(NORMAL_REPORTS.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('A02 关键变化确认的选项文案必须命中对应红旗规则', () => {
+    expect(flagged('大小便控制变化')).toContain('RF-03');
+    expect(flagged('会阴部麻木')).toContain('RF-01');
+    expect(flagged('双腿进行性无力')).toContain('RF-02');
+    expect(flagged('腰痛伴发热')).toContain('RF-06');
+  });
+
+  it('换一种说法的越界提问仍然明确拒答', () => {
+    const oos = (code: string, q: string) =>
+      matchesScopeRule(
+        OUT_OF_SCOPE_RULES.find((r) => r.code === code)!,
+        q,
+      );
+    expect(oos('OOS-01', '我这是不是神经根型的')).toBe(true);
+    expect(oos('OOS-01', '照片子看我是L5压迫吗')).toBe(true);
+    expect(oos('OOS-01', '有没有可能是肾结石引起的腰疼')).toBe(true);
+    expect(oos('OOS-02', '这种情况要住院吗')).toBe(true);
+    expect(oos('OOS-03', '扶他林软膏一天抹几次')).toBe(true);
+    expect(oos('OOS-03', '乙哌立松可以长期吃吗')).toBe(true);
+    expect(oos('OOS-04', '半年后能不能跑马拉松')).toBe(true);
+    expect(oos('OOS-04', '我还能不能正常工作到退休')).toBe(true);
+    expect(oos('OOS-04', '老了会不会瘫在床上')).toBe(true);
+    expect(oos('OOS-04', '过两周能好利索不')).toBe(true);
+    expect(oos('OOS-05', '我需要卧床休息几周')).toBe(true);
+    expect(oos('OOS-05', '推拿能不能把突出的地方按回去')).toBe(true);
+    // 范围内的问题放行
+    expect(OUT_OF_SCOPE_RULES.some((r) => matchesScopeRule(r, '报告里写的 L5/S1 是什么意思'))).toBe(false);
+    expect(OUT_OF_SCOPE_RULES.some((r) => matchesScopeRule(r, '我昨天走了六千步，腰有点酸'))).toBe(false);
+  });
+
+  it('「不会瘫痪吧」走求保证循环而不是一次越界拒答', () => {
+    expect(isReassurance('不会瘫痪吧')).toBe(true);
+    expect(isReassurance('会不会以后要坐轮椅')).toBe(true);
+    expect(isWorryLoop('大概几周能恢复正常上班')).toBe(true);
   });
 });

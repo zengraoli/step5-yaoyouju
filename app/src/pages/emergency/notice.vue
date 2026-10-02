@@ -31,7 +31,7 @@ import { beijingDate, getStatusBarHeight } from '../../utils/system'
 const FALLBACK: EmergencyNotice = {
   title: '需要及时寻求专业帮助',
   headline: '建议尽快就医',
-  body: '你刚才选择了需要医生及时评估的变化。这类变化需要医生及时评估，本产品无法替你判断严重程度，本轮不会生成个性化分析。',
+  body: '你描述的内容包含需要医生及时评估的信号。这类变化需要医生及时评估，本产品无法替你判断严重程度，请尽快就医。',
   offline_note: '本页在网络异常时也可查看。',
   actions: [
     { type: 'call', label: '拨打 120 / 前往急诊' },
@@ -165,8 +165,12 @@ function buildBringItems(detail: EpisodeDetail): BringItem[] {
 /** 最新报告的日期与类型（动态来自该用户的报告，不写死） */
 function reportMetaOf(event: CareEventView): string {
   const date = event.report?.report_date || beijingDate(event.occurred_at) || '日期尚未确认'
-  const head = (event.raw_text ?? '').split(/[：（(]/)[0].trim()
-  return `${date} ${head || '检查报告'}`
+  // 报告原文头部形如「检查类型：腰椎 MRI」：取冒号后的类型，不要把「检查类型」当成标题
+  const firstLine = (event.raw_text ?? '').split(/[\n；;]/)[0].trim()
+  const colon = firstLine.search(/[：:]/)
+  const head =
+    colon >= 0 && colon <= 8 ? firstLine.slice(colon + 1).trim() : firstLine
+  return `${date} ${head.slice(0, 20) || '检查报告'}`
 }
 
 /* ---------- 派生展示 ---------- */
@@ -183,8 +187,8 @@ const bodyText = computed(() => {
   if (signals.value.length === 0) return notice.value.body || FALLBACK.body
   const joined = signals.value.join('、')
   return stopPersonal.value
-    ? `你刚才选择了：${joined}。这类变化需要医生及时评估，本产品无法替你判断严重程度，本轮不会生成个性化分析。`
-    : `你刚才选择了：${joined}。这类变化需要医生及时评估，本产品无法替你判断严重程度；个性化分析仍会生成，请以医生的评估为准。`
+    ? `你刚才描述的内容包含：${joined}。这类变化需要医生及时评估，本产品无法替你判断严重程度，本轮不会生成个性化分析。`
+    : `你刚才描述的内容包含：${joined}。这类变化需要医生及时评估，本产品无法替你判断严重程度；个性化分析仍会生成，请以医生的评估为准。`
 })
 
 const callAction = computed(
@@ -210,8 +214,9 @@ function onHospital() {
   toast('演示环境：将打开地图查找附近医院')
 }
 
+/** 联系主治医生：演示实现没有保存就诊资料的功能，不谎称已保存 */
 function onDoctor() {
-  toast('演示环境：主治医生联系方式已保存在就诊资料中')
+  toast('演示环境：请把主治医生的联系方式写进复诊问题清单，就诊时带上')
 }
 
 /** 生成一页「就诊交接」摘要（仅整理已有信息）→ 复诊准备页 */

@@ -20,6 +20,7 @@ import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { AnalysesController } from './analyses.controller';
 import { AnalysesService } from './analyses.service';
 import { SafetyService } from '../safety/safety.service';
+import { QaService } from '../qa/qa.service';
 import { consumeOneTask } from './analysis-pipeline';
 import { LocalMockAdapter, findSupport } from './model-adapter';
 import { retrieveEvidence } from '../evidence/evidence-retrieval';
@@ -30,6 +31,8 @@ describe('T07 一页分析流水线与 Worker', () => {
   let episodes: EpisodesService;
   let switches: SwitchesService;
   let db: DbService;
+  let qa: QaService;
+  let analyses: AnalysesService;
   let token: string;
   let episodeId: string;
   let dir: string;
@@ -47,6 +50,7 @@ describe('T07 一页分析流水线与 Worker', () => {
         EpisodesService,
         AnalysesService,
         SafetyService,
+        QaService,
         SwitchesService,
         AuditService,
         SchemaService,
@@ -63,6 +67,8 @@ describe('T07 一页分析流水线与 Worker', () => {
     episodes = app.get(EpisodesService);
     switches = app.get(SwitchesService);
     db = app.get(DbService);
+    qa = app.get(QaService);
+    analyses = app.get(AnalysesService);
 
     // 演示用户 u1（13800001234）已同意「健康信息处理」
     const me = auth.login('13800001234', '123456');
@@ -254,6 +260,26 @@ describe('T07 一页分析流水线与 Worker', () => {
     expect(res.body.data.disclaimer).toContain('系统生成内容');
     expect(res.body.data.disclaimer).toContain('不作诊断');
     expect(res.body.data.model_release_id).toBeTruthy();
+  });
+
+  it('还没有任何病历时先在问答里说红旗：之后建病程并提交分析仍被拦下', async () => {
+    // 新用户，先不建病程
+    const me = auth.login('13800009999', '123456');
+    // 问与解释里说红旗（episode_id 为空，安全事件不关联病程）
+    const session = qa.create(me.user.id, {});
+    expect(() =>
+      qa.ask(me.user.id, session.id, '今天开始尿不出来，会阴发麻'),
+    ).toThrow(/会阴部|尽快就医|就医/);
+    // 之后才建立病程
+    const ep = episodes.create(me.user.id, { title: '新建病程' });
+    // 提交分析必须被高危红旗拦下（40911）
+    let code = '';
+    try {
+      analyses.create(me.user.id, { episode_id: ep.id as string, symptom_change: '久坐后腰痛' });
+    } catch (e) {
+      code = (e as { code?: string }).code ?? '';
+    }
+    expect(String(code)).toBe('40911');
   });
 
   it('访问他人分析返回 404', async () => {

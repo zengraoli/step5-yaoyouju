@@ -75,7 +75,11 @@ export class AnalysesService {
 
     // 1b. 病程内已记录过的 high 级红旗同样要停止个性化分析
     if (result.safety_flag === 'none') {
-      const recorded = this.safety.episodeRedFlagEvents(ep.id as string);
+      // 还没有病病程时（先开问答）命中的高危红旗也不能绕过
+      const recorded = [
+        ...this.safety.episodeRedFlagEvents(ep.id as string),
+        ...this.safety.unlinkedHighEvents(userId),
+      ];
       if (recorded.length > 0) {
         const notice = this.buildNotice({
           safety_flag: 'stop_personal',

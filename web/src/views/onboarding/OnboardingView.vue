@@ -81,7 +81,7 @@ async function submit() {
   try {
     // 紧凑单行记录：不在病程 / 一页分析里堆放问卷原文；未回答的记为「尚未确认」
     const parts = [
-      '关键变化确认（自述，尚未确认）：',
+      '关键变化确认（自述，尚未确认）',
       `下肢情况：${answers.value.leg || '尚未确认'}`,
       `大小便控制：${answers.value.bladder || '尚未确认'}`,
       `侧别：${answers.value.side || '尚未确认'}`,

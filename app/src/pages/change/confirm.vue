@@ -173,7 +173,7 @@ async function ensureEpisode(): Promise<string> {
  * 用紧凑单行记录（不在病程 / 一页分析里堆放问卷原文）；未回答的记为「尚未确认」。
  */
 function buildSummary(): string {
-  const parts: string[] = ['关键变化确认（自述，尚未确认）：']
+  const parts: string[] = ['关键变化确认（自述，尚未确认）']
   parts.push(`与上次相比：${change.value || '尚未确认'}`)
   const flags = redFlags.value.map((key) => RED_FLAG_LABELS[key] ?? key)
   parts.push(`需医生及时评估的情况：${flags.length > 0 ? flags.join('、') : '尚未确认'}`)
