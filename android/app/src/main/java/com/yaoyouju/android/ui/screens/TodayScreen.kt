@@ -120,11 +120,14 @@ fun TodayScreen(navController: NavHostController) {
         saving = true
         scope.launch {
             try {
-                val episodes = handleResponse(episodesApi.list())
-                val episode = episodes.firstOrNull()
+                // 新用户可以直接以「记录今天」开始：没有病程时先创建一个（起病时间尚未确认）
+                var episode = handleResponse(episodesApi.list()).firstOrNull()
                 if (episode == null) {
-                    toastText = "还没有病程，请先记录当前关键变化"
-                    return@launch
+                    episode = handleResponse(
+                        episodesApi.create(
+                            com.yaoyouju.android.core.net.CreateEpisodeRequest(title = "我的腰痛病程"),
+                        ),
+                    )
                 }
                 val body = LogTodayRequest(
                     skipped = skipped,

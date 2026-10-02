@@ -104,58 +104,69 @@ fun ChangeScreen(navController: NavHostController) {
 
     fun selectedMatchTexts(): List<String> = RedFlagOptions.matchTextsOf(redFlags)
 
+    /** 取进行中的病程；没有则按第 4 题答案创建（缺失不默认阴性） */
+    suspend fun ensureEpisode(): String? {
+        val episodes = handleResponse(episodesApi.list())
+        val existing = episodes.firstOrNull()?.id
+        if (existing != null) {
+            handleResponse(
+                episodesApi.update(
+                    existing,
+                    UpdateEpisodeRequest(onsetDate = onsetDateOf(onset), onsetCertainty = "尚未确认"),
+                ),
+            )
+            return existing
+        }
+        val created = handleResponse(
+            episodesApi.create(
+                CreateEpisodeRequest(title = "我的腰痛病程", onsetDate = onsetDateOf(onset)),
+            ),
+        )
+        return created.id
+    }
+
+
     fun submit() {
         submitting = true
         scope.launch {
             try {
-                // 命中 high 级红旗：立即跳就医提示（停止个性化分析）
-                if (hasHighSeverity()) {
+                // 命中红旗：先把这次确认写进病程（服务端据此记录安全事件、之后拦下该病程的分析），
+                // 再跳就医提示（产品红线：命中即提示，且不能被流程顺序绕过）
+                val flags = RedFlagOptions.all.filter { redFlags.contains(it.key) }
+                val high = flags.any { it.severity == "high" }
+                val episodeId = ensureEpisode() ?: return@launch
+                writeEvents(
+                    episodesApi,
+                    episodeId,
+                    change,
+                    side,
+                    onset,
+                    RedFlagOptions.matchTextsOf(redFlags),
+                    RedFlagOptions.labelsOf(redFlags),
+                )
+                if (flags.isNotEmpty()) {
                     navController.navigate(
                         Routes.EMERGENCY + "?signals=" +
-                            selectedSignals().joinToString(",") + "&stop=1",
+                            RedFlagOptions.signalsOf(redFlags).joinToString(",") + "&stop=" + if (high) "1" else "0",
                     )
                     return@launch
-                }
-                // 创建或更新病程，写入结构化摘要
-                val episodes = handleResponse(episodesApi.list())
-                val episodeId = episodes.firstOrNull()?.id
-                if (episodeId == null) {
-                    // 没有病程时先创建（起病时间取第 4 题；快速选项也写进起病时间）
-                    val created = handleResponse(
-                        episodesApi.create(
-                            CreateEpisodeRequest(
-                                title = "我的腰痛病程",
-                                onsetDate = onsetDateOf(onset),
-                            ),
-                        ),
-                    )
-                    writeEvents(episodesApi, created.id, change, side, onset, selectedMatchTexts())
-                } else {
-                    // 病程已存在：把第 4 题答案同步为起病时间
-                    val answer = onsetDateOf(onset)
-                    handleResponse(
-                        episodesApi.update(
-                            episodeId,
-                            UpdateEpisodeRequest(
-                                onsetDate = answer,
-                                onsetCertainty = if (answer != null) "尚未确认" else "尚未确认",
-                            ),
-                        ),
-                    )
-                    writeEvents(episodesApi, episodeId, change, side, onset, selectedMatchTexts())
                 }
                 // 提交一页分析（命中红旗走就医提示分支）
                 try {
                     handleResponse(
                         NetworkModule.api<com.yaoyouju.android.core.net.AnalysesApi>().create(
-                            CreateAnalysisRequest(episodeId = episodeId ?: ""),
+                            CreateAnalysisRequest(episodeId = episodeId),
                         ),
                     )
                     toastText = "已记录，正在生成一页分析"
                 } catch (e: Exception) {
                     val error = e as? com.yaoyouju.android.core.net.ApiException
                     if (error != null && (error.code == 40910 || error.code == 40911)) {
-                        navController.navigate(Routes.EMERGENCY + "?stop=1")
+                        navController.navigate(
+                            Routes.EMERGENCY + "?signals=" +
+                                RedFlagOptions.signalsOf(redFlags).joinToString(",") +
+                                "&stop=" + if (error.code == 40911) "1" else "0",
+                        )
                         return@launch
                     }
                     throw e
@@ -262,9 +273,25 @@ fun ChangeScreen(navController: NavHostController) {
                             }
                             redFlags = next
                             // 红旗优先：勾选即跳转
-                            if (option.severity == "high") {
+                            scope.launch {
+                                val episodeId = runCatching { ensureEpisode() }.getOrNull()
+                                if (episodeId != null) {
+                                    runCatching {
+                                        writeEvents(
+                                            episodesApi,
+                                            episodeId,
+                                            change,
+                                            side,
+                                            onset,
+                                            RedFlagOptions.matchTextsOf(redFlags),
+                                            RedFlagOptions.labelsOf(redFlags),
+                                        )
+                                    }
+                                }
                                 navController.navigate(
-                                    Routes.EMERGENCY + "?signals=" + option.signal + "&stop=1",
+                                    Routes.EMERGENCY + "?signals=" +
+                                        RedFlagOptions.signalsOf(redFlags).joinToString(",") +
+                                        "&stop=" + if (option.severity == "high") "1" else "0",
                                 )
                             }
                         },
@@ -448,11 +475,14 @@ private suspend fun writeEvents(
     side: String?,
     onset: String?,
     matchTexts: List<String>,
+    flagLabels: List<String> = emptyList(),
 ) {
     val now = java.time.Instant.now().toString()
     // 紧凑单行记录：不在病程 / 一页分析里堆放问卷原文；未回答的记为「尚未确认」
     val parts = mutableListOf("关键变化确认（自述，尚未确认）：")
     parts.add("与上次相比：${change ?: "尚未确认"}")
+    val flagText = if (flagLabels.isEmpty()) "尚未确认" else flagLabels.joinToString("、")
+    parts.add("需医生及时评估的情况：${flagText}")
     parts.add("侧别：${side ?: "尚未确认"}")
     parts.add("起病：${onset ?: "尚未确认"}")
     if (matchTexts.isNotEmpty()) {

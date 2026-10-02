@@ -159,6 +159,29 @@ fun HomeScreen(navController: NavHostController) {
                 }
             } else {
                 Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+                    // 新用户：还没有病程时先引导「现在确认当前关键变化」（A02 只在时间线为空时有入口）
+                    if (episode == null) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        AppNotice(
+                            type = NoticeType.Info,
+                            text = "先确认当前关键变化（4 个低负担问题），或直接从「记录今天」开始。没有回答的问题会记录为「尚未确认」，不会默认阴性或无。",
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        AppButton(
+                            text = "现在确认当前关键变化",
+                            type = AppButtonType.Primary,
+                            block = true,
+                            onClick = { navController.navigate(Routes.CHANGE) },
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        AppButton(
+                            text = "先记录今天",
+                            type = AppButtonType.Secondary,
+                            block = true,
+                            onClick = { navController.navigate(Routes.TODAY) },
+                        )
+                    }
+
                     // 待确认项卡片（优先）
                     if (pendingEvents.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(16.dp))
@@ -189,7 +212,10 @@ fun HomeScreen(navController: NavHostController) {
                         creating = creatingAnalysis,
                         onGenerate = {
                             val episodeId = episode?.id
-                            if (episodeId != null) {
+                            if (episodeId == null) {
+                                // 新用户：先确认当前关键变化（A02），再生成一页分析
+                                navController.navigate(Routes.CHANGE)
+                            } else {
                                 creatingAnalysis = true
                                 createAnalysisInline(
                                     scope = scope,
@@ -215,9 +241,7 @@ fun HomeScreen(navController: NavHostController) {
                     QuickEntries(
                         onReportInput = { navController.navigate(Routes.REPORT_INPUT) },
                         onTimeline = { navController.navigate(Routes.TIMELINE) },
-                        onToday = {
-                            if (episode != null) navController.navigate(Routes.TODAY)
-                        },
+                        onToday = { navController.navigate(Routes.TODAY) },
                         onFollowup = { navController.navigate(Routes.FOLLOWUP) },
                     )
 

@@ -415,6 +415,14 @@ fun MineScreen(navController: NavHostController) {
                         onClick = { navController.navigate(Routes.EMERGENCY) },
                     )
 
+                    Spacer(modifier = Modifier.height(12.dp))
+                    AppButton(
+                        text = "服务不可用页（断网 / 服务异常时查看）",
+                        type = AppButtonType.Secondary,
+                        block = true,
+                        onClick = { navController.navigate(Routes.FALLBACK) },
+                    )
+
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // 版本信息

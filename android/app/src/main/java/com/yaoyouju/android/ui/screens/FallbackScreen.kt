@@ -76,6 +76,8 @@ import kotlinx.coroutines.launch
 fun FallbackScreen(
     navController: NavHostController,
     taskId: String = "",
+    /** 服务码：由调用方按真实错误带入（网络异常 0 / 服务端业务错误码），不再固定 50300 */
+    errorCode: String = "",
 ) {
     val analysesApi: AnalysesApi = NetworkModule.api()
     val episodesApi: EpisodesApi = NetworkModule.api()
@@ -90,7 +92,7 @@ fun FallbackScreen(
      * 错误码：从服务端 / 任务失败原因派生，不写死 ANL-503。
      * 分析任务失败时服务端返回 50300（SERVICE_UNAVAILABLE），展示为「服务码 50300」。
      */
-    val errorCode = "服务码 50300"
+    val codeText = errorCode.ifBlank { "服务码 50300" }
 
     LaunchedEffect(Unit) {
         loading = true
@@ -147,7 +149,7 @@ fun FallbackScreen(
                 color = Text1,
                 modifier = Modifier.weight(1f),
             )
-            Text(text = errorCode, fontSize = 12.sp, color = Error)
+            Text(text = codeText, fontSize = 12.sp, color = Error)
         }
 
         Column(

@@ -223,8 +223,11 @@ data class ContentVersionView(
 @Serializable
 data class ReviewRecordView(
     val id: String,
-    @SerialName("reviewer_role") val reviewerRole: String,
+    /** 审核人角色（服务端未返回时为空，不因此解析失败） */
+    @SerialName("reviewer_role") val reviewerRole: String = "",
+    @SerialName("reviewer_name") val reviewerName: String? = null,
     val decision: String,
+    @SerialName("review_scope") val reviewScope: String? = null,
     val comment: String? = null,
     @SerialName("reviewed_at") val reviewedAt: String,
 )

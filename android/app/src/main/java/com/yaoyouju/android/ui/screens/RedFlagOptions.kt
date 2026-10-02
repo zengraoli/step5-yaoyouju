@@ -45,6 +45,15 @@ object RedFlagOptions {
     /** 已选选项 → 触发服务端安全规则的文本（写入病程摘要） */
     fun matchTextsOf(keys: Set<String>): List<String> = all.filter { keys.contains(it.key) }.map { it.match }
 
+    /** 已选选项的展示文案（写进病程摘要，含「以上都没有 / 不确定」） */
+    fun labelsOf(keys: Set<String>): List<String> = keys.mapNotNull { key ->
+        when (key) {
+            NONE_KEY -> listOf("以上都没有")
+            UNSURE_KEY -> listOf("不确定 / 记不清")
+            else -> all.filter { it.key == key }.map { it.label }
+        }
+    }.flatten()
+
     /**
      * 第 4 题快速选项 → 起病日期（YYYY-MM-DD）。
      * 「记不清 / 尚未确认」返回 null（缺失不默认阴性）。

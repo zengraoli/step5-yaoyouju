@@ -153,22 +153,22 @@ fun FollowupScreen(navController: NavHostController) {
                 )
                 exportText = result.text
                 tab = tabs[1]
-                if (format == "文本") {
-                    // 文本：直接调起系统分享（可发给医生或存记事本）
-                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(android.content.Intent.EXTRA_TEXT, result.text)
-                    }
-                    context.startActivity(android.content.Intent.createChooser(send, "分享复诊摘要"))
-                    toastText = "已生成摘要文本，请选择分享方式"
-                } else {
-                    // PDF / 图片：Android 用系统打印 / 分享，提示明确路径
-                    toastText = if (format == "PDF") {
-                        "摘要已生成；请用系统分享里的「打印 / 导出 PDF」保存"
-                    } else {
-                        "摘要已生成；请用系统截图保存为图片后分享"
-                    }
+                // 三种格式都真实生成文件（Download/Yaoyouju）并调起系统分享
+                val file = when (format) {
+                    "PDF" -> ExportFiles.exportPdf(context, result.text)
+                    "图片" -> ExportFiles.exportImage(context, result.text)
+                    else -> ExportFiles.exportText(context, result.text)
                 }
+                ExportFiles.share(
+                    context,
+                    file,
+                    when (format) {
+                        "PDF" -> "application/pdf"
+                        "图片" -> "image/png"
+                        else -> "text/plain"
+                    },
+                )
+                toastText = "已生成" + format + "文件：" + file.name + "（Download/Yaoyouju）"
                 load()
             } catch (e: Exception) {
                 toastText = e.userMessage()

@@ -2,7 +2,7 @@ package com.yaoyouju.android.core.net
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
 
 /**
  * 服务端统一响应格式：{"code": 0, "data": ..., "message": "ok"}
@@ -126,14 +126,14 @@ data class SwitchState(
 data class AccountExport(
     @SerialName("exported_at") val exportedAt: String = "",
     val user: ExportUser = ExportUser(),
-    val consents: JsonObject = JsonObject(emptyMap()),
-    val episodes: JsonObject = JsonObject(emptyMap()),
-    val analyses: JsonObject = JsonObject(emptyMap()),
-    @SerialName("followup_summaries") val followupSummaries: JsonObject = JsonObject(emptyMap()),
-    @SerialName("followup_questions") val followupQuestions: JsonObject = JsonObject(emptyMap()),
-    @SerialName("qa_sessions") val qaSessions: JsonObject = JsonObject(emptyMap()),
-    val feedback: JsonObject = JsonObject(emptyMap()),
-    @SerialName("safety_events") val safetyEvents: JsonObject = JsonObject(emptyMap()),
+    val consents: JsonArray = JsonArray(emptyList()),
+    val episodes: JsonArray = JsonArray(emptyList()),
+    val analyses: JsonArray = JsonArray(emptyList()),
+    @SerialName("followup_summaries") val followupSummaries: JsonArray = JsonArray(emptyList()),
+    @SerialName("followup_questions") val followupQuestions: JsonArray = JsonArray(emptyList()),
+    @SerialName("qa_sessions") val qaSessions: JsonArray = JsonArray(emptyList()),
+    val feedback: JsonArray = JsonArray(emptyList()),
+    @SerialName("safety_events") val safetyEvents: JsonArray = JsonArray(emptyList()),
     val note: String = "",
 )
 

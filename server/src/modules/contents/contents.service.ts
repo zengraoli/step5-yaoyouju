@@ -155,6 +155,8 @@ export interface ReviewRecordView {
   comment: string | null;
   reviewer_id: string | null;
   reviewer_name: string | null;
+  /** 审核人角色（各端展示「谁审核的」；账号不存在时为空） */
+  reviewer_role: string | null;
   reviewed_at: string;
 }
 
@@ -1006,12 +1008,13 @@ export class ContentsService {
   private reviewRecordsOf(itemId: string): ReviewRecordView[] {
     const rows = this.db.app
       .prepare(
-        `SELECT r.*, a.name AS reviewer_name FROM review_record r
+        `SELECT r.*, a.name AS reviewer_name, ro.name AS reviewer_role FROM review_record r
          LEFT JOIN admin_user a ON a.id = r.reviewer_id
+         LEFT JOIN role ro ON ro.id = a.role_id
          WHERE r.target_id=? AND r.target_type='content_item'
          ORDER BY r.reviewed_at ASC, r.rowid ASC`,
       )
-      .all(itemId) as (ReviewRecordRow & { reviewer_name: string | null })[];
+      .all(itemId) as (ReviewRecordRow & { reviewer_name: string | null; reviewer_role: string | null })[];
     return rows.map((r) => ({
       id: r.id,
       decision: r.decision,
@@ -1019,6 +1022,7 @@ export class ContentsService {
       comment: r.comment,
       reviewer_id: r.reviewer_id,
       reviewer_name: r.reviewer_name,
+      reviewer_role: r.reviewer_role ?? null,
       reviewed_at: r.reviewed_at,
     }));
   }
