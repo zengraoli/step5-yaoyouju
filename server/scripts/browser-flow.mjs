@@ -13,7 +13,11 @@ import { setTimeout as delay } from 'node:timers/promises'
 const CHROME = process.env.CHROME_PATH ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe'
 const base = process.argv[2]
 const label = process.argv[3]
-const flow = JSON.parse(readFileSync(process.argv[4], 'utf8'))
+const flowRaw = readFileSync(process.argv[4], 'utf8')
+// 支持 ${PHONE} 占位（每次验收用新手机号，避免复用已有数据）
+const phone = process.env.PHONE ?? '137' + String(Date.now()).slice(-8)
+const flow = JSON.parse(flowRaw.replace(/\$\{PHONE\}/g, phone))
+console.log(`[${label}] 使用手机号 ${phone}`)
 const width = Number(process.env.WIDTH ?? 1440)
 const height = Number(process.env.HEIGHT ?? 900)
 const port = 9600 + Math.floor(Math.random() * 300)
@@ -69,6 +73,17 @@ async function runStep(api, step, idx) {
     await api.send('Page.navigate', { url: base.replace(/\/$/, '') + step.path })
   }
   await delay(step.wait ?? 2500)
+  // 等待关键文案出现（SPA 数据加载完成后再断言，避免误报）
+  if (step.waitForText) {
+    for (let i = 0; i < 40; i += 1) {
+      const r = await api.send('Runtime.evaluate', {
+        expression: `document.body.textContent.includes(${JSON.stringify(step.waitForText)})`,
+        returnByValue: true,
+      })
+      if (r?.result?.result?.value === true || r?.result?.value === true) break
+      await delay(300)
+    }
+  }
   // 等待关键元素出现（SPA 需要时间挂载）
   if (step.waitFor) {
     const want = step.waitFor
@@ -124,17 +139,47 @@ async function runStep(api, step, idx) {
     })
     await delay(150)
   }
+  // 截图（SHOTS=1 时逐步保存，便于人工核对页面）
+  if (process.env.SHOTS) {
+    try {
+      const shot = await api.send('Page.captureScreenshot', { format: 'png' })
+      const fs = await import('node:fs')
+      fs.mkdirSync('scripts/.shots', { recursive: true })
+      fs.writeFileSync(`scripts/.shots/${String(idx + 1).padStart(2, '0')}-${(step.name ?? 'step').replace(/[^\w\u4e00-\u9fa5]+/g, '_')}.png`, Buffer.from(shot.data, 'base64'))
+    } catch { /* 忽略截图失败 */ }
+  }
+  // 调试：直接执行一段 JS 并打印结果
+  if (step.probe) {
+    await api.send('Runtime.enable')
+    const r = await api.send('Runtime.evaluate', { expression: step.probe, returnByValue: true })
+    console.log('   [probe]', String(r?.result?.result?.value ?? r?.result?.value ?? '').slice(0, 600))
+  }
+  // 点击（图标按钮用 clickSelector 指定 CSS 选择器）
+  if (step.clickSelector) {
+    await api.send('Runtime.evaluate', {
+      expression: `(() => { const el = document.querySelector(${JSON.stringify(step.clickSelector)}); if (!el) return 'no-element'; el.click(); return 'ok' })()`,
+      returnByValue: true,
+    })
+    await delay(step.afterClick ?? 3000)
+  }
   // 点击
   if (step.click) {
     await api.send('Runtime.evaluate', {
       expression: `(() => {
         const want = ${JSON.stringify(step.click)};
         const exact = ${step.clickExact ? 'true' : 'false'};
-        const els = [...document.querySelectorAll('button,a,.chip')];
-        const el = els.find((e) => (exact ? (e.innerText || '').trim() === want : (e.innerText || '').trim().includes(want)));
-        if (!el) return 'no-button';
-        el.click();
-        return 'ok';
+        // uni-app H5 把按钮渲染成 uni-button / uni-view 自定义元素，必须一起找
+        const els = [...document.querySelectorAll('button,a,.chip,uni-button,uni-view,uni-text')];
+        const match = (e) => (exact ? (e.innerText || '').trim() === want : (e.innerText || '').trim().includes(want));
+        // 点「最深」的匹配元素：外层容器也包含同样的文字，点它不会触发业务点击
+        const depth = (e) => { let d = 0; let n = e; while ((n = n.parentElement)) d += 1; return d }
+        const sorted = els.filter(match).sort((a, b) => depth(b) - depth(a))
+        // 优先点真正的可交互元素（button / uni-button / a）：uni-app 的点击监听挂在组件根元素上
+        const interactive = sorted.filter((e) => /^(BUTTON|UNI-BUTTON|A)$/.test(e.tagName))
+        const el = interactive[0] ?? sorted[0]
+        if (!el) return 'no-button'
+        el.click()
+        return 'ok'
       })()`,
       returnByValue: true,
     })
@@ -142,7 +187,8 @@ async function runStep(api, step, idx) {
   }
   // 每次取值前重新启用 Runtime，避免导航后上下文被清空导致取到空
   await api.send('Runtime.enable')
-  const doc = await api.send('Runtime.evaluate', { expression: 'document.body.innerText', returnByValue: true })
+  // 用 textContent 取全文：uni-app H5 的 innerText 在部分容器上会漏掉子元素文字
+  const doc = await api.send('Runtime.evaluate', { expression: 'document.body.textContent', returnByValue: true })
   const text = String(doc?.result?.result?.value ?? doc?.result?.value ?? '')
   const errors = []
   const netErrors = []

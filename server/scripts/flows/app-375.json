@@ -1,0 +1,256 @@
+{
+  "steps": [
+    {
+      "name": "登录（新手机号，375 宽）",
+      "path": "/pages/login/login",
+      "waitFor": "input.uni-input-input",
+      "fill": [["input.uni-input-input", "${PHONE}", 0], ["input.uni-input-input", "123456", 1]],
+      "wait": 1500
+    },
+    {
+      "name": "勾选健康信息处理同意",
+      "click": "单独同意：处理我的健康信息",
+      "wait": 1500
+    },
+    {
+      "name": "登录并进入首页",
+      "click": "登录 / 注册",
+      "waitForText": "创建病程",
+      "expect": ["当前情况", "创建病程"],
+      "wait": 6000
+    },
+    {
+      "name": "先打开问与解释（建立病程之前）",
+      "click": "问与解释",
+      "clickExact": true,
+      "waitForText": "问与解释",
+      "expect": ["问与解释"],
+      "wait": 6000
+    },
+    {
+      "name": "回首页（创建病程之前）",
+      "click": "当前情况",
+      "clickExact": true,
+      "waitForText": "创建病程",
+      "expect": ["创建病程"],
+      "wait": 6000
+    },
+    {
+      "name": "创建病程",
+      "click": "创建病程",
+      "waitForText": "最新一页分析",
+      "expect": ["最新一页分析"],
+      "wait": 6000
+    },
+    {
+      "name": "进入病程时间线",
+      "click": "病程",
+      "clickExact": true,
+      "waitForText": "病程",
+      "expect": ["病程"],
+      "wait": 6000
+    },
+    {
+      "name": "时间线点＋：当前关键变化（A02）",
+      "clickSelector": ".nav__actions .nav__action:nth-child(2)",
+      "waitForText": "当前关键变化",
+      "expect": ["当前关键变化"],
+      "wait": 6000
+    },
+    {
+      "name": "A02：选变化加重",
+      "click": "加重",
+      "wait": 1200
+    },
+    {
+      "name": "A02：红旗项选「以上都没有」",
+      "click": "以上都没有",
+      "wait": 1200
+    },
+    {
+      "name": "A02：选侧别左侧",
+      "click": "左侧",
+      "wait": 1200
+    },
+    {
+      "name": "A02：选起病约1周内",
+      "click": "约1周内",
+      "wait": 1200
+    },
+    {
+      "name": "A02：下一步（写入病程）",
+      "click": "下一步",
+      "waitForText": "报告术语",
+      "expect": ["报告术语"],
+      "wait": 6000
+    },
+    {
+      "name": "选择主要困惑：报告术语",
+      "click": "报告术语",
+      "wait": 1500
+    },
+    {
+      "name": "困惑页下一步：进入录入报告",
+      "click": "下一步",
+      "waitForText": "录入报告",
+      "expect": ["录入报告与医嘱"],
+      "wait": 6000
+    },
+    {
+      "name": "填病历写法的红旗原文",
+      "fill": [["textarea.uni-textarea-textarea", "门诊病历：患者诉近三天小便失禁，会阴部麻木。"]],
+      "wait": 1500
+    },
+    {
+      "name": "点下一步：命中红旗立即进就医提示",
+      "click": "下一步：核对信息",
+      "waitForText": "需要及时寻求专业帮助",
+      "expect": ["需要及时寻求专业帮助", "会阴部麻木"],
+      "wait": 6000
+    },
+    {
+      "name": "就医提示页：停止个性化分析 + 点返回",
+      "clickSelector": ".nav__back",
+      "waitForText": "报告术语",
+      "expect": ["本轮不会生成个性化分析"],
+      "wait": 6000
+    },
+    {
+      "name": "从困惑页返回 A02",
+      "clickSelector": ".nav__back",
+      "waitForText": "当前关键变化",
+      "expect": ["当前关键变化"],
+      "wait": 6000
+    },
+    {
+      "name": "从 A02 返回病程页",
+      "clickSelector": ".nav__back",
+      "waitForText": "病程",
+      "expect": ["病程"],
+      "wait": 6000
+    },
+    {
+      "name": "回首页，准备生成一页分析",
+      "click": "当前情况",
+      "clickExact": true,
+      "waitForText": "生成一页分析",
+      "expect": ["生成一页分析"],
+      "wait": 6000
+    },
+    {
+      "name": "生成一页分析被红旗拦下",
+      "click": "生成一页分析",
+      "waitForText": "需要及时寻求专业帮助",
+      "expect": ["需要及时寻求专业帮助"],
+      "wait": 6000
+    },
+    {
+      "name": "从就医提示返回首页",
+      "clickSelector": ".nav__back",
+      "waitForText": "生成一页分析",
+      "expect": ["生成一页分析"],
+      "wait": 6000
+    },
+    {
+      "name": "问与解释：快速输入越界提问",
+      "click": "问与解释",
+      "clickExact": true,
+      "waitForText": "问与解释",
+      "fill": [["input.uni-input-input", "我这个程度够不够得上做手术", 0]],
+      "wait": 1200
+    },
+    {
+      "name": "点发送：越界拒答并转复诊问题",
+      "click": "发 送",
+      "waitForText": "手术",
+      "expect": ["我不能给出手术建议", "加入复诊问题"],
+      "wait": 6000
+    },
+    {
+      "name": "问与解释：红旗提问被拦下并跳就医提示",
+      "click": "问与解释",
+      "clickExact": true,
+      "waitForText": "问与解释",
+      "fill": [["input.uni-input-input", "这两天会阴部麻木，伴大小便控制变化", 0]],
+      "wait": 1200
+    },
+    {
+      "name": "点发送：命中红旗",
+      "click": "发 送",
+      "waitForText": "需要及时寻求专业帮助",
+      "expect": ["需要及时寻求专业帮助"],
+      "wait": 6000
+    },
+    {
+      "name": "从就医提示返回问与解释",
+      "clickSelector": ".nav__back",
+      "waitForText": "问与解释",
+      "expect": ["问与解释"],
+      "wait": 6000
+    },
+    {
+      "name": "回首页，进入记录今天",
+      "click": "当前情况",
+      "clickExact": true,
+      "waitForText": "记录今天",
+      "expect": ["记录今天"],
+      "wait": 6000
+    },
+    {
+      "name": "快捷入口：记录今天",
+      "click": "记录今天",
+      "waitForText": "记录今天",
+      "expect": ["能坐", "与昨天相比"],
+      "wait": 6000
+    },
+    {
+      "name": "填能坐时长",
+      "fill": [["input.uni-input-input", "60", 0]],
+      "wait": 1200
+    },
+    {
+      "name": "保存今天的记录",
+      "click": "保存今天的记录",
+      "waitForText": "已保存",
+      "expect": ["已保存今天的记录"],
+      "wait": 6000
+    },
+    {
+      "name": "复诊摘要",
+      "click": "复诊准备",
+      "clickExact": true,
+      "waitForText": "复诊",
+      "expect": ["复诊摘要"],
+      "wait": 6000
+    },
+    {
+      "name": "我的：进入数据与授权",
+      "click": "我的",
+      "clickExact": true,
+      "waitForText": "撤回同意",
+      "expect": ["撤回同意"],
+      "wait": 6000
+    },
+    {
+      "name": "撤回同意",
+      "click": "撤回同意",
+      "waitForText": "已撤回",
+      "expect": ["已撤回"],
+      "wait": 6000
+    },
+    {
+      "name": "重新同意",
+      "click": "重新同意",
+      "waitForText": "已重新同意",
+      "expect": ["已重新同意"],
+      "wait": 6000
+    },
+    {
+      "name": "退出登录",
+      "click": "退出登录",
+      "waitForText": "请输入手机号",
+      "expect": ["请输入手机号"],
+      "wait": 6000
+    }
+  ]
+}

@@ -125,15 +125,22 @@ async function req(url, method = 'GET', data, token) {
 const missed = []
 const falsePositives = []
 
-async function main() {
-  const phone = '139' + String(Math.floor(Math.random() * 1e8)).padStart(8, '0')
+let seq = Math.floor(Math.random() * 1e8)
+
+/** 每条说法都用「新用户 + 新病程」：高危红旗会停止该账号的个性化分析（第七轮第 4 条） */
+async function newUser() {
+  const phone = '139' + String(seq += 1).padStart(8, '0')
   const login = await req('/auth/login', 'POST', { phone, code: '123456' })
   const token = login.body?.data?.token
   if (!token) throw new Error(`登录失败：${login.body?.message ?? '未知原因'}`)
   await req('/auth/consents', 'POST', { scope: '健康信息处理' }, token)
+  return token
+}
 
+async function main() {
   /** 每条说法都用新病程；命中 = 40910 / 40911（high）或带 safety_notice（medium） */
   async function triggered(text) {
+    const token = await newUser()
     const ep = await req('/episodes', 'POST', { title: '新增用例' }, token)
     const r = await req('/analyses', 'POST', { episode_id: ep.body.data.id, symptom_change: text }, token)
     return (

@@ -165,13 +165,23 @@ let fail = 0
 const missed = []
 const falsePositives = []
 
-async function main() {
-  const phone = '139' + String(Math.floor(Math.random() * 1e8)).padStart(8, '0')
+/**
+ * 每条说法都用「新用户 + 新病程」：
+ * 命中高危红旗后该账号会停止个性化分析（产品红线第 3 条，第七轮第 4 条），
+ * 因此复用一个用户会让后面的用例全部被拦住，统计失真。
+ */
+async function newUser() {
+  const phone = '139' + String(seq += 1).padStart(8, '0')
   const login = await req('/auth/login', 'POST', { phone, code: '123456' })
   const token = login.body?.data?.token
   if (!token) throw new Error(`登录失败：${login.body?.message ?? '未知原因'}`)
   await req('/auth/consents', 'POST', { scope: '健康信息处理' }, token)
+  return token
+}
 
+let seq = Math.floor(Math.random() * 1e8)
+
+async function main() {
   /**
    * 每条说法都用新病程。命中即算触发：
    * - high 级（会阴麻木 / 下肢无力 / 大小便控制）→ 40911 或 40910，不建任务；
@@ -179,6 +189,7 @@ async function main() {
    *   客户端据此展示就医提示（个性化分析仍生成）。
    */
   async function blocked(text) {
+    const token = await newUser()
     const ep = await req('/episodes', 'POST', { title: '安全规则用例' }, token)
     const r = await req('/analyses', 'POST', { episode_id: ep.body.data.id, symptom_change: text }, token)
     const notice = r.body.data?.safety_notice

@@ -119,6 +119,13 @@ async function checkPage(api, page) {
   const missing = (page.expect ?? []).filter((e) => !text.includes(e))
   const absent = (page.expectAbsent ?? []).filter((e) => text.includes(e))
   if (process.env.DEBUG) console.log('   [text]', text.slice(0, 160))
+  if (process.env.DUMP_HTML) {
+    const html = await api.send('Runtime.evaluate', {
+      expression: 'document.body.outerHTML.slice(0, 6000)',
+      returnByValue: true,
+    })
+    console.log('   [html]', String(html?.result?.result?.value ?? html?.result?.value ?? '').replace(/\s+/g, ' ').slice(0, 4000))
+  }
   const ok = errors.length === 0 && bad.length === 0 && missing.length === 0 && absent.length === 0 && overflowPx <= 1
   if (!ok) totalFail += 1
   console.log(`${ok ? '✓' : '✗'} [${label}] ${page.path}`)

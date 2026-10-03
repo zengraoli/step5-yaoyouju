@@ -375,8 +375,14 @@ async function main() {
   }
 
   // ---------- 33：运营编辑权限 ----------
+  // 运营编辑没有 content.publish：点「发起发布」生成双人确认单（40900 + confirmation_id），
+  // 由另一名临床审核 / 超级管理员确认后才真正发布（第七轮验收反馈第 7 条）
   const publishTry = await req(`/admin/contents/${target.id}/publish`, 'POST', {}, editor)
-  check('运营编辑不能发布内容（40300）', publishTry.body.code === 40300, publishTry.body.message)
+  check('运营编辑不能直接发布（只能发起双人确认单）',
+    publishTry.body.code === 40900 && Boolean(publishTry.body.data?.confirmation_id),
+    publishTry.body.message)
+  check('运营编辑不能确认自己发起的发布单',
+    (await req(`/admin/confirmations/${publishTry.body.data.confirmation_id}/approve`, 'POST', {}, editor)).body.code !== 0)
   const rawEdit = await req(`/admin/evidence/${doc.id}`, 'PATCH', {
     title: doc.title,
     source_type: doc.source_type,
