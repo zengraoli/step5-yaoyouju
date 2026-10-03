@@ -317,7 +317,9 @@ function buildKnown(db: DatabaseSync, episodeId: string): KnownItem[] {
     verify_status: string;
   }[];
   return events.map((e) => ({
-    text: `${beijingDate(e.occurred_at)} ${compactKnownText(e.raw_text, e.event_type)}（${e.source_type}，${e.verify_status}）`,
+    // 来源与核实状态由字段下发（source / verify_status），各端自行渲染状态标签，
+    // 不再拼进正文，避免「（自述，尚未确认）」「（自述，已确认）」与状态标签重复出现（第七轮第 30 条）
+    text: `${beijingDate(e.occurred_at)} ${compactKnownText(e.raw_text, e.event_type)}`,
     source: e.source_type,
     occurred_at: e.occurred_at,
     verify_status: e.verify_status,

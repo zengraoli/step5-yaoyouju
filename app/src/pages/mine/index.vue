@@ -11,6 +11,7 @@
  * - GET  /safety/emergency-notice      紧急就医提示（公开）
  */
 import { computed, onMounted, ref } from 'vue';
+import AppButton from '../../components/AppButton.vue'
 import AppCard from '../../components/AppCard.vue'
 import AppIcon from '../../components/AppIcon.vue'
 import AppNotice from '../../components/AppNotice.vue'
@@ -216,11 +217,11 @@ function onDeleteAccount() {
 async function submitDeleteRequest() {
   const phone = deletePhoneInput.value.trim()
   const code = deleteCodeInput.value.trim()
-  if (!/^1d{10}$/.test(phone)) {
+  if (!/^1\d{10}$/.test(phone)) {
     toast('请输入正确的 11 位手机号')
     return
   }
-  if (!/^d{6}$/.test(code)) {
+  if (!/^\d{6}$/.test(code)) {
     toast('请输入 6 位验证码')
     return
   }
@@ -244,11 +245,11 @@ async function submitDeleteRequest() {
 async function submitDeleteConfirm() {
   const phone = deletePhoneInput.value.trim() || deletePhone.value
   const code = deleteCodeInput.value.trim()
-  if (!/^1d{10}$/.test(phone)) {
+  if (!/^1\d{10}$/.test(phone)) {
     toast('请输入正确的 11 位手机号')
     return
   }
-  if (!/^d{6}$/.test(code)) {
+  if (!/^\d{6}$/.test(code)) {
     toast('请输入 6 位验证码')
     return
   }
@@ -738,7 +739,7 @@ function onSettings() {
   align-items: center;
   justify-content: center;
   padding: $spacing-page;
-  z-index: 100;
+  z-index: 1000;
 }
 
 .dialog {

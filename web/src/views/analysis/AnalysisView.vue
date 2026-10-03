@@ -173,6 +173,15 @@ const toast = useToast()
 
 const meta = computed(() => analysis.value?.sections.meta ?? null)
 const known = computed(() => analysis.value?.sections.known ?? [])
+
+/** 已知条目的来源 / 核实状态标签（状态取自字段，不再从正文正则猜，第七轮第 30 条） */
+function knownTag(item: { source: string; verify_status?: string }): { key: 'quote' | 'self' | 'unconfirmed' | 'conflict'; text: string } {
+  if (item.source === '报告原文') return { key: 'quote', text: '报告原文' }
+  if (item.verify_status === '有冲突') return { key: 'conflict', text: '自述 · 有冲突' }
+  if (item.verify_status === '尚未确认') return { key: 'unconfirmed', text: '自述 · 尚未确认' }
+  if (item.source === '医生记录') return { key: 'self', text: '医生记录' }
+  return { key: 'self', text: '自述' }
+}
 const explains = computed(() => analysis.value?.sections.explain ?? [])
 const unknowns = computed(() => analysis.value?.sections.unknown ?? [])
 const nextItems = computed(() => analysis.value?.sections.next ?? [])
@@ -507,9 +516,8 @@ async function onSaveReport() {
               <li v-for="(item, i) in known" :key="i" class="known-item">
                 <span class="known-item__text">{{ item.text }}</span>
                 <span class="known-item__tags">
-                  <StatusTag :status="item.source === '报告原文' ? 'quote' : item.source === '医生记录' ? 'self' : 'self'" :text="item.source" />
+                  <StatusTag :status="knownTag(item).key" :text="knownTag(item).text" />
                   <span v-if="item.source === '报告原文'" class="known-item__aux">可回看原文</span>
-                  <span v-else-if="/尚未确认/.test(item.text)" class="known-item__aux known-item__aux--warn">未经核实</span>
                 </span>
               </li>
             </ul>

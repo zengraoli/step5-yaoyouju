@@ -187,11 +187,15 @@ const intro = computed<string>(() => {
   return parts.join('；')
 })
 
-/** 已知条目的来源标签：报告原文可回看；自述按核实状态显示 */
-function knownTag(item: { source: string; text: string }): { key: 'quote' | 'self' | 'unverified'; text: string } {
+/** 已知条目的来源标签：报告原文可回看；自述按核实状态显示（状态取自字段，不再从正文猜） */
+function knownTag(item: { source: string; text: string; verify_status?: string }): {
+  key: 'quote' | 'self' | 'unconfirmed' | 'conflict'
+  text: string
+} {
   if (item.source === '报告原文') return { key: 'quote', text: '报告原文 · 可回看' }
+  if (item.verify_status === '有冲突') return { key: 'conflict', text: '自述 · 有冲突' }
+  if (item.verify_status === '尚未确认') return { key: 'unconfirmed', text: '自述 · 尚未确认' }
   if (item.source === '医生记录') return { key: 'self', text: '医生记录' }
-  if (/尚未确认/.test(item.text)) return { key: 'unverified', text: '自述 · 未经核实' }
   return { key: 'self', text: '自述' }
 }
 

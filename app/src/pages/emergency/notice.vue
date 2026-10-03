@@ -27,11 +27,12 @@ import { getEmergencyNotice, type EmergencyNotice } from '../../api/safety'
 import { getEpisode, listEpisodes, type CareEventView, type EpisodeDetail } from '../../api/episodes'
 import { beijingDate, getStatusBarHeight } from '../../utils/system'
 
-/** 网络异常时的静态兜底内容（与接口返回一致的演示文案；本页不被网络阻断） */
+/** 网络异常时的静态兜底内容（与接口返回一致的演示文案；本页不被网络阻断）。
+ *  注意：不能写「你描述的内容包含…」——用户可能只是直接打开本页（验收反馈第 31 条）。 */
 const FALLBACK: EmergencyNotice = {
   title: '需要及时寻求专业帮助',
   headline: '建议尽快就医',
-  body: '你描述的内容包含需要医生及时评估的信号。这类变化需要医生及时评估，本产品无法替你判断严重程度，请尽快就医。',
+  body: '如果你出现了需要医生及时评估的变化，请尽快就医。这类提示不会被登录、付费或上传阻断；本产品无法替你判断严重程度，不作诊断。',
   offline_note: '本页在网络异常时也可查看。',
   actions: [
     { type: 'call', label: '拨打 120 / 前往急诊' },

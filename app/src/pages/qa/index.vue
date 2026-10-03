@@ -47,6 +47,8 @@ const statusBarHeight = ref(0)
 const sessionId = ref('')
 const messages = ref<QaMessageView[]>([])
 const inputText = ref('')
+/** 输入框引用（H5 上回车发送时直接读 DOM 值，避免丢最后一个字） */
+const inputRef = ref<unknown>(null)
 const sending = ref(false)
 const errorText = ref('')
 /** 本轮上下文说明（基于：当前情况日期 + 报告日期） */
@@ -126,9 +128,29 @@ async function loadContext(): Promise<void> {
   }
 }
 
+/** 读取输入框当前真实内容：
+ *  H5 上「回车发送」时 confirm 事件可能早于最后一次 input（输入法整段上屏 / 快速输入），
+ *  直接读原生输入框的值，避免丢掉最后一个字（验收反馈第 8 条）。 */
+function readInputText(): string {
+  // #ifdef H5
+  try {
+    const el = inputRef.value as { value?: string; $el?: { value?: string } } | null
+    const dom = (el?.$el ?? el) as { value?: string } | null
+    if (dom && typeof dom.value === 'string' && dom.value.length > 0) return dom.value
+    const active = document.activeElement as { value?: string; tagName?: string } | null
+    if (active && active.tagName === 'INPUT' && typeof active.value === 'string' && active.value.length > 0) {
+      return active.value
+    }
+  } catch {
+    // 读不到 DOM 时退回模型值
+  }
+  // #endif
+  return inputText.value
+}
+
 /** 提问 */
 async function onSend(text?: string) {
-  const content = (text ?? inputText.value).trim()
+  const content = (text ?? readInputText()).trim()
   if (!content || sending.value) return
   if (!auth.isLoggedIn) {
     uni.navigateTo({ url: '/pages/login/login' })
@@ -332,6 +354,7 @@ function onOpenHistory() {
     <view class="qa-input">
       <view class="qa-input__box">
         <input
+          ref="inputRef"
           v-model="inputText"
           class="qa-input__control"
           placeholder="输入你的问题…"

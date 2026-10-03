@@ -47,6 +47,8 @@ const episodeId = ref('')
 const messages = ref<QaMessageView[]>([])
 const history = ref<QaSessionListItem[]>([])
 const inputText = ref('')
+/** 输入框引用（回车发送时直接读 DOM 值，避免输入法整段上屏丢字） */
+const composerInput = ref<HTMLInputElement | null>(null)
 const sending = ref(false)
 
 /** 本轮上下文（右侧栏） */
@@ -161,7 +163,13 @@ async function loadContext() {
 
 /** 提问 */
 async function onSend(text?: string) {
-  const content = (text ?? inputText.value).trim()
+  // 直接读 DOM 值兜底：输入法整段上屏时 v-model 可能还没跟上（第七轮第 8 条）
+  const fromDom = (): string => {
+    const el = composerInput.value as HTMLInputElement | null
+    if (el && typeof el.value === 'string' && el.value.length > 0) return el.value
+    return inputText.value
+  }
+  const content = (text ?? fromDom()).trim()
   if (!content || sending.value) return
   sending.value = true
   try {
@@ -300,12 +308,14 @@ function citeTag(c: QaCitation): { key: 'quote' | 'self' | 'generated' | 'review
 
         <!-- 输入区 -->
         <div class="composer">
+          <!-- keydown 而不是 keyup：输入法整段上屏时 keyup 会丢掉最后一个字（第七轮第 8 条） -->
           <input
+            ref="composerInput"
             v-model="inputText"
             class="composer__input"
             type="text"
             placeholder="输入你的问题…（回车发送）"
-            @keyup.enter="onSend()"
+            @keydown.enter.prevent="onSend()"
           />
           <AppButton type="primary" :disabled="!inputText.trim() || sending" @click="onSend()">发送</AppButton>
         </div>
