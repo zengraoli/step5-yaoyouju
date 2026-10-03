@@ -62,6 +62,15 @@ function anchorJournalPath(): string {
   return path.join(dir, 'audit-anchor.journal');
 }
 
+/** 流水账文件是否存在（被删掉本身就是删改证据，第七轮验收反馈第 12 条） */
+function journalExists(): boolean {
+  try {
+    return fs.existsSync(anchorJournalPath());
+  } catch {
+    return false;
+  }
+}
+
 function journalAppend(total: number, headHash: string, hmac: string): void {
   try {
     fs.mkdirSync(path.dirname(anchorJournalPath()), { recursive: true });
@@ -99,7 +108,18 @@ export class AuditService {
   /** 事务嵌套深度：业务方法自身可能已开事务，这里只在最外层开 */
   private sp = 0;
 
-  constructor(private readonly db: DbService) {}
+  constructor(private readonly db: DbService) {
+    // 追加流水表（自增 rowid 永不重用）：即使有人从 audit_log 删掉尾部记录，
+    // 这张表的行数与 sqlite_sequence 仍然留着痕迹，从而发现「删尾 + 回滚锚点」（第七轮第 12 条）
+    this.db.app.exec(`
+      CREATE TABLE IF NOT EXISTS audit_append_log (
+        seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+        head_hash  TEXT NOT NULL,
+        total      INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `);
+  }
 
   private lastHash(): string {
     const row = this.db.app
@@ -135,6 +155,10 @@ export class AuditService {
            ON CONFLICT(id) DO UPDATE SET head_hash = excluded.head_hash, head_hmac = excluded.head_hmac, total = excluded.total`,
         )
         .run(hash, anchorHmac(hash, total), total);
+      // 追加流水表与流水账文件同步留痕（两者互相独立，删一个还能从另一个发现）
+      this.db.app
+        .prepare(`INSERT INTO audit_append_log (head_hash, total, created_at) VALUES (?, ?, ?)`)
+        .run(hash, total, createdAt);
       journalAppend(total, hash, anchorHmac(hash, total));
       this.commit(sp);
     } catch (err) {
@@ -203,7 +227,33 @@ export class AuditService {
     if (!anchor.head_hmac || anchor.head_hmac !== anchorHmac(anchor.head_hash, anchor.total)) {
       return { ok: false, broken_at: null, reason: '链头校验和不匹配，审计记录可能被删改' };
     }
-    // 锚点流水账：库里的锚点不能早于账本最后一行（否则说明删了尾记录又把锚点换回旧值）
+    // 追加流水表：自增 rowid 永不重用，删行会留下断口（第七轮第 12 条）
+    const appendRows = (this.db.app.prepare('SELECT COUNT(*) AS n FROM audit_append_log').get() as { n: number }).n;
+    const appendMax = (
+      this.db.app.prepare('SELECT COALESCE(MAX(seq), 0) AS m FROM audit_append_log').get() as { m: number }
+    ).m;
+    if (appendRows !== appendMax) {
+      return {
+        ok: false,
+        broken_at: null,
+        reason: '审计追加流水表不连续（第 ' + (appendRows + 1) + ' 条缺失或被删除），可能存在被删除的审计记录',
+      };
+    }
+    if (appendRows !== anchor.total) {
+      return {
+        ok: false,
+        broken_at: null,
+        reason: '审计追加流水表与锚点记录数不一致，可能存在被删除的审计记录',
+      };
+    }
+    // 锚点流水账：文件被删 / 被截回旧行都说明有人动过数据目录（第七轮第 12 条）
+    if (rows.length > 0 && !journalExists()) {
+      return {
+        ok: false,
+        broken_at: null,
+        reason: '锚点流水账缺失（数据目录里的 audit-anchor.journal 被删除），无法证明审计未被删减',
+      };
+    }
     const tail = journalTail();
     if (tail && (anchor.total < tail.total || anchor.head_hash !== tail.head_hash)) {
       return {

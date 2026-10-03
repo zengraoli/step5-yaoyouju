@@ -188,13 +188,26 @@ export class AdminAuthService {
    * 绑定动态验证码（MFA）：邀请成员 / 重置 MFA 后首次登录必须绑定才能操作。
    * 演示实现：任意 6 位演示码即可完成绑定（真实实现需校验 TOTP 种子）。
    */
-  bindMfa(adminId: string, code: string): { id: string; mfa_enabled: boolean } {
+  bindMfa(adminId: string, password: string, code: string): { id: string; mfa_enabled: boolean } {
+    const row = this.app
+      .prepare('SELECT password_hash, mfa_enabled FROM admin_user WHERE id = ?')
+      .get(adminId) as { password_hash: string; mfa_enabled: number } | undefined;
+    if (!row) {
+      throw new ApiException(ErrorCode.UNAUTHORIZED, '请先登录');
+    }
+    // 绑定 MFA 必须再次输入账号口令：只拿到登录态也不能静默绑定（第七轮验收反馈第 11 条）
+    if (!password || !safeEqual(this.hashPassword(password), row.password_hash)) {
+      throw new ApiException(ErrorCode.FORBIDDEN, '账号口令不正确，绑定动态验证码需要再次输入口令');
+    }
     const totp = (code ?? '').trim();
     if (!/^\d{6}$/.test(totp)) {
       throw new ApiException(ErrorCode.BAD_REQUEST, '请输入 6 位动态验证码');
     }
     if (!safeEqual(totp, this.demoTotp())) {
       throw new ApiException(ErrorCode.BAD_REQUEST, '动态验证码不正确，请重新输入');
+    }
+    if (row.mfa_enabled === 1) {
+      throw new ApiException(ErrorCode.CONFLICT, '该账号已绑定动态验证码，无需重复绑定');
     }
     this.app
       .prepare('UPDATE admin_user SET mfa_enabled = 1, mfa_bonded_at = ? WHERE id = ?')

@@ -30,9 +30,9 @@ export const useAuthStore = defineStore('auth', () => {
     return permissions.value.includes('*') || permissions.value.includes(permission)
   }
 
-  /** 绑定动态验证码（首次登录必做） */
-  async function bindMfa(totp: string) {
-    const res = await authApi.bindMfa(totp)
+  /** 绑定动态验证码（首次登录必做；需同时输入账号口令，第七轮第 11 条） */
+  async function bindMfa(password: string, totp: string) {
+    const res = await authApi.bindMfa(password, totp)
     if (admin.value) admin.value = { ...admin.value, mfa_enabled: true }
     return res
   }

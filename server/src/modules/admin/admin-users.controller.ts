@@ -54,6 +54,18 @@ class ResetMfaDto {
   confirmation_id?: string;
 }
 
+class ChangeRoleDto {
+  @ApiProperty({ description: '新角色', enum: [...ADMIN_ROLES] })
+  @IsIn([...ADMIN_ROLES], { message: `角色必须是：${ADMIN_ROLES.join(' / ')}` })
+  role!: string;
+
+  @ApiProperty({ description: '双人确认单 ID（另一名超级管理员确认后带上即可生效）', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  confirmation_id?: string;
+}
+
 /**
  * 后台成员与权限（B10）：成员表、权限矩阵来源、邀请 / 停用 / 重置 MFA。
  * 业务逻辑见 AdminUsersService（供双人确认执行器复用）。
@@ -93,5 +105,12 @@ export class AdminUsersController {
   @Post(':id/reset-mfa')
   resetMfa(@CurrentAdmin() admin: AdminContext, @Param('id') id: string, @Body() dto?: ResetMfaDto) {
     return this.users.resetMfa(admin, id, dto?.confirmation_id);
+  }
+
+  @ApiOperation({ summary: '变更成员角色（仅超级管理员；需另一名超级管理员双人确认；写审计）' })
+  @RequirePermission('user.manage')
+  @Post(':id/role')
+  changeRole(@CurrentAdmin() admin: AdminContext, @Param('id') id: string, @Body() dto: ChangeRoleDto) {
+    return this.users.changeRole(admin, id, dto.role, dto.confirmation_id);
   }
 }

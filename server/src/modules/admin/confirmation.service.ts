@@ -85,23 +85,31 @@ export const CONFIRMATION_RULES: Record<string, ConfirmationRule> = {
   'user.status': {
     label: '后台成员停用 / 启用',
     requester_roles: ['超级管理员'],
-    confirmer_roles: ['超级管理员', '合规支持'],
+    confirmer_roles: ['超级管理员'],
     same_role_ok: ['超级管理员'],
-    requirement: '超级管理员发起 + 另一名超级管理员确认（只有一名超管时可由合规支持确认）',
+    requirement: '超级管理员发起 + 另一名超级管理员确认（合规支持对成员与角色只读，不能确认）',
   },
   'user.invite_super': {
     label: '邀请超级管理员',
     requester_roles: ['超级管理员'],
-    confirmer_roles: ['超级管理员', '合规支持'],
+    confirmer_roles: ['超级管理员'],
     same_role_ok: ['超级管理员'],
-    requirement: '超级管理员发起 + 另一名超级管理员确认（全新部署只有一名超管时可由合规支持确认）',
+    requirement:
+      '超级管理员发起 + 另一名超级管理员确认（全新部署只有一名超级管理员时，可在界面上直接完成引导式新增）',
+  },
+  'user.role': {
+    label: '变更成员角色',
+    requester_roles: ['超级管理员'],
+    confirmer_roles: ['超级管理员'],
+    same_role_ok: ['超级管理员'],
+    requirement: '超级管理员发起 + 另一名超级管理员确认',
   },
   'user.mfa_reset_super': {
     label: '重置超级管理员动态验证码',
     requester_roles: ['超级管理员'],
-    confirmer_roles: ['超级管理员', '合规支持'],
+    confirmer_roles: ['超级管理员'],
     same_role_ok: ['超级管理员'],
-    requirement: '超级管理员发起 + 另一名超级管理员确认（只有一名超管时可由合规支持确认）',
+    requirement: '超级管理员发起 + 另一名超级管理员确认',
   },
   'feedback.report_handling': {
     label: '举报临床复核处置',
@@ -411,14 +419,10 @@ export class ConfirmationService {
       );
     }
     if (!admin.permissions.includes('*') && !this.canPerform(admin, row.action)) {
-      // 引导例外：全新部署只有一名超级管理员时，邀请第二名超管可由合规支持确认
-      // （合规没有成员管理权限，但这是唯一能把第二名超管建出来的路径）
-      const onlyOneSuper = this.activeSuperCount() <= 1;
-      const bootstrap =
-        row.action === 'user.invite_super' && onlyOneSuper && admin.role.name === '合规支持';
-      if (!bootstrap) {
-        throw new ApiException(ErrorCode.FORBIDDEN, '没有权限执行该操作');
-      }
+      // 引导例外已移除（第七轮验收反馈第 6 条）：合规支持对「成员与角色」只读 / 仅申请，
+      // 不能确认任何成员类双人确认。全新部署只有一名超级管理员时，
+      // 由 invite() 的引导分支直接在界面上完成第二名超管的新增。
+      throw new ApiException(ErrorCode.FORBIDDEN, '没有权限执行该操作');
     }
   }
 
@@ -588,10 +592,15 @@ export class ConfirmationService {
     return {
       id: row.id,
       action: row.action,
-      label: rule?.label ?? row.action,
+      // 模型提升 / 回滚在标签里带上目标发布，避免待确认面板里出现多张同名确认单（第七轮第 14 条）
+      label:
+        rule?.label && row.action.startsWith('model.') && row.target_label
+          ? `${rule.label}：${row.target_label}`
+          : (rule?.label ?? row.action),
       target_id: row.target_id,
       target_label: row.target_label,
-      payload: parsePayload(row.payload),
+      // 口令哈希等敏感字段不下发（第七轮验收反馈第 13 条）
+      payload: sanitizePayload(parsePayload(row.payload)),
       note: row.note,
       status: row.status as ConfirmationStatus,
       requested_by: row.requested_by,
@@ -632,4 +641,17 @@ function parsePayload(raw: string | null): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/** 敏感字段（口令哈希 / 明文口令 / 验证码）：只用于服务端执行，绝不下发到任何界面 */
+const SECRET_PAYLOAD_KEYS = ['password_hash', 'password', 'totp', 'secret'];
+
+/** 下发前剔除敏感字段（第七轮验收反馈第 13 条） */
+function sanitizePayload(payload: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(payload)) {
+    if (SECRET_PAYLOAD_KEYS.includes(k)) continue;
+    out[k] = v;
+  }
+  return out;
 }

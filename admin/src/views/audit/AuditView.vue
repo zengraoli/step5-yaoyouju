@@ -10,12 +10,21 @@
  * - GET  /admin/audit/verify     哈希链校验
  * - POST /admin/audit/export-request   导出申请（需审批）
  */
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import AppButton from '@/components/AppButton.vue'
 import AppCard from '@/components/AppCard.vue'
 import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import { getAdminToken, getBaseUrl, request } from '@/api/request'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
+/** 只有超级管理员能审批审计导出（合规支持只能申请） */
+const canApprove = computed<boolean>(() => auth.role === '超级管理员' || auth.hasPermission('*'))
+/** 下载按钮只给申请人本人（服务端也会再校验一次） */
+function isApplicant(a: { applicant_id?: string | null }): boolean {
+  return Boolean(a.applicant_id) && a.applicant_id === auth.admin?.id
+}
 
 interface AuditItem {
   id: string
@@ -161,7 +170,15 @@ async function onDownloadExport(id: string) {
     headers: { Authorization: `Bearer ${getAdminToken()}` },
   })
   if (!res.ok) {
-    notify('下载失败：该导出申请还没有通过审批')
+    // 直接显示服务端的中文原因（已下载过一次 / 只能申请人本人下载 / 尚未通过审批）
+    let message = '下载失败，请稍后重试'
+    try {
+      const body = (await res.json()) as { message?: string }
+      if (body?.message) message = body.message
+    } catch {
+      // 保留默认文案
+    }
+    notify(message)
     return
   }
   const blob = await res.blob()
@@ -175,7 +192,7 @@ async function onDownloadExport(id: string) {
 }
 
 /** 导出申请列表 */
-const approvals = ref<{ id: string; status: string; applicant_name: string | null; approver_name: string | null; reason: string; created_at: string }[]>([])
+const approvals = ref<{ id: string; status: string; applicant_id?: string | null; applicant_name: string | null; approver_name: string | null; reason: string; created_at: string }[]>([])
 const exporting = ref(false)
 const approving = ref('')
 
@@ -294,12 +311,13 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
             <td>{{ a.created_at.slice(0, 16).replace('T', ' ') }}</td>
             <td>
               <StatusTag v-if="a.status === '已批准'" status="confirmed" text="已批准" />
+              <StatusTag v-else-if="a.status === '已导出'" status="offline" text="已导出" />
               <StatusTag v-else status="unconfirmed" text="待审批" />
             </td>
             <td>{{ a.approver_name ?? '—' }}</td>
             <td class="table__ops">
               <button
-                v-if="a.status === '待审批'"
+                v-if="a.status === '待审批' && canApprove"
                 type="button"
                 class="op-link"
                 :disabled="approving === a.id"
@@ -308,13 +326,16 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
                 审批
               </button>
               <button
-                v-else
+                v-else-if="a.status === '已批准' && isApplicant(a)"
                 type="button"
                 class="op-link"
                 @click="onDownloadExport(a.id)"
               >
                 下载导出文件
               </button>
+              <span v-else-if="a.status === '已导出'" class="table__muted">已下载过一次，不能重复下载</span>
+              <span v-else-if="a.status === '已批准'" class="table__muted">需由申请人本人下载</span>
+              <span v-else class="table__muted">待超级管理员审批</span>
             </td>
           </tr>
           <tr v-if="approvals.length === 0">
@@ -491,6 +512,11 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
   text-align: center;
   color: var(--color-text-3);
   padding: var(--spacing-xl);
+}
+
+.table__muted {
+  font-size: var(--font-size-aux-sm);
+  color: var(--color-text-3);
 }
 
 /* ---------- 分页 ---------- */

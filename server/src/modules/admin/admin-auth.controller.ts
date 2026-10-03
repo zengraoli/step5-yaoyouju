@@ -27,6 +27,12 @@ class AdminLoginDto {
 }
 
 class BindMfaDto {
+  @ApiProperty({ description: '账号口令（再次确认是本人，而不是只拿到登录态）' })
+  @IsString()
+  @IsNotEmpty({ message: '请输入口令' })
+  @MaxLength(100)
+  password!: string;
+
   @ApiProperty({ description: '动态验证码（演示固定码 6 位数字）' })
   @Matches(/^\d{6}$/, { message: '验证码为 6 位数字' })
   totp!: string;
@@ -53,12 +59,12 @@ export class AdminAuthController {
 
   /**
    * 绑定动态验证码（MFA）：新邀请成员 / 重置 MFA 后的账号首次登录必须绑定后才能操作。
-   * 演示实现：演示固定码即完成绑定。
+   * 必须同时提供账号口令 + 动态验证码：只拿到登录态（会话被窃）也不能静默绑定（第七轮第 11 条）。
    */
-  @ApiOperation({ summary: '绑定动态验证码（首次登录必做；演示固定码）' })
+  @ApiOperation({ summary: '绑定动态验证码（首次登录必做；口令 + 动态验证码）' })
   @Post('bind-mfa')
   bindMfa(@CurrentAdmin() admin: AdminContext, @Body() dto: BindMfaDto) {
-    return this.adminAuth.bindMfa(admin.id, dto.totp);
+    return this.adminAuth.bindMfa(admin.id, dto.password, dto.totp);
   }
 
   /** 登出（吊销当前令牌，旧令牌立即失效；写审计） */

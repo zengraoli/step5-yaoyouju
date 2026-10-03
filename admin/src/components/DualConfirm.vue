@@ -79,7 +79,8 @@ async function submitInit() {
       data: {
         action: props.action,
         target_id: props.targetId,
-        target_label: props.targetLabel ?? extraLabel.value,
+        // 动态标签（start() 传入的具体对象说明）优先，避免「模型发布提升（双人确认）」这类同名确认单
+        target_label: extraLabel.value || props.targetLabel || '',
         payload: JSON.stringify(props.payload ?? {}),
         note: note.value.trim(),
       },

@@ -248,12 +248,16 @@ const headerSummary = computed<string>(() => {
           <!-- 高危开关双人确认弹层：一个人改不了，必须另一名具备权限的账号确认（每个开关一个） -->
           <template v-for="s in switches.filter((x) => HIGH_RISK.includes(x.key))" :key="s.key">
             <DualConfirm
-              v-if="s.key === dualTarget.key"
               :ref="(el) => (dualRefs[s.key] = el as never)"
               action="switch.update"
               :target-id="s.key"
-              :target-label="`开关 ${SWITCH_LABELS[s.key] ?? s.key} → ${dualTarget.enabled ? '开启' : '关闭'}`"
-              :payload="{ enabled: dualTarget.enabled, reason: '双人确认后变更' }"
+              :target-label="`开关 ${SWITCH_LABELS[s.key] ?? s.key} → ${
+                dualTarget.key === s.key && dualTarget.enabled ? '开启' : '关闭'
+              }`"
+              :payload="{
+                enabled: dualTarget.key === s.key ? dualTarget.enabled : !s.enabled,
+                reason: '双人确认后变更',
+              }"
               :submit="submitSwitchWithConfirm"
               :show-button="false"
               @done="loadAll()"

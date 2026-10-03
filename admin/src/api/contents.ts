@@ -108,9 +108,25 @@ export function rejectContent(id: string, comment: string): Promise<ContentDetai
   return request<ContentDetail>({ url: `/admin/contents/${encodeURIComponent(id)}/reject`, method: 'POST', data: { comment } })
 }
 
-/** 发布（需双人确认） */
-export function publishContent(id: string): Promise<ContentDetail> {
-  return request<ContentDetail>({ url: `/admin/contents/${encodeURIComponent(id)}/publish`, method: 'POST' })
+/** 发布（需双人确认；运营编辑只能发起，由另一人确认后生效） */
+export function publishContent(id: string, confirmationId?: string): Promise<ContentDetail> {
+  return request<ContentDetail>({
+    url: `/admin/contents/${encodeURIComponent(id)}/publish`,
+    method: 'POST',
+    data: confirmationId ? { confirmation_id: confirmationId } : {},
+  })
+}
+
+/** 引用定位预览（下线前查看受影响的页面） */
+export function contentImpact(id: string): Promise<{
+  content_item_id: string
+  title: string
+  reference_count: number
+  analyses: { analysis_id: string; episode_id: string; analysis_version: number; statement: string }[]
+  followups: { episode_id: string; exported_at: string | null }[]
+  note: string
+}> {
+  return request({ url: `/admin/contents/${encodeURIComponent(id)}/impact` })
 }
 
 /** 一键下线（返回引用定位） */

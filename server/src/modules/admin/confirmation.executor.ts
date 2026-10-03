@@ -74,7 +74,11 @@ export class ConfirmationExecutor {
           confirmation_id: claimed.id,
         });
       case 'user.invite_super':
-        return this.users.createInvitedSuper(text(payload.name), claimed.id, payload, admin.id);
+        // created_by 记发起邀请的人（requester）：他与新超管同邀请根，
+        // 之后不能借这个自己设定过口令的账号完成自己的双人确认（第七轮第 6 条）
+        return this.users.createInvitedSuper(text(payload.name), claimed.id, payload, claimed.requester.id);
+      case 'user.role':
+        return this.users.changeRole(admin, claimed.target_id, text(payload.role), claimed.id);
       case 'user.mfa_reset_super':
         return this.users.resetMfa(admin, claimed.target_id, claimed.id);
       case 'feedback.report_handling':

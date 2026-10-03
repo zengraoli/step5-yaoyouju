@@ -8,6 +8,45 @@ import { CurrentAdmin } from '../../common/current-admin.decorator';
 import { ContentsService, ContentDetail } from './contents.service';
 import { ConfirmationService } from '../admin/confirmation.service';
 
+/** 编辑草稿（部分字段即可，第七轮验收反馈第 7 条：运营只改标题 / 脚本时不必重复传 type） */
+class UpdateDraftDto {
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  title?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  applicable_scope?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  not_applicable?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  script?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  subtitle_text?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  asset_key?: string | null;
+}
+
 class DraftDto {
   @ApiProperty()
   @IsString()
@@ -89,6 +128,14 @@ class ReasonDto {
   confirmation_id?: string;
 }
 
+class PublishDto {
+  @ApiProperty({ description: '双人确认单 ID（发起发布后由另一名账号确认后带上）', required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  confirmation_id?: string;
+}
+
 class BatchOfflineDto {
   @ApiProperty({ description: '内容 ID 列表' })
   @IsArray()
@@ -109,7 +156,10 @@ class BatchOfflineDto {
 @ApiTags('admin-contents')
 @Controller('admin/contents')
 export class AdminContentsController {
-  constructor(private readonly contents: ContentsService) {}
+  constructor(
+    private readonly contents: ContentsService,
+    private readonly confirmations: ConfirmationService,
+  ) {}
 
   @ApiOperation({ summary: '内容列表（筛选 + 状态统计 + 分页）' })
   @RequirePermission('content.view')
@@ -153,7 +203,7 @@ export class AdminContentsController {
   update(
     @CurrentAdmin() admin: AdminContext,
     @Param('id') id: string,
-    @Body() dto: DraftDto,
+    @Body() dto: UpdateDraftDto,
   ): ContentDetail {
     return this.contents.updateDraft(admin.id, id, dto);
   }
@@ -194,19 +244,41 @@ export class AdminContentsController {
   /**
    * 发布（已审定 → 已发布；需双人确认）。
    * - 有 content.publish（临床审核 / 超级管理）的账号：沿用「审核人与发布人不能是同一人」的双人规则；
-   * - 只有 content.submit（运营编辑）的账号：只能「发起发布」，由另一名临床审核 / 超级管理确认后执行。
+   * - 只有 content.submit（运营编辑）的账号：点「发起发布」即生成确认单，
+   *   由另一名临床审核 / 超级管理在「待我确认」里确认后执行（第七轮验收反馈第 7 条）。
    */
   @ApiOperation({ summary: '发布（已审定 → 已发布；需双人确认）' })
   @Post(':id/publish')
-  publish(@CurrentAdmin() admin: AdminContext, @Param('id') id: string) {
+  publish(@CurrentAdmin() admin: AdminContext, @Param('id') id: string, @Body() dto?: PublishDto) {
     const canPublish = admin.permissions.includes('*') || admin.permissions.includes('content.publish');
     const canInitiate = admin.permissions.includes('*') || admin.permissions.includes('content.submit');
     if (!canPublish && !canInitiate) {
       throw new ApiException(ErrorCode.FORBIDDEN, '没有权限执行该操作');
     }
+    const detail = this.contents.adminDetail(id);
     if (!canPublish) {
       // 运营编辑：只能发起，等另一名具备发布权限的账号确认后生效
-      throw new ApiException(ErrorCode.CONFLICT, '该操作需要双人确认后才能生效');
+      const gate = this.confirmations.prepare(
+        'content.publish',
+        id,
+        detail.title,
+        dto?.confirmation_id ? '另一人已确认的发布申请' : `发布《${detail.title}》`,
+        admin,
+        dto?.confirmation_id,
+      );
+      if (!gate.proceed) {
+        throw new ApiException(
+          ErrorCode.CONFLICT,
+          `已提交「发布《${detail.title}》」双人确认申请（需${gate.confirmation?.requirement ?? '临床审核 / 超级管理员'}确认后生效）`,
+          {
+            confirmation_id: gate.confirmation?.id ?? null,
+            requirement: gate.confirmation?.requirement ?? null,
+          },
+        );
+      }
+      const result = this.contents.publish(admin.id, id);
+      this.confirmations.markApplied(gate.confirmation!.id);
+      return result;
     }
     return this.contents.publish(admin.id, id);
   }

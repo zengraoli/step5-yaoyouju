@@ -1,7 +1,7 @@
 import { ArgumentMetadata, BadRequestException, Injectable, PipeTransform } from '@nestjs/common';
 import { validate, ValidationError, ValidatorOptions } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { translateValidationMessage } from './all-exceptions.filter';
+import { REQUIRED_HINTS, translateValidationMessage } from './all-exceptions.filter';
 
 /**
  * 分来源的校验管道（验收反馈第 27 条：标题传数字应返回中文 400，而查询参数要能转换）：
@@ -53,6 +53,10 @@ export class SmartValidationPipe implements PipeTransform<unknown> {
     const constraints = error.constraints ?? {};
     const keys = Object.keys(constraints);
     if (keys.length === 0) return '请求参数不正确';
+    // 必填字段没有传：给出中文引导（「请选择要反馈的一页分析」），不要说「xxx应为文本」
+    if ((error.value === undefined || error.value === null) && REQUIRED_HINTS[error.property]) {
+      return REQUIRED_HINTS[error.property];
+    }
     const typeKeys = [
       'isString', 'isNumber', 'isInt', 'isBoolean', 'isDate', 'isArray', 'isObject',
       'isEnum', 'isIn', 'isUUID', 'isEmail', 'isNotEmpty', 'isDefined', 'whitelist',

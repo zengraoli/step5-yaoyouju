@@ -99,7 +99,7 @@ export class DualControlService {
       const confirmedBy = approver?.reviewer_id ?? null;
       const confirmed = !!confirmedBy && confirmedBy !== actorId;
       // 双人确认不能由「同一个人邀请的账号」完成（验收反馈第 6 条）
-      const sameRoot = !!confirmedBy && !!actorId && this.sameInvitationRoot(confirmedBy, actorId);
+      const sameRoot = !!confirmedBy && !!actorId && confirmedBy !== actorId && this.sameInvitationRoot(confirmedBy, actorId);
       return {
         action,
         required,

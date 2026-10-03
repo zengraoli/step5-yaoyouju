@@ -90,9 +90,30 @@ export class AdminUsersService {
     if (dup) {
       throw new ApiException(ErrorCode.CONFLICT, `已存在同名账号「${name}」，请换一个账号名`);
     }
-    // 邀请超级管理员属于最高风险，必须另请一名超级管理员双人确认（验收反馈第 6 条）
+    // 邀请超级管理员属于最高风险：必须另请一名超级管理员双人确认（验收反馈第 6 条）。
+    // 引导分支：全新部署只有一名超级管理员时，还没有第二名超管可以确认，
+    // 允许该超管在界面上直接完成新增（写审计），否则永远建不出第二名超管；
+    // 一旦存在两名及以上超级管理员，之后一律走双人确认。
     if (input.role === '超级管理员') {
       const invitationId = (input as { confirmation_id?: string }).confirmation_id;
+      const onlyOneSuper = this.activeSuperCount() <= 1;
+      if (!invitationId && onlyOneSuper) {
+        const id = randomUUID();
+        this.db.app
+          .prepare(
+            'INSERT INTO admin_user (id, name, role_id, mfa_enabled, password_hash, status, mfa_bonded_at, created_by) VALUES (?, ?, ?, 0, ?, ?, ?, ?)',
+          )
+          .run(id, name, role.id, hashAdminPassword(input.password), 'active', null, admin.id);
+        this.audit.append(admin.id, 'admin_user.invite', `admin_user:${id}`, {
+          name,
+          role: input.role,
+          bootstrap: '全新部署只有一名超级管理员，引导式新增（写审计）',
+        });
+        this.logger.warn(
+          `[admin-users] 引导分支：${admin.name} 在只有一名超级管理员时新增了超级管理员 ${name}`,
+        );
+        return { id, name, role: input.role, mfa: '未绑定', mfa_required: true, bootstrap: true };
+      }
       const gate = this.confirmations.prepare(
         'user.invite_super',
         name,
@@ -109,7 +130,13 @@ export class AdminUsersService {
           { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
         );
       }
-      return this.createInvitedSuper(name, gate.confirmation!.id, gate.confirmation!.payload, admin.id);
+      // created_by 记「发起邀请的人」：他与新超管同邀请根，之后不能借新超管完成自己的双人确认
+      return this.createInvitedSuper(
+        name,
+        gate.confirmation!.id,
+        gate.confirmation!.payload,
+        gate.confirmation!.requested_by,
+      );
     }
     const id = randomUUID();
     this.db.app
@@ -245,6 +272,66 @@ export class AdminUsersService {
     this.audit.append(admin.id, 'admin_user.reset_mfa', `admin_user:${id}`, { name: target.name });
     this.logger.log(`[admin-users] ${admin.name} 重置了 ${target.name} 的 MFA`);
     return { id, mfa: '未绑定', mfa_enabled: false };
+  }
+
+  /**
+   * 变更成员角色（B10「改变角色」）：仅超级管理员，且必须另一名超级管理员双人确认。
+   * 不能变更自己的角色（避免自提权）；变更后该账号名下令牌全部吊销（权限立即按新角色生效）。
+   */
+  changeRole(admin: AdminContext, id: string, roleName: string, confirmationId?: string) {
+    if (id === admin.id) {
+      throw new ApiException(ErrorCode.FORBIDDEN, '不能变更自己的角色，请换一位超级管理员操作');
+    }
+    const target = this.db.app.prepare('SELECT id, name, status FROM admin_user WHERE id = ?').get(id) as
+      | { id: string; name: string; status: string }
+      | undefined;
+    if (!target) throw new ApiException(ErrorCode.NOT_FOUND, '成员不存在');
+    const role = this.db.app.prepare('SELECT id, name FROM role WHERE name = ?').get(roleName) as
+      | { id: string; name: string }
+      | undefined;
+    if (!role) throw new ApiException(ErrorCode.BAD_REQUEST, '角色不存在');
+    const from = this.roleNameOf(id);
+    if (from === roleName) {
+      throw new ApiException(ErrorCode.CONFLICT, `该成员已经是「${roleName}」角色`);
+    }
+    const gate = this.confirmations.prepare(
+      'user.role',
+      id,
+      `${target.name}：${from} → ${roleName}`,
+      confirmationId ? `另一人已确认变更 ${target.name} 的角色` : `变更 ${target.name} 的角色（${from} → ${roleName}）`,
+      admin,
+      confirmationId,
+      { role: roleName, from },
+    );
+    if (!gate.proceed) {
+      throw new ApiException(
+        ErrorCode.CONFLICT,
+        `已提交「变更成员角色」双人确认申请（需${gate.confirmation?.requirement ?? '另一名超级管理员'}确认后生效）`,
+        { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
+      );
+    }
+    this.db.app.prepare('UPDATE admin_user SET role_id = ? WHERE id = ?').run(role.id, id);
+    this.adminAuth.revokeTokensOf(id);
+    this.confirmations.markApplied(gate.confirmation!.id);
+    this.audit.append(admin.id, 'admin_user.role', `admin_user:${id}`, {
+      name: target.name,
+      from,
+      to: roleName,
+      confirmation_id: gate.confirmation!.id,
+    });
+    this.logger.log(`[admin-users] ${admin.name} 将 ${target.name} 的角色变更为 ${roleName}`);
+    return { id, name: target.name, role: roleName };
+  }
+
+  /** 当前启用中的超级管理员数量（引导判断用） */
+  private activeSuperCount(): number {
+    const row = this.db.app
+      .prepare(
+        `SELECT COUNT(*) AS n FROM admin_user u JOIN role r ON r.id = u.role_id
+          WHERE r.name = '超级管理员' AND u.status = 'active'`,
+      )
+      .get() as { n: number };
+    return row?.n ?? 0;
   }
 
   private roleNameOf(id: string): string | undefined {

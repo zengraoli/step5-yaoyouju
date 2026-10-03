@@ -15,8 +15,11 @@ import AppNotice from '@/components/AppNotice.vue'
 import StatusTag from '@/components/StatusTag.vue'
 import {
   batchTakeOffline,
+  contentImpact,
   createDraft,
   listContentsAdmin,
+  takeOffline,
+  withdrawContent,
   type ContentAdminItem,
 } from '@/api/contents'
 
@@ -82,8 +85,70 @@ function notify(title: string) {
   globalThis.alert?.(title)
 }
 
-function onMore() {
-  notify('更多操作：撤回 / 标记更正 / 提交新版本')
+function confirmAction(message: string): boolean {
+  return globalThis.confirm ? globalThis.confirm(message) : true
+}
+
+/** 「···」更多操作菜单（第七轮第 7 条：菜单里的每个动作都要真的能执行） */
+const menuFor = ref('')
+function onMore(id: string) {
+  menuFor.value = menuFor.value === id ? '' : id
+}
+
+/** 引用定位：列出这条内容被哪些一页分析 / 复诊摘要引用 */
+async function onImpact(item: ContentAdminItem) {
+  menuFor.value = ''
+  try {
+    const impact = await contentImpact(item.id)
+    const lines = [
+      `《${item.title}》引用定位：`,
+      `· 被一页分析引用 ${impact.analyses.length} 处`,
+      ...impact.analyses.slice(0, 3).map((a) => `  - v${a.analysis_version}：${a.statement.slice(0, 40)}`),
+      `· 出现在 ${impact.followups.length} 份复诊摘要里`,
+      impact.note,
+    ]
+    notify(lines.join('\n'))
+  } catch (e) {
+    notify(e instanceof Error ? e.message : '引用定位加载失败')
+  }
+}
+
+/** 撤回（已发布 → 已撤回，需双人确认） */
+async function onWithdraw(item: ContentAdminItem) {
+  menuFor.value = ''
+  if (!confirmAction(`确认发起撤回《${item.title}》？需要另一名临床审核 / 超级管理员确认后生效。`)) return
+  try {
+    await withdrawContent(item.id, '发现严重问题，发起撤回（双人确认）')
+    notify('已发起撤回申请，请另一名具备权限的账号在「待我确认」里确认')
+    await load()
+  } catch (e) {
+    const data = (e as { data?: { confirmation_id?: string } })?.data
+    if (data?.confirmation_id) {
+      notify('已发起撤回申请，请另一名具备权限的账号在「待我确认」里确认')
+      await load()
+      return
+    }
+    notify(e instanceof Error ? e.message : '撤回失败')
+  }
+}
+
+/** 一键下线（已发布 → 已下线，需双人确认） */
+async function onTakeOffline(item: ContentAdminItem) {
+  menuFor.value = ''
+  if (!confirmAction(`确认发起一键下线《${item.title}》？下线后用户端立即不可见，需另一人确认后生效。`)) return
+  try {
+    await takeOffline(item.id, '应急下线（双人确认）')
+    notify('已发起下线申请，请另一名具备权限的账号在「待我确认」里确认')
+    await load()
+  } catch (e) {
+    const data = (e as { data?: { pending?: { id: string; confirmation_id: string }[] } })?.data
+    if (data?.pending) {
+      notify('已发起下线申请，请另一名具备权限的账号在「待我确认」里确认')
+      await load()
+      return
+    }
+    notify(e instanceof Error ? e.message : '下线失败')
+  }
 }
 
 function onFilterChange() {
@@ -274,7 +339,36 @@ const pageCount = computed<number>(() => Math.max(1, Math.ceil(total.value / pag
               <td class="table__ops">
                 <button type="button" class="op-link" @click="router.push(`/contents/${item.id}`)">详情</button>
                 <button type="button" class="op-link" @click="router.push(`/contents/${item.id}`)">更正</button>
-                <button type="button" class="op-link op-link--muted" @click="onMore">···</button>
+                <span class="more">
+                  <button type="button" class="op-link op-link--muted" @click="onMore(item.id)">···</button>
+                  <div v-if="menuFor === item.id" class="more__menu">
+                    <button type="button" class="more__item" @click="onImpact(item)">引用定位</button>
+                    <button
+                      v-if="item.status === '已发布'"
+                      type="button"
+                      class="more__item"
+                      @click="onWithdraw(item)"
+                    >
+                      撤回（双人确认）
+                    </button>
+                    <button
+                      v-if="item.status === '已发布'"
+                      type="button"
+                      class="more__item more__item--danger"
+                      @click="onTakeOffline(item)"
+                    >
+                      一键下线（双人确认）
+                    </button>
+                    <button
+                      v-if="item.status === '已撤回' || item.status === '已下线'"
+                      type="button"
+                      class="more__item"
+                      @click="menuFor = ''; router.push(`/contents/${item.id}`)"
+                    >
+                      修订后重审
+                    </button>
+                  </div>
+                </span>
               </td>
             </tr>
             <tr v-if="items.length === 0">
@@ -469,6 +563,47 @@ const pageCount = computed<number>(() => Math.max(1, Math.ceil(total.value / pag
 
 .op-link--muted {
   color: var(--color-text-3);
+}
+
+/* ---------- 「···」更多操作 ---------- */
+.more {
+  position: relative;
+  display: inline-block;
+}
+
+.more__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 168px;
+  padding: var(--spacing-xs) 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  box-shadow: 0 8px 24px rgb(27 34 48 / 12%);
+  display: flex;
+  flex-direction: column;
+}
+
+.more__item {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-aux-sm);
+  font-family: inherit;
+  color: var(--color-text-1);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.more__item:hover {
+  background: var(--color-bg);
+}
+
+.more__item--danger {
+  color: var(--color-danger, #c0392b);
 }
 
 .toggle {

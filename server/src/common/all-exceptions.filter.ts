@@ -66,6 +66,38 @@ const FIELD_LABELS: Record<string, string> = {
   severity: '严重度',
   help_type: '帮助类型',
   id: 'ID',
+  analysis_id: '一页分析',
+  note: '变更原因',
+  target_id: '操作对象',
+  action: '操作类型',
+  payload: '业务参数',
+  totp: '动态验证码',
+  feedback_id: '举报',
+  comment: '意见',
+  review_scope: '审核范围',
+  is_error_report: '是否错误举报',
+  unsolved_question: '未解决的问题',
+  subtitle_text: '字幕',
+  applicable_scope: '适用范围',
+  not_applicable: '不适用范围',
+  asset_key: '资源',
+  ids: '内容 ID 列表',
+  confirmation_id: '确认单',
+  confirmation_ids: '确认单',
+};
+
+/** 必填字段缺失时的中文引导（比「xxx不能为空」更可操作，验收反馈第 28 条） */
+export const REQUIRED_HINTS: Record<string, string> = {
+  analysis_id: '请选择要反馈的一页分析',
+  note: '请填写变更原因（写审计）',
+  content: '请输入内容',
+  comment: '请填写意见',
+  reason: '请填写原因',
+  title: '请填写标题',
+  password: '请输入口令',
+  totp: '请输入动态验证码',
+  name: '请输入账号',
+  role: '请选择角色',
 };
 
 /**
@@ -93,7 +125,7 @@ export function translateValidationMessage(message: string): string {
     const n = /must not be less than (\d+)/.exec(rest)![1];
     return `${field}不能小于 ${n}`;
   }
-  if (/should not be empty/.test(rest)) return `${field}不能为空`;
+  if (/should not be empty/.test(rest)) return REQUIRED_HINTS[m[1]] ?? `${field}不能为空`;
   if (/must be a valid ISO 8601/.test(rest) || /must be a Date/.test(rest)) return `${field}应为有效的时间格式`;
   if (/must be a UUID/.test(rest)) return `${field}格式不正确`;
   if (/must be an integer/.test(rest)) return `${field}应为整数`;

@@ -25,12 +25,21 @@ import DualConfirm from '@/components/DualConfirm.vue'
 const showInvite = ref(false)
 const inviteForm = ref({ name: '', role: '运营编辑', password: '' })
 const inviting = ref(false)
+/** 当前是否只有一名超级管理员（引导式新增第二名超管） */
+const onlyOneSuper = computed<boolean>(
+  () => users.value.filter((u) => u.role === '超级管理员' && u.status === '正常').length <= 1,
+)
+/** 改变角色弹层 */
+const showRole = ref(false)
+const roleUser = ref<AdminUser | null>(null)
+const roleForm = ref({ role: '运营编辑' })
 
 /** 停用超级管理员的双人确认 */
 const dualUser = ref<AdminUser | null>(null)
 const dualRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
-/** 邀请超级管理员的双人确认 */
+/** 邀请超级管理员 / 改变角色的双人确认 */
 const dualInviteRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
+const roleDualRef = ref<{ start: (target?: unknown, label?: string) => void } | null>(null)
 
 /** 双人确认后停用成员 */
 async function submitUserDual(confirmationId: string): Promise<unknown> {
@@ -277,7 +286,12 @@ async function submitInvite() {
       method: 'POST',
       data: { name, role: inviteForm.value.role, password },
     })
-    notify('已邀请成员；首次登录需绑定 MFA 后才能操作')
+    // 只有一名超级管理员时服务端走引导分支：直接新增（写审计），不需要第二人确认
+    notify(
+      inviteForm.value.role === '超级管理员' && onlyOneSuper.value
+        ? '已引导式新增第二名超级管理员（写入审计）；之后再邀请超级管理员必须双人确认'
+        : '已邀请成员；首次登录需绑定 MFA 后才能操作',
+    )
     showInvite.value = false
     inviteForm.value = { name: '', role: '运营编辑', password: '' }
     await load()
@@ -285,7 +299,7 @@ async function submitInvite() {
     // 邀请超级管理员需要双人确认：40900 时带上确认单 ID 由另一名账号确认
     const err = e as { message?: string; data?: { confirmation_id?: string } }
     if (inviteForm.value.role === '超级管理员' && err?.data?.confirmation_id) {
-      notify('已提交「邀请超级管理员」双人确认申请：请由另一名超级管理员（只有一名超管时可由合规支持）在「待我确认」里确认')
+      notify('已提交「邀请超级管理员」双人确认申请：请由另一名超级管理员在「待我确认」里确认')
       showInvite.value = false
       await load()
       return
@@ -294,6 +308,21 @@ async function submitInvite() {
   } finally {
     inviting.value = false
   }
+}
+
+/** 打开「改变角色」弹层（超级管理员；需另一名超级管理员双人确认） */
+function onChangeRole(user: AdminUser) {
+  if (!isSuper.value) {
+    notify('改变角色需要超级管理员权限')
+    return
+  }
+  if (user.name === auth.admin?.name) {
+    notify('不能变更自己的角色，请换一位超级管理员操作')
+    return
+  }
+  roleUser.value = user
+  roleForm.value = { role: user.role }
+  showRole.value = true
 }
 
 /** 带确认单 ID 再次提交邀请超级管理员（第二人确认后生效） */
@@ -311,6 +340,21 @@ async function submitInviteSuperDual(confirmationId: string): Promise<unknown> {
   notify('已按双人确认结果邀请超级管理员（写入审计）')
   showInvite.value = false
   inviteForm.value = { name: '', role: '运营编辑', password: '' }
+  await load()
+  return result
+}
+
+/** 改变角色（双人确认后生效） */
+async function submitRoleDual(confirmationId: string): Promise<unknown> {
+  const u = roleUser.value
+  if (!u) throw new Error('未选择成员')
+  const result = await request({
+    url: `/admin/users/${u.id}/role`,
+    method: 'POST',
+    data: { role: roleForm.value.role, confirmation_id: confirmationId },
+  })
+  notify('已按双人确认结果变更角色（写入审计）')
+  showRole.value = false
   await load()
   return result
 }
@@ -359,7 +403,7 @@ async function submitInviteSuperDual(confirmationId: string): Promise<unknown> {
               <StatusTag v-else status="offline" text="已停用" />
             </td>
             <td class="table__ops">
-              <button type="button" class="op-link" @click="notify(`角色变更需由超级管理员操作（当前角色：${u.role}）`)">改变角色</button>
+              <button type="button" class="op-link" @click="onChangeRole(u)">改变角色</button>
               <button type="button" class="op-link" @click="onResetMfa(u)">重置 MFA</button>
               <button type="button" class="op-link" :disabled="operating === u.id" @click="onToggleStatus(u)">
                 {{ u.status === '正常' ? '停用' : '启用' }}
@@ -494,6 +538,32 @@ async function submitInviteSuperDual(confirmationId: string): Promise<unknown> {
       </AppCard>
     </div>
 
+    <!-- 改变角色弹层（超级管理员；另一名超级管理员双人确认后生效） -->
+    <div v-if="showRole" class="modal-mask" @click.self="showRole = false">
+      <AppCard class="modal">
+        <h3 class="modal__title">改变角色 · {{ roleUser?.name }}</h3>
+        <p class="modal__desc">
+          变更角色属于高风险操作，需要另一名超级管理员双人确认后生效；变更后该账号需重新登录。
+        </p>
+        <label class="modal__field">
+          <span>新角色</span>
+          <select v-model="roleForm.role" class="modal__input">
+            <option value="运营编辑">运营编辑</option>
+            <option value="临床审核">临床审核</option>
+            <option value="技术负责人">技术负责人</option>
+            <option value="合规支持">合规支持</option>
+            <option value="超级管理员">超级管理员</option>
+          </select>
+        </label>
+        <div class="modal__actions">
+          <AppButton type="primary" @click="roleDualRef?.start(roleForm.role, `变更 ${roleUser?.name ?? ''} 的角色为 ${roleForm.role}`)">
+            发起双人确认
+          </AppButton>
+          <AppButton type="soft" @click="showRole = false">取消</AppButton>
+        </div>
+      </AppCard>
+    </div>
+
     <!-- 停用成员双人确认弹层（按钮隐藏：由成员行的停用操作触发） -->
     <DualConfirm
       :ref="(el) => (dualRef = el as never)"
@@ -506,7 +576,7 @@ async function submitInviteSuperDual(confirmationId: string): Promise<unknown> {
       @done="load()"
     />
 
-    <!-- 邀请超级管理员双人确认弹层（只有一名超管时可由合规支持确认） -->
+    <!-- 邀请超级管理员双人确认弹层（已有两名及以上超级管理员时必须双人确认） -->
     <DualConfirm
       :ref="(el) => (dualInviteRef = el as never)"
       action="user.invite_super"
@@ -514,6 +584,18 @@ async function submitInviteSuperDual(confirmationId: string): Promise<unknown> {
       :target-label="`邀请超级管理员「${inviteForm.name.trim()}」`"
       :payload="{ name: inviteForm.name.trim(), role: '超级管理员', password: inviteForm.password }"
       :submit="submitInviteSuperDual"
+      :show-button="false"
+      @done="load()"
+    />
+
+    <!-- 改变角色双人确认弹层 -->
+    <DualConfirm
+      :ref="(el) => (roleDualRef = el as never)"
+      action="user.role"
+      :target-id="roleUser?.id ?? ''"
+      :target-label="`变更 ${roleUser?.name ?? ''} 的角色：${roleUser?.role ?? ''} → ${roleForm.role}`"
+      :payload="{ role: roleForm.role }"
+      :submit="submitRoleDual"
       :show-button="false"
       @done="load()"
     />

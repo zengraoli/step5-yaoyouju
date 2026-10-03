@@ -417,7 +417,7 @@ function stepTag(status: string): { key: 'confirmed' | 'unconfirmed' | 'offline'
           </p>
           <ul class="impact-list">
             <li v-for="a in impact.analyses" :key="a.analysis_id" class="impact-item">
-              <StatusTag status="quote" text="已发布内容" />
+              <StatusTag status="generated" :text="`一页分析 v${a.analysis_version}`" />
               <span class="impact-item__text">{{ a.statement }}</span>
             </li>
           </ul>

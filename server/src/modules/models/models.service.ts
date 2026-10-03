@@ -160,7 +160,8 @@ export class ModelReleasesService {
         .prepare(`SELECT id FROM model_release WHERE status='生效' AND id<>?`)
         .all(id) as { id: string }[];
       for (const p of previous) {
-        this.db.app.prepare(`UPDATE model_release SET status='已回滚' WHERE id=?`).run(p.id);
+        // 灰度流量同步归零：否则库里还是 100，界面显示 0%，两边不一致（第七轮第 29 条）
+        this.db.app.prepare(`UPDATE model_release SET status='已回滚', gray_traffic=0 WHERE id=?`).run(p.id);
         this.audit.append(actorId, 'model_release.auto_rollback', `model_release:${p.id}`, {
           from: '生效',
           to: '已回滚',

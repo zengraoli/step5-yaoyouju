@@ -41,12 +41,12 @@ export function adminMe(): Promise<AdminProfile> {
   return request<AdminProfile>({ url: '/admin/auth/me' })
 }
 
-/** 绑定动态验证码（新成员 / 重置 MFA 后首次登录必做） */
-export function bindMfa(totp: string): Promise<{ id: string; mfa_enabled: boolean }> {
+/** 绑定动态验证码（新成员 / 重置 MFA 后首次登录必做；需同时输入账号口令，第七轮第 11 条） */
+export function bindMfa(password: string, totp: string): Promise<{ id: string; mfa_enabled: boolean }> {
   return request<{ id: string; mfa_enabled: boolean }>({
     url: '/admin/auth/bind-mfa',
     method: 'POST',
-    data: { totp },
+    data: { password, totp },
   })
 }
 

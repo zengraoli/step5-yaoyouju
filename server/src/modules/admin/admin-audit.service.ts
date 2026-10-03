@@ -193,6 +193,14 @@ export class AdminAuditService {
     if (request.applicant_id === approverId) {
       throw new ApiException(ErrorCode.CONFLICT, '导出申请不能由本人审批，请换一位超级管理员审批');
     }
+    // 审批人不能与申请人有邀请创建关系（含同一个人邀请的账号）：
+    // 否则「超管自建合规账号 → 自己审批 → 用该账号下载全量审计」仍然成立（第七轮第 6 条）
+    if (request.applicant_id && this.invitationRelated(request.applicant_id, approverId)) {
+      throw new ApiException(
+        ErrorCode.FORBIDDEN,
+        '审批人与导出申请人存在邀请创建关系（含同一个人邀请的账号），请换一位与该申请无关的超级管理员审批',
+      );
+    }
     const now = new Date().toISOString();
     this.db.app
       .prepare(`UPDATE audit_export_request SET status = '已批准', approver_id = ?, approved_at = ? WHERE id = ?`)
@@ -268,6 +276,35 @@ export class AdminAuditService {
       total: rows.length,
     });
     return { filename: `yaoyouju-audit-${exportedAt.slice(0, 10)}.json`, body };
+  }
+
+  /**
+   * 两个后台账号是否存在邀请创建关系（任一方向直接邀请，或同一个人邀请的同根账号）。
+   * 用于审计导出审批：自建账号不能审批自己邀请人的申请（第七轮第 6 条）。
+   */
+  private invitationRelated(a: string, b: string): boolean {
+    if (a === b) return true;
+    const createdBy = (id: string): string | null => {
+      const row = this.db.app.prepare('SELECT created_by FROM admin_user WHERE id = ?').get(id) as
+        | { created_by: string | null }
+        | undefined;
+      return row?.created_by ?? null;
+    };
+    const rootOf = (id: string): string | null => {
+      let current: string | null = id;
+      const seen = new Set<string>();
+      for (let depth = 0; depth < 10 && current; depth += 1) {
+        if (seen.has(current)) break;
+        seen.add(current);
+        const parent = createdBy(current);
+        if (!parent) return current;
+        current = parent;
+      }
+      return current;
+    };
+    if (createdBy(a) === b || createdBy(b) === a) return true;
+    const ra = rootOf(a);
+    return ra !== null && ra === rootOf(b);
   }
 
   private loadRequest(id: string): AuditExportRequest {

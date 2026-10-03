@@ -220,24 +220,35 @@ function toHalfDigits(text: string): string {
 }
 
 const CN_NUM: Record<string, string> = {
-  '\u5E7A': '1', '\u3007': '0', '\u96F6': '0', '\u4E00': '1', '\u4E8C': '2', '\u4E24': '2', '\u4E09': '3',
-  '\u56DB': '4', '\u4E94': '5', '\u516D': '6', '\u4E03': '7', '\u516B': '8', '\u4E5D': '9',
+  幺: '1', 一: '1', 壹: '1', 二: '2', 贰: '2', 两: '2', 三: '3', 叁: '3', 四: '4', 肆: '4',
+  五: '5', 伍: '5', 六: '6', 陆: '6', 七: '7', 柒: '7', 八: '8', 捌: '8', 九: '9', 玖: '9',
+  零: '0', 〇: '0', 洞: '0',
 };
 const NUM_CHARS = Object.keys(CN_NUM).join('');
-/** 数字分隔符（空格 / 横线 / 斜杠 / 点 / 全角空格 / 全角横线） */
-const SEP = '[\\s./\\-\u3000\uFF0D]*';
+/** 数字分隔符（空格 / 横线 / 斜杠 / 点 / 下划线 / 间隔号 / 全角逗号括号等） */
+const SEP_SRC = '\\s./\\-\u3000\uFF0D_\u00B7\uFF0C\u3001\uFF08\uFF09\u2014\u2013\uFF0B';
+const SEP = `[${SEP_SRC}]*`;
 /** 单个「数字位」：半角数字或汉字数字 */
 const DIGIT_LIKE = `(?:\\d|[${NUM_CHARS}])`;
+/**
+ * 前后边界：手机号前后不能再紧跟另一个「数字位」。
+ * 否则「13800001111222」（订单号）、「139123456789012」（快递单号）会被部分遮挡（第七轮第 16 条）。
+ */
+const NOT_DIGIT_AFTER = `(?![${SEP_SRC}]?${DIGIT_LIKE})`;
+const NOT_DIGIT_BEFORE = `(?<![${SEP_SRC}]?${DIGIT_LIKE})`;
 /** 大陆手机号（1[3-9] + 9 位），允许分隔符与 +86 前缀 */
 const CN_MOBILE_RE = new RegExp(
-  `(?:\\+?86)?${SEP}(1[3-9]${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d)`,
+  `${NOT_DIGIT_BEFORE}(?:\\+?86)?${SEP}(1[3-9]${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d${SEP}\\d)${NOT_DIGIT_AFTER}`,
 );
-/** 汉字数字手机号（幺/一 + [3-9] + 9 位汉字数字） */
-const CN_MOBILE_CN_RE = new RegExp(`[\u5E7A\u4E00][\u4E09\u56DB\u4E94\u4E03\u516B\u4E5D][${NUM_CHARS}]{9}`);
+/** 汉字数字手机号（幺/一/壹 + [3-9] + 9 位汉字数字；含大写汉字数字与口语「洞」） */
+const CN_MOBILE_CN_RE = new RegExp(
+  `${NOT_DIGIT_BEFORE}[\u5E7A\u4E00\u58F9][\u4E09\u56DB\u4E94\u4E03\u516B\u4E5D\u53C1\u8086\u4F0D\u9646\u67D2\u7396\u62D9][${NUM_CHARS}]{9}${NOT_DIGIT_AFTER}`,
+);
 /** 混合写法手机号（半角数字与汉字数字混排，如「139一二三四9876」） */
 const CN_MOBILE_MIX_RE = new RegExp(
-  `[\u5E7A\u4E001]${SEP}[\u4E09\u56DB\u4E94\u4E03\u516B\u4E5D3-9]${SEP}` +
-    Array.from({ length: 9 }, () => `${DIGIT_LIKE}`).join(SEP),
+  `${NOT_DIGIT_BEFORE}[\u5E7A\u4E001]${SEP}[\u4E09\u56DB\u4E94\u4E03\u516B\u4E5D3-9]${SEP}` +
+    Array.from({ length: 9 }, () => `${DIGIT_LIKE}`).join(SEP) +
+    NOT_DIGIT_AFTER,
 );
 
 /** 把一段「数字位」序列归一成 11 位数字（汉字数字 → 半角） */
@@ -261,6 +272,14 @@ export function maskPhone(text: string): string {
   out = out.replace(new RegExp(CN_MOBILE_CN_RE.source, 'g'), mask);
   out = out.replace(new RegExp(CN_MOBILE_MIX_RE.source, 'g'), mask);
   return out;
+}
+
+/** 严重度中文名（确认单标签不带英文，第七轮验收反馈第 28 条） */
+export function severityLabel(severity: string | null | undefined): string {
+  if (severity === 'high') return '高危';
+  if (severity === 'medium') return '中危';
+  if (severity === 'low') return '低危';
+  return severity || '举报';
 }
 
 /** 用户原始内容里的手机号脱敏（后台拿到授权也不应看到完整手机号） */
@@ -514,7 +533,7 @@ export class FeedbackService {
     const gate = this.confirmations.prepare(
       'feedback.authorize',
       id,
-      `举报原文 #${id.slice(0, 6)} · ${row.severity || '举报'}`,
+      `举报原文 #${id.slice(0, 6)} · ${severityLabel(row.severity)}`,
       input.confirmation_id ? '另一人已确认的单条授权：' + scope : '单条授权：' + scope,
       this.adminById(actorId),
       input.confirmation_id,

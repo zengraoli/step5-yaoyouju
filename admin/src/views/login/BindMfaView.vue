@@ -13,12 +13,17 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const totp = ref('')
+const password = ref('')
 const submitting = ref(false)
 const errorText = ref('')
 const done = ref(false)
 
 async function onSubmit() {
   if (submitting.value) return
+  if (!password.value) {
+    errorText.value = '请输入账号口令（确认是本人操作）'
+    return
+  }
   if (!/^\d{6}$/.test(totp.value.trim())) {
     errorText.value = '请输入 6 位动态验证码'
     return
@@ -26,7 +31,7 @@ async function onSubmit() {
   submitting.value = true
   errorText.value = ''
   try {
-    await auth.bindMfa(totp.value.trim())
+    await auth.bindMfa(password.value, totp.value.trim())
     done.value = true
     setTimeout(() => router.push('/dashboard'), 800)
   } catch (e) {
@@ -45,6 +50,12 @@ async function onSubmit() {
         首次登录需先绑定动态验证码（MFA），绑定后才能操作后台。演示环境使用演示固定码。
       </p>
       <form class="bind-form" @submit.prevent="onSubmit">
+        <label class="field">
+          <span class="field__label">账号口令（再次确认是本人）</span>
+          <span class="field__box">
+            <input v-model="password" class="field__input" type="password" maxlength="100" placeholder="请输入账号口令" />
+          </span>
+        </label>
         <label class="field">
           <span class="field__label">动态验证码</span>
           <span class="field__box">
