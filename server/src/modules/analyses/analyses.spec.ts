@@ -35,6 +35,11 @@ describe('T07 一页分析流水线与 Worker', () => {
   let analyses: AnalysesService;
   let token: string;
   let episodeId: string;
+  let flaggedToken = '';
+  let flaggedEpisodeId = '';
+  let flaggedEpisode2Id = '';
+  let highToken = '';
+  let highEpisodeId = '';
   let dir: string;
   let analysisId = '';
   let cleanEpisodeId = '';
@@ -93,6 +98,20 @@ describe('T07 一页分析流水线与 Worker', () => {
     // 另一个干净病程：前面的用例会写入红旗安全事件，用干净病程验证正常流程
     const ep2 = episodes.create(me.user.id, { title: '久坐腰痛正常流程测试' });
     cleanEpisodeId = ep2.id as string;
+    // 高危红旗专用用户（第七轮第 4 条：命中高危后该账号任何病程都不再生成个性化分析）
+    const flagged = auth.login('13800005678', '123456');
+    flaggedToken = flagged.token;
+    auth.grantConsent(flagged.user.id, '健康信息处理');
+    const ep3 = episodes.create(flagged.user.id, { title: '红旗命中后的第二个病程' });
+    flaggedEpisodeId = ep3.id as string;
+    const ep4 = episodes.create(flagged.user.id, { title: '红旗命中后的第三个病程' });
+    flaggedEpisode2Id = ep4.id as string;
+    // 高危提示专用用户（只验证本次命中的就医提示，不影响 u1 的后续用例）
+    const high = auth.login('13800009999', '123456');
+    highToken = high.token;
+    auth.grantConsent(high.user.id, '健康信息处理');
+    const ep5 = episodes.create(high.user.id, { title: '高危提示测试病程' });
+    highEpisodeId = ep5.id as string;
     episodes.addEvent(me.user.id, cleanEpisodeId, {
       event_type: '症状',
       occurred_at: '2026-09-01',
@@ -123,8 +142,8 @@ describe('T07 一页分析流水线与 Worker', () => {
     const before = countTasks();
     const res = await api()
       .post('/analyses')
-      .set(H())
-      .send({ episode_id: episodeId, symptom_change: '这两天会阴部麻木，伴大小便控制变化' });
+      .set({ Authorization: `Bearer ${highToken}` })
+      .send({ episode_id: highEpisodeId, symptom_change: '这两天会阴部麻木，伴大小便控制变化' });
     expect(res.body.code).toBe(40911); // high → 停止个性化分析
     expect(res.body.data).toBeTruthy();
     expect(res.body.data.title).toBe('需要及时寻求专业帮助');
@@ -140,7 +159,7 @@ describe('T07 一页分析流水线与 Worker', () => {
     // 写入了安全事件
     const ev = db.app
       .prepare('SELECT COUNT(*) AS n FROM safety_event WHERE user_id=?')
-      .get(auth.verifyToken(token)!.id) as { n: number };
+      .get(auth.verifyToken(highToken)!.id) as { n: number };
     expect(ev.n).toBeGreaterThan(0);
   });
 

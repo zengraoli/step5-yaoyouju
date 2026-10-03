@@ -145,6 +145,25 @@ export class SafetyService {
     }));
   }
 
+  /**
+   * 该用户历史上命中过的所有高危红旗（不限病程）。
+   * 产品红线第 3 条：命中高危红旗即停止个性化分析，且不因「换一个病程 / 先问一句再建病程」
+   * 被绕过（验收反馈第 4 条：第二个病程照常生成分析）。
+   */
+  userHighEvents(userId: string): { rule_code: string; severity: string; label: string }[] {
+    const rows = this.db.app
+      .prepare(
+        `SELECT rule_code, severity FROM safety_event
+          WHERE user_id = ? AND severity = 'high' ORDER BY created_at ASC`,
+      )
+      .all(userId) as { rule_code: string; severity: string }[];
+    return rows.map((r) => ({
+      rule_code: r.rule_code,
+      severity: r.severity,
+      label: RED_FLAG_RULES.find((x) => x.code === r.rule_code)?.label ?? r.rule_code,
+    }));
+  }
+
   /** 新建病程时，把之前未关联病程的高危红旗挂到新病程上（红旗不被流程顺序绕过） */
   attachUnlinkedEvents(userId: string, episodeId: string): number {
     const res = this.db.app

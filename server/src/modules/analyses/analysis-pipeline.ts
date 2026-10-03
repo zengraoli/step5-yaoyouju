@@ -173,8 +173,20 @@ function runPipeline(
         )
         .get(episodeId) as { n: number }
     ).n > 0;
-  if (!hasReport) {
-    evidence = evidence.filter((c) => !REPORT_READING_CHUNK.test(c.content));
+  const keepRelevant = (chunks: RetrievedChunk[]): RetrievedChunk[] =>
+    hasReport ? chunks : chunks.filter((c) => !REPORT_READING_CHUNK.test(c.content));
+  evidence = keepRelevant(evidence);
+  // 没有报告、而首检 / 兜底命中的都是「怎么看报告」类片段时，改用症状类检索词再找一次，
+  // 避免普通症状描述的任务被判成「未检索到相关片段」而失败（第七轮验收反馈第 10 条）
+  if (evidence.length === 0 && !hasReport) {
+    const symptomQuery = '腰痛 腰酸 腿麻 发麻 无力 加重 休息 姿势 睡觉 起床 就医 复诊';
+    const retry = evidenceService.search(symptomQuery, 8);
+    const kept = keepRelevant(retry.results);
+    if (kept.length > 0) {
+      outcome = retry;
+      evidence = kept;
+      fallbackQuery = fallbackQuery ?? symptomQuery;
+    }
   }
   if (evidence.length === 0) {
     throw new PipelineError('检索校验失败：证据库内未检索到相关片段');
@@ -184,7 +196,7 @@ function runPipeline(
   const known = buildKnown(db, episodeId);
 
   // 4. 候选视频（受「视频推荐」开关控制）
-  const videos = switchEnabled(db, '视频推荐') ? buildVideoCandidates(db) : [];
+  const videos = switchEnabled(db, '视频推荐') ? buildVideoCandidates(db, hasReport) : [];
 
   // 5. 上下文（缺失信息用于「未知」段，不补写）
   const context = buildContext(db, episodeId, payload);
@@ -305,7 +317,7 @@ function buildKnown(db: DatabaseSync, episodeId: string): KnownItem[] {
     verify_status: string;
   }[];
   return events.map((e) => ({
-    text: `${beijingDate(e.occurred_at)} ${compactKnownText(e.raw_text)}（${e.source_type}，${e.verify_status}）`,
+    text: `${beijingDate(e.occurred_at)} ${compactKnownText(e.raw_text, e.event_type)}（${e.source_type}，${e.verify_status}）`,
     source: e.source_type,
     occurred_at: e.occurred_at,
     verify_status: e.verify_status,
@@ -313,32 +325,50 @@ function buildKnown(db: DatabaseSync, episodeId: string): KnownItem[] {
   }));
 }
 
+/** 已知段单条原文的最大长度（超出截断，完整原文留在「原文对照」里看） */
+const KNOWN_TEXT_MAX = 60;
+
 /**
- * 已知段文案：A02 的结构化摘要按「；」拆开，只保留已回答的项，
- * 不再把整份问卷原文堆在一页分析里（验收反馈第 30 条）。
+ * 已知段文案（第七轮验收反馈第 30 条）：
+ * - A02 的结构化摘要按「；」拆开，只保留已回答的项，不再堆整行问卷；
+ * - 报告原文只放摘要，不把整份报告铺在「当前确认的信息」里；
+ * - 原文开头已带的日期不再重复（「2026-09-20 2026-09-20 MRI」→「2026-09-20 MRI」）。
  */
-function compactKnownText(raw: string | null): string {
-  const text = (raw ?? '').trim();
+function compactKnownText(raw: string | null, eventType?: string): string {
+  let text = (raw ?? '').trim();
   if (!text) return '（无原文）';
-  if (!text.startsWith('关键变化确认')) return text;
-  const parts = text
-    .split('；')
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-  const kept = parts.filter((p) => !p.endsWith('：尚未确认'));
-  return kept.length > 0 ? kept.join('；') : text;
+  // 去掉原文开头自带的日期（与条目前的日期重复）
+  text = text.replace(/^\s*(?:\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?)\s*/, '');
+  if (text.startsWith('关键变化确认')) {
+    const parts = text
+      .split('；')
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0);
+    const kept = parts.filter((p) => !p.endsWith('：尚未确认'));
+    text = kept.length > 0 ? kept.join('；') : text;
+  }
+  if (eventType === '报告' && text.length > KNOWN_TEXT_MAX) {
+    text = `${text.slice(0, KNOWN_TEXT_MAX)}…（完整报告见原文对照）`;
+  }
+  return text || '（无原文）';
 }
 
-/** 候选视频：已发布且未下线的视频内容 */
-function buildVideoCandidates(db: DatabaseSync): VideoItem[] {
+/**
+ * 候选视频：已发布且未下线的视频内容。
+ * 没有录入报告时不推荐「怎么看报告」类视频（第七轮验收反馈第 30 条）。
+ */
+function buildVideoCandidates(db: DatabaseSync, hasReport: boolean): VideoItem[] {
   const rows = db
     .prepare(
-      `SELECT id, title FROM content_item
+      `SELECT id, title, applicable_scope FROM content_item
        WHERE type='视频' AND current_status='已发布' AND offline_switch=0
-       ORDER BY created_at DESC LIMIT 2`,
+       ORDER BY created_at DESC LIMIT 4`,
     )
-    .all() as { id: string; title: string }[];
-  return rows.map((r) => ({
+    .all() as { id: string; title: string; applicable_scope: string | null }[];
+  const picked = (
+    hasReport ? rows : rows.filter((r) => !/报告|影像|片子|术语/.test(r.applicable_scope ?? ''))
+  ).slice(0, 2);
+  return picked.map((r) => ({
     content_item_id: r.id,
     title: r.title,
     reason: '与你当前情况相关的已审核科普视频',
@@ -369,6 +399,7 @@ function buildContext(db: DatabaseSync, episodeId: string, payload: TaskPayload)
     episode_title: ep?.title ?? '',
     leg_change: log?.leg_change ?? null,
     report_describes_leg,
+    has_report: reports.length > 0,
     question: payload.texts?.question,
   };
 }

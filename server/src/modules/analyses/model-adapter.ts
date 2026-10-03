@@ -62,6 +62,8 @@ export interface GenerateContext {
   leg_change?: string | null;
   /** 报告原文是否描述了下肢肌力情况 */
   report_describes_leg: boolean;
+  /** 是否录入了报告（没有报告时不能说「报告未提及」，也不推荐报告解读类视频） */
+  has_report?: boolean;
   /** 本次提交的主要困惑 / 提问（可选） */
   question?: string;
 }
@@ -120,7 +122,10 @@ export class LocalMockAdapter implements LlmAdapter {
 
     // 未知：缺失信息明确标注，绝不下结论
     const unknown: string[] = [];
-    if (!context.report_describes_leg) {
+    if (context.has_report === false) {
+      // 没有录入报告：不能说「报告未提及」（那是已有报告但未描述），只能标尚未确认
+      unknown.push(`下肢肌力情况：${UNCONFIRMED}（尚未录入报告）`);
+    } else if (!context.report_describes_leg) {
       unknown.push(`下肢肌力情况：${REPORT_NOT_MENTIONED}，${UNCONFIRMED}`);
     }
     const leg = context.leg_change;
@@ -129,7 +134,11 @@ export class LocalMockAdapter implements LlmAdapter {
     } else if (leg === '有') {
       unknown.push(`腿部变化与腰部症状的关系：${UNCONFIRMED}`);
     }
-    unknown.push(`当前症状与影像改变的因果关系：${UNCONFIRMED}`);
+    unknown.push(
+      context.has_report === false
+        ? `当前症状的原因：${UNCONFIRMED}`
+        : `当前症状与影像改变的因果关系：${UNCONFIRMED}`,
+    );
 
     // 下一步：可执行的生活任务与复诊问题（不作诊断、不给用药 / 手术建议）
     const next: NextItem[] = [

@@ -305,9 +305,16 @@ describe('T04c 自编语料逐条核对（第六轮验收反馈：换一种说�
     expect(OUT_OF_SCOPE_RULES.some((r) => matchesScopeRule(r, '我昨天走了六千步，腰有点酸'))).toBe(false);
   });
 
-  it('「不会瘫痪吧」走求保证循环而不是一次越界拒答', () => {
+  it('「不会瘫痪吧」走求保证循环；「会不会坐轮椅」走越界拒答（第七轮第 9 条）', () => {
+    // 否定式求助（「不会…吧」）走求保证循环，不做一次越界拒答
     expect(isReassurance('不会瘫痪吧')).toBe(true);
-    expect(isReassurance('会不会以后要坐轮椅')).toBe(true);
+    expect(isReassurance('不会坐轮椅吧')).toBe(true);
     expect(isWorryLoop('大概几周能恢复正常上班')).toBe(true);
+    // 预后类提问（「会不会…」）走越界拒答并转复诊问题，不再被求保证话术接住
+    expect(isReassurance('会不会以后要坐轮椅')).toBe(false);
+    expect(isReassurance('再过几年会不会更严重')).toBe(false);
+    const prognosis = OUT_OF_SCOPE_RULES.find((r) => r.category === '预后')!;
+    expect(matchesScopeRule(prognosis, '会不会以后要坐轮椅')).toBe(true);
+    expect(matchesScopeRule(prognosis, '再过几年会不会更严重')).toBe(true);
   });
 });

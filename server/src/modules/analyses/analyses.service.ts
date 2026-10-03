@@ -73,44 +73,35 @@ export class AnalysesService {
       texts,
     });
 
-    // 1b. 病程内已记录过的 high 级红旗同样要停止个性化分析
-    if (result.safety_flag === 'none') {
-      // 还没有病病程时（先开问答）命中的高危红旗也不能绕过
-      const recorded = [
-        ...this.safety.episodeRedFlagEvents(ep.id as string),
-        ...this.safety.unlinkedHighEvents(userId),
-      ];
-      if (recorded.length > 0) {
-        const notice = this.buildNotice({
-          safety_flag: 'stop_personal',
-          matched: recorded.map((r) => ({
-            rule_code: r.rule_code,
-            label: r.label,
-            severity: 'high',
-            action: '停止个性化分析' as const,
-            advice: '该病程中已记录需要及时就医的信号，请先就医，本产品不再生成个性化分析。',
-            excerpt: '',
-          })),
-          rule_set_version: RULE_SET_VERSION,
-          out_of_scope: null,
-        });
-        this.logger.warn(
-          `[analysis] 病程 ${ep.id} 已记录红旗 ${recorded.map((r) => r.rule_code).join(',')}，停止个性化分析`,
-        );
-        // 与「本次命中」一致：抛 40911 + 就医提示，绝不再生成个性化分析
-        throw new ApiException(
-          ErrorCode.SAFETY_STOP_PERSONAL,
-          notice.matched[0]?.advice,
-          notice,
-        );
-      }
-    }
-
     // 2. 命中 high（停止个性化）→ 不创建任务，返回就医提示（40911，由控制器抛错）
     if (result.safety_flag === 'stop_personal') {
       const notice = this.buildNotice(result);
       const high = result.matched.find((m) => m.severity === 'high') ?? result.matched[0];
       throw new ApiException(ErrorCode.SAFETY_STOP_PERSONAL, high?.advice, notice);
+    }
+
+    // 1b. 该用户历史上命中过的高危红旗：无论本次提交是否再命中、也无论新建了几个病程，
+    //    都停止个性化分析（产品红线第 3 条：红旗不被流程顺序绕过，验收反馈第 4 条）
+    const recorded = this.safety.userHighEvents(userId);
+    if (recorded.length > 0) {
+      const notice = this.buildNotice({
+        safety_flag: 'stop_personal',
+        matched: recorded.map((r) => ({
+          rule_code: r.rule_code,
+          label: r.label,
+          severity: 'high',
+          action: '停止个性化分析' as const,
+          advice: '该账号已记录需要及时就医的信号，请先就医，本产品不再生成个性化分析。',
+          excerpt: '',
+        })),
+        rule_set_version: RULE_SET_VERSION,
+        out_of_scope: null,
+      });
+      this.logger.warn(
+        `[analysis] 用户 ${userId} 已记录高危红旗 ${recorded.map((r) => r.rule_code).join(',')}，停止个性化分析`,
+      );
+      // 与「本次命中」一致：抛 40911 + 就医提示，绝不再生成个性化分析
+      throw new ApiException(ErrorCode.SAFETY_STOP_PERSONAL, notice.matched[0]?.advice, notice);
     }
 
     const safetyNotice = result.safety_flag === 'seek_care' ? this.buildNotice(result) : null;
