@@ -1,9 +1,10 @@
 package com.yaoyouju.android.core.net
 
+import com.yaoyouju.android.ui.screens.safetyNoticeOf
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.MediaType.Companion.toMediaType
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -76,33 +77,50 @@ class ApiErrorHandlingTest {
 
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
 
+    /** 用服务端真实返回体构造 HTTP 错误响应（Retrofit 把错误体放在 errorBody） */
+    private fun <T> errorResponse(raw: String, httpCode: Int): retrofit2.Response<ApiResponse<T>> {
+        val body = okhttp3.ResponseBody.create(
+            "application/json".toMediaType(),
+            raw.toByteArray(),
+        )
+        return retrofit2.Response.error(httpCode, body)
+    }
+
     @Test
     fun `解析 HTTP 409 的 errorBody（业务错误不走兜底文案）`() {
         // 服务端真实返回体（安全规则命中：40911 + 就医提示）
         val raw = """{"code":40911,"data":{"title":"需要及时寻求专业帮助","headline":"建议尽快就医","body":"你提交的内容包含需要尽快就医的信号：大小便控制变化。","matched":[{"rule_code":"RF-03","label":"大小便控制变化","severity":"high","action":"停止个性化分析","advice":"大小便控制出现变化需要尽快由医生评估，请立即就医。","excerpt":"大小便控制变化"}]},"message":"大小便控制出现变化需要尽快由医生评估，请立即就医。"}"""
-        val obj = json.parseToJsonElement(raw).jsonObject
-        val code = obj["code"]!!.jsonPrimitive.content.toInt()
-        val message = obj["message"]!!.jsonPrimitive.content
-        assertEquals(40911, code)
-        assertTrue(message.contains("立即就医"))
-        val notice = json.decodeFromString<EmergencyNotice>(obj["data"]!!.jsonObject.toString())
-        assertEquals("RF-03", notice.matched[0].ruleCode)
-        assertEquals("high", notice.matched[0].severity)
+        // 直接调用产品代码 handleResponse：错误码与中文提示必须保留
+        val ex = runBlocking { runCatching { handleResponse(errorResponse<LoginUser>(raw, 409)) }.exceptionOrNull() }
+        assertTrue(ex is ApiException)
+        ex as ApiException
+        assertEquals(40911, ex.code)
+        assertTrue(ex.message.contains("立即就医"))
+        // 就医提示 data 能被产品代码解析出来（界面据此跳就医提示页）
+        val notice = safetyNoticeOf(ex)
+        requireNotNull(notice)
+        assertEquals("大小便控制变化", notice.first)
+        assertEquals(true, notice.second)
     }
 
     @Test
     fun `解析 HTTP 409 的 errorBody（冷静期未到）`() {
         val raw = """{"code":40900,"data":null,"message":"还在冷静期内（2026-10-04 10:00 之后才能确认删除），可以取消删除"}"""
-        val obj = json.parseToJsonElement(raw).jsonObject
-        assertEquals(40900, obj["code"]!!.jsonPrimitive.content.toInt())
-        assertTrue(obj["message"]!!.jsonPrimitive.content.contains("冷静期"))
+        val ex = runBlocking { runCatching { handleResponse(errorResponse<LoginUser>(raw, 409)) }.exceptionOrNull() }
+        assertTrue(ex is ApiException)
+        ex as ApiException
+        assertEquals(40900, ex.code)
+        assertTrue(ex.message.contains("冷静期"))
     }
 
     @Test
     fun `解析 HTTP 400 的 errorBody（能坐时长超限）`() {
         val raw = """{"code":40000,"data":null,"message":"能坐时长不能大于 1440"}"""
-        val obj = json.parseToJsonElement(raw).jsonObject
-        assertEquals("能坐时长不能大于 1440", obj["message"]!!.jsonPrimitive.content)
+        val ex = runBlocking { runCatching { handleResponse(errorResponse<LoginUser>(raw, 400)) }.exceptionOrNull() }
+        assertTrue(ex is ApiException)
+        ex as ApiException
+        assertEquals(40000, ex.code)
+        assertEquals("能坐时长不能大于 1440", ex.message)
     }
 
     @Test

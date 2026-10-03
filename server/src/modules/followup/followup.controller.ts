@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsArray, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { FollowupService } from './followup.service';
@@ -74,6 +74,18 @@ export class FollowupController {
 @Post(':id/followup-questions')
 addQuestion(@CurrentUser() user: { id: string }, @Param('id') id: string, @Body() dto: AddQuestionDto) {
   return this.followup.addUserQuestion(user.id, id, dto.question);
+}
+
+/** 移除一条复诊问题（一页分析里取消勾选时同步移除） */
+@ApiOperation({ summary: '移除复诊问题（取消勾选时同步移除）' })
+@HttpCode(200)
+@Delete(':id/followup-questions')
+removeQuestion(
+  @CurrentUser() user: { id: string },
+  @Param('id') id: string,
+  @Body() dto: AddQuestionDto,
+) {
+  return this.followup.removeUserQuestion(user.id, id, dto.question);
 }
 
 /** 实时复诊问题清单与条数（不依赖是否已生成摘要；病程页统计用） */

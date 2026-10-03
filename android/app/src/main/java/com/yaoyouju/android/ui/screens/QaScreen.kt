@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -90,6 +91,9 @@ fun QaScreen(navController: NavHostController) {
     var sending by remember { mutableStateOf(false) }
     var contextLabel by remember { mutableStateOf("") }
     var toastText by remember { mutableStateOf("") }
+    /** 没有病程时要加入复诊问题：先确认再建病程（第七轮第 35 条） */
+    var showCreateEpisodeDialog by remember { mutableStateOf(false) }
+    var pendingQuestion by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
     /** 建议问题（按设计稿的示例问题，用户点击即提问） */
@@ -264,18 +268,15 @@ fun QaScreen(navController: NavHostController) {
                         MessageBubble(
                             message = message,
                             onAddFollowup = { text ->
-                                // 写入服务端复诊问题清单（没有病程时先创建一个）
+                                // 写入服务端复诊问题清单。
+                                // 没有病程时先问一句，不静默新建空病程（第七轮第 35 条）
                                 scope.launch {
                                     try {
                                         var episode = handleResponse(episodesApi.list()).firstOrNull()
                                         if (episode == null) {
-                                            episode = handleResponse(
-                                                episodesApi.create(
-                                                    com.yaoyouju.android.core.net.CreateEpisodeRequest(
-                                                        title = "我的腰痛病程",
-                                                    ),
-                                                ),
-                                            )
+                                            pendingQuestion = text
+                                            showCreateEpisodeDialog = true
+                                            return@launch
                                         }
                                         handleResponse(
                                             followupApi.addQuestion(
@@ -362,6 +363,36 @@ fun QaScreen(navController: NavHostController) {
             modifier = Modifier.padding(horizontal = 20.dp),
         )
         Spacer(modifier = Modifier.height(8.dp))
+    }
+
+    if (showCreateEpisodeDialog) {
+        CreateEpisodeForQuestionDialog(
+            question = pendingQuestion,
+            onDismiss = { showCreateEpisodeDialog = false },
+            onConfirm = {
+                showCreateEpisodeDialog = false
+                val text = pendingQuestion
+                pendingQuestion = ""
+                scope.launch {
+                    try {
+                        val created = handleResponse(
+                            episodesApi.create(
+                                com.yaoyouju.android.core.net.CreateEpisodeRequest(title = "我的腰痛病程"),
+                            ),
+                        )
+                        handleResponse(
+                            followupApi.addQuestion(
+                                created.id,
+                                com.yaoyouju.android.core.net.AddFollowupQuestionRequest(text),
+                            ),
+                        )
+                        toastText = "已建立病程并加入复诊问题：$text"
+                    } catch (e: Exception) {
+                        toastText = e.userMessage()
+                    }
+                }
+            },
+        )
     }
 
     if (toastText.isNotBlank()) {
@@ -456,4 +487,31 @@ private fun MessageBubble(
             StatusTag(status = StatusKey.NoDiagnosis)
         }
     }
+}
+
+/** 没有病程时加入复诊问题：先确认是否建立病程（不静默新建，第七轮第 35 条） */
+@Composable
+private fun CreateEpisodeForQuestionDialog(
+    question: String,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("还没有病程记录") },
+        text = {
+            Text(
+                text = "加入复诊问题需要先有一个病程。要现在建立「我的腰痛病程」吗？" +
+                    "（之后可以在「当前关键变化」里补充细节）",
+                fontSize = 13.sp,
+                color = Text2,
+            )
+        },
+        confirmButton = {
+            AppButton(text = "建立病程并加入", type = AppButtonType.Primary, onClick = onConfirm)
+        },
+        dismissButton = {
+            AppButton(text = "取消", type = AppButtonType.Secondary, onClick = onDismiss)
+        },
+    )
 }

@@ -8,6 +8,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.yaoyouju.android.core.net.NetworkModule
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -45,6 +47,12 @@ class ScreenShotsTest {
     private fun navController(): NavHostController {
         val context: Context = ApplicationProvider.getApplicationContext()
         return NavHostController(context)
+    }
+
+    @Before
+    fun disableNetwork() {
+        // 截图测试不访问电脑上的 127.0.0.1:3200：结果不随环境变化（第七轮第 26 条）
+        NetworkModule.useUnreachableBaseUrlForTests()
     }
 
     /** 渲染一个页面并截图 */

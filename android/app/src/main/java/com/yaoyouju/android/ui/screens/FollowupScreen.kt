@@ -108,7 +108,8 @@ fun FollowupScreen(navController: NavHostController) {
                     }
                 }
             } catch (e: Exception) {
-                toastText = e.userMessage()
+                // 断网时进服务不可用页，不要显示「还没有复诊摘要」（第七轮第 21 条）
+                if (!navController.openFallbackOnNetworkError(e)) toastText = e.userMessage()
             } finally {
                 loading = false
             }

@@ -85,6 +85,7 @@ fun AnalysisScreen(
     val analysesApi: AnalysesApi = NetworkModule.api()
     val feedbackApi: com.yaoyouju.android.core.net.FeedbackApi = NetworkModule.api()
     val episodesApi: EpisodesApi = NetworkModule.api()
+    val followupApi: com.yaoyouju.android.core.net.FollowupApi = NetworkModule.api()
     val scope = rememberCoroutineScope()
 
     var analysis by remember { mutableStateOf<AnalysisView?>(null) }
@@ -131,17 +132,25 @@ fun AnalysisScreen(
                 loading = false
             }
         } else {
-            // 没有带任务 / 分析 ID：直接加载该病程最新一页分析（从首页 / 病程 / 困惑页进入）
+            // 没有带任务 / 分析 ID：加载该病程最新一页分析（从首页 / 病程 / 困惑页进入）。
+            // 刚提交任务时可能还没有结果：轮询一会儿，不要立刻显示「还没有一页分析」（第七轮第 23 条）
             try {
                 val episodes = handleResponse(episodesApi.list())
                 val active = episodes.firstOrNull()?.id
-                if (active != null) {
-                    analysis = handleResponse(analysesApi.latestByEpisode(active))
-                    if (analysis == null) {
+                if (active == null) {
+                    errorText = "还没有病程记录"
+                } else {
+                    var latest = handleResponse(analysesApi.latestByEpisode(active))
+                    var waited = 0
+                    while (latest == null && waited < 30) {
+                        delay(2000)
+                        waited += 2
+                        latest = handleResponse(analysesApi.latestByEpisode(active))
+                    }
+                    analysis = latest
+                    if (latest == null) {
                         errorText = "还没有一页分析，请从核对信息页生成"
                     }
-                } else {
-                    errorText = "还没有病程记录"
                 }
             } catch (e: Exception) {
                 errorText = e.userMessage()
@@ -206,6 +215,35 @@ fun AnalysisScreen(
                 type = NoticeType.Error,
                 text = "本页内容由系统生成，仅供参考，不作诊断，不提供处方或手术判断。",
             )
+
+            // 安全标记为「建议就医」时展示就医提示（不是只有通用免责声明，第七轮第 23 条）
+            if (analysis?.safetyFlag == "seek_care" || analysis?.safetyFlag == "stop_personal") {
+                Spacer(modifier = Modifier.height(8.dp))
+                AppCard(
+                    background = ErrorLight,
+                    borderColor = Error,
+                    modifier = Modifier.clickable {
+                        navController.navigate(
+                            Routes.EMERGENCY + "?stop=" + if (analysis?.safetyFlag == "stop_personal") "1" else "0",
+                        )
+                    },
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = if (analysis?.safetyFlag == "stop_personal") "建议尽快就医" else "建议及时就医评估",
+                            fontSize = 15.sp,
+                            color = Error,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "这一版分析命中了需要医生及时评估的信号。点击查看就医提示（含就诊可带资料）。",
+                            fontSize = 12.sp,
+                            color = Text2,
+                            lineHeight = 19.sp,
+                        )
+                    }
+                }
+            }
 
             if (loading) {
                 Box(
@@ -333,6 +371,35 @@ fun AnalysisScreen(
                                 } else {
                                     checkedQuestions + index
                                 }
+                                // 勾选 / 取消勾选都同步到服务端复诊问题清单（不再只改本地，第七轮第 19 条）
+                                val questionText = item.text
+                                scope.launch {
+                                    try {
+                                        val eps = handleResponse(episodesApi.list())
+                                        val epId = eps.firstOrNull()?.id
+                                        if (epId != null) {
+                                            if (checked) {
+                                                handleResponse(
+                                                    followupApi.removeQuestion(
+                                                        epId,
+                                                        com.yaoyouju.android.core.net.AddFollowupQuestionRequest(questionText),
+                                                    ),
+                                                )
+                                                toastText = "已从复诊问题清单移除"
+                                            } else {
+                                                handleResponse(
+                                                    followupApi.addQuestion(
+                                                        epId,
+                                                        com.yaoyouju.android.core.net.AddFollowupQuestionRequest(questionText),
+                                                    ),
+                                                )
+                                                toastText = "已加入复诊问题：$questionText"
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        toastText = e.userMessage()
+                                    }
+                                }
                             }
                             .padding(vertical = 10.dp, horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -369,9 +436,24 @@ fun AnalysisScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     SectionTitle(index = 5, title = "可选科普视频")
                     sections.videos.forEach { video ->
-                        AppCard(modifier = Modifier.padding(bottom = 8.dp)) {
+                        // 视频卡片可点击进入内容详情（第七轮第 17 条：之前点了没反应）
+                        AppCard(
+                            modifier = Modifier
+                                .padding(bottom = 8.dp)
+                                .clickable {
+                                    navController.navigate(Routes.CONTENT_DETAIL + "?contentId=" + video.contentItemId)
+                                },
+                        ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                Text(text = video.title, fontSize = 13.sp, color = Text1)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = video.title,
+                                        fontSize = 13.sp,
+                                        color = Text1,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(text = "查看 ›", fontSize = 11.sp, color = Primary)
+                                }
                                 if (video.reason.isNotBlank()) {
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(

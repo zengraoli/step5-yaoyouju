@@ -70,6 +70,7 @@ import kotlinx.coroutines.launch
  * - 不会把报告中未描述的内容写成「已排除」；
  * - 本步可跳过（跳过不写入任何报告，也不当作「没有报告」）。
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ReportInputScreen(navController: NavHostController) {
     val reportsApi: ReportsApi = NetworkModule.api()
@@ -395,8 +396,11 @@ fun ReportInputScreen(navController: NavHostController) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 快捷标签
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // 快捷标签：用 FlowRow 自动换行，窄屏不会竖排四行（第七轮第 34 条）
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 adviceChips.forEach { chip ->
                     Text(
                         text = chip,

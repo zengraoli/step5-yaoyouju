@@ -232,7 +232,9 @@ export class FollowupService {
     const fmt = format as ExportFormat;
     const content = this.parseContent(row.content);
     const exportedAt = new Date().toISOString();
-    const text = fmt === '文本' ? this.renderText(content) : this.renderBrowserPrintNote(fmt);
+    // 所有格式都返回摘要正文：Android 端要真实生成 PDF / 图片文件（第七轮验收反馈第 20 条），
+    // Web / App H5 仍用浏览器打印；「由浏览器打印生成」只作为 note 提示，不再顶替正文。
+    const text = this.renderText(content);
     this.db.app
       .prepare('UPDATE followup_summary SET export_format = ?, exported_at = ? WHERE id = ?')
       .run(fmt, exportedAt, summaryId);
@@ -248,7 +250,7 @@ export class FollowupService {
       note:
         fmt === '文本'
           ? '已生成可复制的纯文本，可粘贴给医生或自行保存'
-          : `演示实现：${fmt} 通过浏览器打印生成，不服务端生成`,
+          : `已生成含摘要正文的${fmt}内容；Web / App（H5）也可用浏览器打印另存为${fmt}`,
     };
   }
 
@@ -302,6 +304,19 @@ export class FollowupService {
       .run(id, episodeId, text, new Date().toISOString());
     this.logger.log(`[followup] 用户加入复诊问题 ${id.slice(0, 8)}…`);
     return { id };
+  }
+
+  /** 移除一条用户主动加入的复诊问题（取消勾选时调用；写审计由控制器负责） */
+  removeUserQuestion(userId: string, episodeId: string, question: string): { removed: number } {
+    this.ownedEpisode(userId, episodeId);
+    const text = (question ?? '').trim();
+    if (!text) throw new ApiException(ErrorCode.BAD_REQUEST, '问题内容不能为空');
+    const res = this.db.app
+      .prepare('DELETE FROM followup_question WHERE episode_id = ? AND question = ?')
+      .run(episodeId, text);
+    const removed = Number(res.changes ?? 0);
+    this.logger.log(`[followup] 用户移除复诊问题 ${removed} 条（episode ${episodeId.slice(0, 8)}…）`);
+    return { removed };
   }
 
   /** 实时复诊问题清单（不依赖是否已生成摘要）：用于病程页统计条数（验收反馈第 35 条） */

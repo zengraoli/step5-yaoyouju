@@ -22,12 +22,15 @@ import com.yaoyouju.android.ui.theme.YaoyoujuTheme
 
 /**
  * 单 Activity + Compose Navigation。
- * deep link：yaoyouju://A07 直接打开对应设计稿编号的页面（adb 测试用）。
+ * deep link：yaoyoujuapp://A07 直接打开对应设计稿编号的页面（adb 测试用）。
  */
 class MainActivity : ComponentActivity() {
 
     private val deepLinkRoute = mutableStateOf<String?>(null)
-    /** deep link 序号：同一页面重复打开也要能重新跳转（结构相等不会触发重组，验收反馈第 39 条） */
+    /**
+     * deep link 序号：同一页面重复打开也要能重新跳转。
+     * 只靠路由名做 LaunchedEffect 的 key 时，第二次打开同一个链接值不变、不会重组（第七轮第 33 条）。
+     */
     private val deepLinkNonce = mutableStateOf(0L)
     /** 本地令牌（null = 尚未读取；空串 = 未登录） */
     private val savedToken = mutableStateOf<String?>(null)
@@ -61,6 +64,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     YaoyoujuApp(
                         deepLinkRoute = deepLinkRoute.value,
+                        deepLinkNonce = deepLinkNonce.value,
                         startDestination = if (token.isBlank()) Routes.LOGIN else Routes.HOME,
                     )
                 }
@@ -78,6 +82,7 @@ class MainActivity : ComponentActivity() {
         val target = DeepLinks.parse(intent?.data?.toString())
         if (target != null) {
             deepLinkRoute.value = target.route
+            deepLinkNonce.value += 1
         }
     }
 }

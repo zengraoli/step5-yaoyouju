@@ -36,7 +36,7 @@ server 启动方式见 `server/README.md`（`npm run dev`，端口 3200）。
 ## Deep link（测试时直接打开页面）
 
 ```bash
-adb shell am start -a android.intent.action.VIEW -d "yaoyouju://A07"
+adb shell am start -a android.intent.action.VIEW -d "yaoyoujuapp://A07"
 ```
 
 支持的编号（对应设计稿）：
@@ -71,7 +71,7 @@ app/src/main/java/com/yaoyouju/android/
 ├── core/
 │   ├── net/                   Retrofit 接口、统一响应解析、错误模型
 │   ├── datastore/             令牌与基地址持久化
-│   └── deepLink/              yaoyouju://<编号> → 路由映射
+│   └── deepLink/              yaoyoujuapp://<编号> → 路由映射
 └── ui/
     ├── theme/                 Material 3 主题（色彩令牌 / 字体 / 圆角）
     ├── components/            按钮 / 芯片 / 状态标签 / 提示条 / 卡片 / 底部导航

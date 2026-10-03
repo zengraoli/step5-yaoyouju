@@ -45,6 +45,8 @@ private val BOTTOM_ROUTES = setOf(
 @Composable
 fun YaoyoujuApp(
     deepLinkRoute: String? = null,
+    /** deep link 序号：同一页面重复打开也要能重新跳转（第七轮第 33 条） */
+    deepLinkNonce: Long = 0,
     startDestination: String = Routes.HOME,
 ) {
     val navController = rememberNavController()
@@ -174,9 +176,10 @@ fun YaoyoujuApp(
     // 必须在图设置完成之后再跳转：组合期直接 navigate 会抛
     // "Navigation graph has not been set for NavController"（验收反馈第 19 条）。
     // 注意：带查询参数的路由要补全参数后再跳转，否则 getBackStackEntry 找不到目标。
-    LaunchedEffect(deepLinkRoute) {
+    LaunchedEffect(deepLinkRoute, deepLinkNonce) {
         val target = deepLinkRoute ?: return@LaunchedEffect
         val full = DEEP_LINK_ROUTES[target] ?: target
+        // 运行中第二次打开同一个 deep link：nonce 变化会重新触发，从而真正跳转（第七轮第 33 条）
         navController.navigate(full) { launchSingleTop = true }
     }
 }

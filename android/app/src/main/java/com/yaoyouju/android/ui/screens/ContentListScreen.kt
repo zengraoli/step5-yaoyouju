@@ -88,8 +88,9 @@ fun ContentListScreen(navController: NavHostController) {
         scope.launch {
             try {
                 items = handleResponse(contentsApi.list(filter.second))
-            } catch (_: Exception) {
-                items = emptyList()
+            } catch (e: Exception) {
+                // 断网时进服务不可用页，不要显示「暂无内容」（第七轮第 21 条）
+                if (!navController.openFallbackOnNetworkError(e)) items = emptyList()
             } finally {
                 loading = false
             }

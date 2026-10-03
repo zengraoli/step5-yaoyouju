@@ -7,6 +7,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import AppNotice from '@/components/AppNotice.vue'
 import { getEmergencyNotice } from '@/api/safety'
+import { FALLBACK_NOTICE_BODY } from './noticeFallback'
 import { getEpisode, listEpisodes } from '@/api/episodes'
 import { beijingDate } from '@/utils/date'
 import { STORAGE_KEYS } from '@/utils/constants'
@@ -28,7 +29,7 @@ interface EmergencyNotice {
 const FALLBACK: EmergencyNotice = {
   title: '需要及时寻求专业帮助',
   headline: '建议尽快就医',
-  body: '如果你出现了需要医生及时评估的变化，请尽快就医。这类提示不会被登录、付费或上传阻断；本产品无法替你判断严重程度，不作诊断。',
+  body: FALLBACK_NOTICE_BODY,
   offline_note: '本页在网络异常时也可查看。',
   actions: [
     { type: 'call', label: '拨打 120 / 前往急诊' },

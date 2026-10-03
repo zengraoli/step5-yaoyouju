@@ -138,20 +138,8 @@ fun TodayScreen(navController: NavHostController) {
                     topWorry = topWorry.ifBlank { null },
                 )
                 val log = handleResponse(episodesApi.saveTodayLog(episode.id, body))
-                // 命中红旗：记录仍然保存，但立刻给出就医提示（产品红线）
-                val notice = log.safetyNotice
-                if (notice != null && notice.matched.isNotEmpty()) {
-                    val labels = notice.matched.joinToString("、") { it.label }
-                    val stop = notice.matched.any { it.severity == "high" }
-                    toastText = "${notice.headline}：$labels"
-                    safetySignals = labels
-                    safetyStop = stop
-                    safetyNoticeTitle = notice.title
-                    safetyBody = notice.body
-                    showEmergency = true
-                    return@launch
-                }
-                // 「与昨天相比」与「今天做了什么」作为自述事件保存
+                // 「与昨天相比」与「今天做了什么」作为自述事件保存。
+                // 必须先落库再判断红旗：命中红旗时同一次填写的内容也不能丢（第七轮第 35 条）
                 val occurredAt = java.time.Instant.now().toString()
                 if (compareYesterday.isNotBlank()) {
                     handleResponse(
@@ -180,6 +168,18 @@ fun TodayScreen(navController: NavHostController) {
                             ),
                         ),
                     )
+                }
+                // 命中红旗：记录已全部保存，再立刻给出就医提示（产品红线：不被任何流程阻断）
+                val notice = log.safetyNotice
+                if (notice != null && notice.matched.isNotEmpty()) {
+                    val labels = notice.matched.joinToString("、") { it.label }
+                    val stop = notice.matched.any { it.severity == "high" }
+                    safetySignals = labels
+                    safetyStop = stop
+                    safetyNoticeTitle = notice.title
+                    safetyBody = notice.body
+                    showEmergency = true
+                    return@launch
                 }
                 toastText = if (skipped) "已跳过今天（不会当作没有症状）" else "已保存今天的记录"
                 navController.popBackStack()

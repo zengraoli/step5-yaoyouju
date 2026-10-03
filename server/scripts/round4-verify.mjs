@@ -156,7 +156,7 @@ async function main() {
   const clinician2Name = 'clinician2' + Date.now().toString().slice(-6)
   await req('/admin/users', 'POST', { name: clinician2Name, role: '临床审核', password: '123456789' }, super1)
   const clinician2 = await adminLogin(clinician2Name, '123456789')
-  await req('/admin/auth/bind-mfa', 'POST', { totp: ADMIN_TOTP }, clinician2)
+  await req('/admin/auth/bind-mfa', 'POST', { password: '123456789', totp: ADMIN_TOTP }, clinician2)
   const sameRole = await req(`/admin/confirmations/${cid}/approve`, 'POST', {}, clinician2)
   check('同一角色（另一名临床审核）不能确认', sameRole.body.code === 40900, sameRole.body.message)
   const superApprove = await req(`/admin/confirmations/${cid}/approve`, 'POST', {}, super1)
@@ -211,7 +211,7 @@ async function main() {
   const newToken = await adminLogin(newName, '123456789')
   const confirmTry = await req('/admin/confirmations', 'GET', null, newToken)
   check('未绑定 MFA 的新账号不能操作后台（40300）', confirmTry.body.code === 40300, confirmTry.body.message)
-  const bind = await req('/admin/auth/bind-mfa', 'POST', { totp: ADMIN_TOTP }, newToken)
+  const bind = await req('/admin/auth/bind-mfa', 'POST', { password: '123456789', totp: ADMIN_TOTP }, newToken)
   // 绑定后业务接口立即可用
   const afterBindConfirm = await req('/admin/confirmations', 'GET', null, newToken)
   check('绑定 MFA 后业务接口可用', afterBindConfirm.body.code === 0, afterBindConfirm.body.message)

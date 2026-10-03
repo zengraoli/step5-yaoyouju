@@ -1,6 +1,7 @@
 package com.yaoyouju.android.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +50,7 @@ import com.yaoyouju.android.ui.components.AppChip
 import com.yaoyouju.android.ui.components.AppNotice
 import com.yaoyouju.android.ui.components.NoticeType
 import com.yaoyouju.android.ui.navigation.Routes
+import com.yaoyouju.android.ui.theme.Border
 import com.yaoyouju.android.ui.theme.Error
 import com.yaoyouju.android.ui.theme.ErrorLight
 import com.yaoyouju.android.ui.theme.Primary
@@ -90,6 +92,8 @@ fun ChangeScreen(navController: NavHostController) {
 
     var submitting by remember { mutableStateOf(false) }
     var toastText by remember { mutableStateOf("") }
+    /** 本次 A02 是否已经写过「关键变化确认」事件（勾选红旗 / 提交只写一次，第七轮第 32 条） */
+    var answeredWritten by remember { mutableStateOf(false) }
 
     // 红旗选项（与 server 安全规则 RF-xx 对应；逻辑见 RedFlagOptions，单元测试直接验证）
     val redFlagOptions = RedFlagOptions.all
@@ -107,15 +111,22 @@ fun ChangeScreen(navController: NavHostController) {
     /** 取进行中的病程；没有则按第 4 题答案创建（缺失不默认阴性） */
     suspend fun ensureEpisode(): String? {
         val episodes = handleResponse(episodesApi.list())
-        val existing = episodes.firstOrNull()?.id
+        val existing = episodes.firstOrNull()
         if (existing != null) {
-            handleResponse(
-                episodesApi.update(
-                    existing,
-                    UpdateEpisodeRequest(onsetDate = onsetDateOf(onset), onsetCertainty = "尚未确认"),
-                ),
-            )
-            return existing
+            // 只在这次真的回答了起病时间时更新；不把已确认的起病信息改回「尚未确认」（第七轮第 32 条）
+            val date = onsetDateOf(onset)
+            when {
+                date != null -> handleResponse(
+                    episodesApi.update(
+                        existing.id,
+                        UpdateEpisodeRequest(onsetDate = date, onsetCertainty = "已确认"),
+                    ),
+                )
+                onset != null && existing.onsetCertainty != "已确认" -> handleResponse(
+                    episodesApi.update(existing.id, UpdateEpisodeRequest(onsetCertainty = "尚未确认")),
+                )
+            }
+            return existing.id
         }
         val created = handleResponse(
             episodesApi.create(
@@ -131,19 +142,23 @@ fun ChangeScreen(navController: NavHostController) {
         scope.launch {
             try {
                 // 命中红旗：先把这次确认写进病程（服务端据此记录安全事件、之后拦下该病程的分析），
-                // 再跳就医提示（产品红线：命中即提示，且不能被流程顺序绕过）
+                // 再跳就医提示（产品红线：命中即提示，且不能被流程顺序绕过）。
+                // 勾选红旗时已经写过一次，这里不重复写（第七轮第 32 条）
                 val flags = RedFlagOptions.all.filter { redFlags.contains(it.key) }
                 val high = flags.any { it.severity == "high" }
                 val episodeId = ensureEpisode() ?: return@launch
-                writeEvents(
-                    episodesApi,
-                    episodeId,
-                    change,
-                    side,
-                    onset,
-                    RedFlagOptions.matchTextsOf(redFlags),
-                    RedFlagOptions.labelsOf(redFlags),
-                )
+                if (!answeredWritten) {
+                    writeEvents(
+                        episodesApi,
+                        episodeId,
+                        change,
+                        side,
+                        onset,
+                        RedFlagOptions.matchTextsOf(redFlags),
+                        RedFlagOptions.labelsOf(redFlags),
+                    )
+                    answeredWritten = true
+                }
                 if (flags.isNotEmpty()) {
                     navController.navigate(
                         Routes.EMERGENCY + "?signals=" +
@@ -272,10 +287,11 @@ fun ChangeScreen(navController: NavHostController) {
                                 next.remove(redFlagUnsure)
                             }
                             redFlags = next
-                            // 红旗优先：勾选即跳转
+                            // 红旗优先：勾选即跳转就医提示。这一题答案写一次病程（submit 里也会写），
+                            // 不再每勾一次就追加一条「关键变化确认」事件（第七轮第 32 条）
                             scope.launch {
                                 val episodeId = runCatching { ensureEpisode() }.getOrNull()
-                                if (episodeId != null) {
+                                if (episodeId != null && !answeredWritten) {
                                     runCatching {
                                         writeEvents(
                                             episodesApi,
@@ -286,6 +302,7 @@ fun ChangeScreen(navController: NavHostController) {
                                             RedFlagOptions.matchTextsOf(redFlags),
                                             RedFlagOptions.labelsOf(redFlags),
                                         )
+                                        answeredWritten = true
                                     }
                                 }
                                 navController.navigate(
@@ -417,7 +434,7 @@ private fun QuestionTitle(index: Int, text: String) {
     }
 }
 
-/** 多选行（红旗项用危险色） */
+/** 多选行（红旗项用危险色；设计稿 A02：卡片 + 左侧复选框，未勾选也要看到方框） */
 @Composable
 private fun MultiSelectRow(
     text: String,
@@ -429,7 +446,16 @@ private fun MultiSelectRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(if (danger && checked) ErrorLight else Surface)
+            .background(if (danger && checked) ErrorLight else if (checked) PrimaryLight else Surface)
+            .border(
+                width = 1.dp,
+                color = when {
+                    danger && checked -> Error
+                    checked -> Primary
+                    else -> Border
+                },
+                shape = RoundedCornerShape(10.dp),
+            )
             .clickable { onToggle() }
             .padding(vertical = 12.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -444,6 +470,15 @@ private fun MultiSelectRow(
                         checked -> Primary
                         else -> Surface
                     },
+                )
+                .border(
+                    width = 1.5.dp,
+                    color = when {
+                        danger && checked -> Error
+                        checked -> Primary
+                        else -> Text3
+                    },
+                    shape = RoundedCornerShape(5.dp),
                 ),
             contentAlignment = Alignment.Center,
         ) {

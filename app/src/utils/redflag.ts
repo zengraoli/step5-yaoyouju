@@ -50,8 +50,9 @@ export const RED_FLAG_OPTIONS: RedFlagOption[] = [
   {
     key: 'fever',
     label: '发热、夜间痛持续不缓解或体重明显下降',
-    signal: '伴发热',
-    match: '腰痛伴发热',
+    // 信号名与选项文案一致：勾了这一项可能涉及三种情况，不能只写成「伴发热」（第七轮第 32 条）
+    signal: '发热、夜间痛持续不缓解或体重明显下降',
+    match: '发热、夜间痛持续不缓解或体重明显下降',
     severity: 'medium',
   },
 ]

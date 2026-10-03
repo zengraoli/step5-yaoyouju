@@ -137,12 +137,13 @@ fun EmergencyScreen(
         signals.split(",").map { it.trim() }.filter { it.isNotBlank() }
     }
 
-    // 静态兜底内容（与接口返回一致的演示文案；本页不被网络阻断）
+    // 静态兜底内容（与接口返回一致的演示文案；本页不被网络阻断）。
+    // 不能写「你刚才选择了…」：用户可能只是直接打开本页（第七轮第 31 条）。
     val fallback = remember {
         EmergencyNotice(
             title = "需要及时寻求专业帮助",
             headline = "建议尽快就医",
-            body = "你刚才选择了需要医生及时评估的变化。这类变化需要医生及时评估，本产品无法替你判断严重程度，本轮不会生成个性化分析。",
+            body = "如果你出现了需要医生及时评估的变化，请尽快就医。这类提示不会被登录、付费或上传阻断；本产品无法替你判断严重程度，不作诊断。",
             offlineNote = "本页在网络异常时也可查看。",
             actions = listOf(
                 EmergencyAction("call", "拨打 120 / 前往急诊"),
@@ -161,7 +162,13 @@ fun EmergencyScreen(
 
     LaunchedEffect(Unit) {
         try {
-            notice = handleResponse(safetyApi.emergencyNotice())
+            // 命中的信号随请求带入：正文由服务端统一生成，不在本地拼（第七轮第 31 条）
+            notice = handleResponse(
+                safetyApi.emergencyNotice(
+                    signals = signalList.joinToString("、").ifBlank { null },
+                    stop = if (stop) "1" else null,
+                ),
+            )
         } catch (e: Exception) {
             offline = true
             notice = fallback
@@ -238,10 +245,10 @@ fun EmergencyScreen(
                             lineHeight = 30.sp,
                         )
                         Spacer(modifier = Modifier.height(12.dp))
-                        // 你刚才选择了：…
-                        if (signalList.isNotEmpty()) {
+                        // 命中的信号：在线时正文已由服务端生成；断网兜底时在本地补一行（第七轮第 31 条）
+                        if (signalList.isNotEmpty() && offline) {
                             Text(
-                                text = "你刚才选择了：" + signalList.joinToString("、"),
+                                text = "本次录入的内容包含：" + signalList.joinToString("、"),
                                 fontSize = 13.sp,
                                 color = Text2,
                             )

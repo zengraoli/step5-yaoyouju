@@ -52,9 +52,20 @@ object NetworkModule {
             .build()
     }
 
+    /**
+     * 测试专用基地址：把基地址换成本机肯定不会监听的端口，
+     * 让截图测试不依赖「电脑上是否正好跑着 server」（第七轮验收反馈第 26 条）。
+     */
+    @Volatile
+    private var testBaseUrl: String? = null
+
+    fun useUnreachableBaseUrlForTests() {
+        testBaseUrl = "http://127.0.0.1:1/"
+    }
+
     val retrofit: Retrofit by lazy {
         Retrofit.Builder()
-            .baseUrl(BuildConfig.API_BASE_URL.trimEnd('/') + "/")
+            .baseUrl((testBaseUrl ?: BuildConfig.API_BASE_URL).trimEnd('/') + "/")
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()

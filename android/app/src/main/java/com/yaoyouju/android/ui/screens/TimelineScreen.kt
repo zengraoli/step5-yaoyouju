@@ -91,8 +91,9 @@ fun TimelineScreen(navController: NavHostController) {
                 todayRecorded = today
                 loading = false
             },
-            onError = { message ->
-                toastText = message
+            onError = { e ->
+                // 断网时进服务不可用页，不要把「还没有病程记录」当成没有数据（第七轮第 21 条）
+                if (!navController.openFallbackOnNetworkError(e)) toastText = e.userMessage()
                 loading = false
             },
         )
@@ -359,7 +360,7 @@ private fun loadTimelineData(
     scope: kotlinx.coroutines.CoroutineScope,
     episodesApi: EpisodesApi,
     onResult: (List<TimelineGroup>, Boolean?) -> Unit,
-    onError: (String) -> Unit,
+    onError: (Throwable) -> Unit,
 ) {
     scope.launch {
         try {
@@ -377,7 +378,7 @@ private fun loadTimelineData(
             }
             onResult(timeline, today)
         } catch (e: Exception) {
-            onError(e.userMessage())
+            onError(e)
         }
     }
 }

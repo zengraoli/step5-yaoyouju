@@ -5,7 +5,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -136,6 +138,16 @@ data class TimelineGroup(
 data class StructuredResponse(
     val items: List<StructuredItem> = emptyList(),
     val summary: StructuredSummary = StructuredSummary(),
+    /** 侧别等冲突（报告 vs 自述）：需要用户确认后才能生成分析（第七轮第 25 条） */
+    val conflicts: List<StructuredConflict> = emptyList(),
+)
+
+@Serializable
+data class StructuredConflict(
+    val kind: String = "",
+    val message: String = "",
+    @SerialName("report_side") val reportSide: String = "",
+    @SerialName("self_side") val selfSide: String = "",
 )
 
 @Serializable
@@ -502,10 +514,20 @@ interface FollowupApi {
         @Path("id") id: String,
         @Body body: AddFollowupQuestionRequest,
     ): Response<ApiResponse<FollowupQuestionResult>>
+
+    /** 移除一条复诊问题（一页分析里取消勾选时同步移除） */
+    @HTTP(method = "DELETE", path = "episodes/{id}/followup-questions", hasBody = true)
+    suspend fun removeQuestion(
+        @Path("id") id: String,
+        @Body body: AddFollowupQuestionRequest,
+    ): Response<ApiResponse<RemoveQuestionResult>>
 }
 
 @Serializable
 data class FollowupQuestionResult(val id: String = "")
+
+@Serializable
+data class RemoveQuestionResult(val removed: Int = 0)
 
 @Serializable
 data class FollowupSummaryView(

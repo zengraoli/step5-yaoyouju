@@ -105,7 +105,10 @@ data class SafetyNotice(
 /** 就医提示（公开接口，无需登录；R03：不被登录阻断） */
 interface SafetyApi {
     @retrofit2.http.GET("safety/emergency-notice")
-    suspend fun emergencyNotice(): retrofit2.Response<ApiResponse<EmergencyNotice>>
+    suspend fun emergencyNotice(
+        @retrofit2.http.Query("signals") signals: String? = null,
+        @retrofit2.http.Query("stop") stop: String? = null,
+    ): retrofit2.Response<ApiResponse<EmergencyNotice>>
 }
 
 /** 功能开关（公开读取） */

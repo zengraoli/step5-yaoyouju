@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.AuthApi
 import com.yaoyouju.android.core.net.ConsentItem
+import com.yaoyouju.android.core.net.DeletionStatus
 import com.yaoyouju.android.core.net.NetworkModule
 import com.yaoyouju.android.core.net.SafetyApi
 import com.yaoyouju.android.core.net.TokenProvider
@@ -92,6 +93,12 @@ fun MineScreen(navController: NavHostController) {
     var revokeTarget by remember { mutableStateOf<String?>(null) }
     /** 最近一次导出的文件（用于分享） */
     var exportedFile by remember { mutableStateOf<java.io.File?>(null) }
+    /** 待执行的删除申请（含生效时间；重启后从 /auth/me 恢复，第七轮第 24 条） */
+    var pendingDeletion by remember { mutableStateOf<DeletionStatus?>(null) }
+    /** 删除流程步骤：0 未开始 / 1 填手机号与验证码 / 2 冷静期（可取消，到期才可确认） */
+    var deleteStep by remember { mutableStateOf(0) }
+    var deletePhone by remember { mutableStateOf("") }
+    var deleteCode by remember { mutableStateOf("") }
 
     /** 版本信息（按设计稿） */
     val versionInfo = "App v0.1.0 · 规则集版本见「一页分析」的来源信息"
@@ -111,8 +118,16 @@ fun MineScreen(navController: NavHostController) {
                 val me = handleResponse(authApi.me())
                 phoneMasked = me.phoneMasked
                 consents = handleResponse(authApi.consents())
+                // 待执行的删除申请：重启后仍要能看到生效时间（可取消）（第七轮第 24 条）
+                me.deletion?.let { d ->
+                    if (d.status == "冷静期中" || d.status == "已申请") {
+                        pendingDeletion = d
+                        deleteStep = 2
+                    }
+                }
             } catch (e: Exception) {
-                toastText = e.userMessage()
+                // 断网时进服务不可用页，不要显示「手机号未确认 / 还没有同意记录」（第七轮第 21 条）
+                if (!navController.openFallbackOnNetworkError(e)) toastText = e.userMessage()
             } finally {
                 loading = false
             }
@@ -297,8 +312,6 @@ fun MineScreen(navController: NavHostController) {
                     // 数据操作
                     Text(text = "数据", fontSize = 15.sp, color = Text1)
                     Spacer(modifier = Modifier.height(10.dp))
-                    var deleteStep by remember { mutableStateOf(0) }
-                    var deletePhone by remember { mutableStateOf("") }
                     val demoCode = "123456"
 
                     AppButton(
@@ -330,11 +343,17 @@ fun MineScreen(navController: NavHostController) {
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     if (deleteStep > 0) {
+                        val pending = pendingDeletion
                         AppNotice(
                             type = NoticeType.Warn,
                             text = when (deleteStep) {
-                                1 -> "请输入注册手机号（演示验证码 $demoCode），提交后进入 24 小时冷静期。"
-                                else -> "冷静期内可以取消；到期后才能确认删除。"
+                                1 -> "请输入注册手机号与短信验证码（演示验证码 $demoCode），提交后进入 24 小时冷静期。"
+                                else -> if (pending != null && pending.effectiveAt.isNotBlank()) {
+                                    "删除申请已提交，" + BjTime.dateTime(pending.effectiveAt) +
+                                        "（北京时间）之后才能确认删除；冷静期内可以取消。"
+                                } else {
+                                    "冷静期内可以取消；到期后才能确认删除。"
+                                }
                             },
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -347,18 +366,22 @@ fun MineScreen(navController: NavHostController) {
                         },
                         type = AppButtonType.Danger,
                         block = true,
+                        enabled = deleteStep != 2 || pendingDeletion?.canConfirm == true,
                         onClick = {
                             scope.launch {
                                 try {
                                     when (deleteStep) {
                                         0 -> deleteStep = 1
                                         1 -> {
-                                            authRepository.requestDelete(deletePhone, demoCode)
+                                            val status = authRepository.requestDelete(deletePhone, deleteCode.ifBlank { demoCode })
+                                            pendingDeletion = status
                                             deleteStep = 2
-                                            toastText = "删除申请已提交，24 小时冷静期内可取消"
+                                            toastText = "删除申请已提交，" +
+                                                (if (status.effectiveAt.isNotBlank()) BjTime.dateTime(status.effectiveAt) + "（北京时间）" else "24 小时") +
+                                                "之后才能确认删除"
                                         }
                                         else -> {
-                                            authRepository.confirmDelete(deletePhone, demoCode)
+                                            authRepository.confirmDelete(deletePhone, deleteCode.ifBlank { demoCode })
                                             authRepository.logout()
                                             loggedIn = false
                                             toastText = "账户与数据已删除"
@@ -381,6 +404,8 @@ fun MineScreen(navController: NavHostController) {
                                     try {
                                         authRepository.cancelDelete()
                                         deleteStep = 0
+                                        pendingDeletion = null
+                                        deleteCode = ""
                                         toastText = "已取消删除申请"
                                     } catch (e: Exception) {
                                         toastText = e.userMessage()
@@ -392,7 +417,15 @@ fun MineScreen(navController: NavHostController) {
                         OutlinedTextField(
                             value = deletePhone,
                             onValueChange = { deletePhone = it },
-                            label = { Text("手机号") },
+                            label = { Text("手机号（11 位）") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = deleteCode,
+                            onValueChange = { deleteCode = it },
+                            label = { Text("短信验证码（演示 $demoCode）") },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )

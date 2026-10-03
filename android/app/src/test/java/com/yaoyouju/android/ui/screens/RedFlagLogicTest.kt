@@ -45,13 +45,13 @@ class RedFlagLogicTest {
         assertEquals(listOf("大小便控制变化"), RedFlagOptions.signalsOf(setOf("bowel")))
         assertEquals(listOf("会阴部麻木"), RedFlagOptions.signalsOf(setOf("saddle")))
         assertEquals(listOf("双腿进行性无力"), RedFlagOptions.signalsOf(setOf("legs")))
-        assertEquals(listOf("伴发热"), RedFlagOptions.signalsOf(setOf("fever")))
+        assertEquals(listOf("发热、夜间痛持续不缓解或体重明显下降"), RedFlagOptions.signalsOf(setOf("fever")))
     }
 
     @Test
     fun `多选信号按选项顺序`() {
         assertEquals(
-            listOf("大小便控制变化", "会阴部麻木", "双腿进行性无力", "伴发热"),
+            listOf("大小便控制变化", "会阴部麻木", "双腿进行性无力", "发热、夜间痛持续不缓解或体重明显下降"),
             RedFlagOptions.signalsOf(setOf("fever", "legs", "saddle", "bowel")),
         )
     }
@@ -61,9 +61,9 @@ class RedFlagLogicTest {
     @Test
     fun `触发文本可被服务端规则匹配`() {
         assertEquals(listOf("会阴部麻木"), RedFlagOptions.matchTextsOf(setOf("saddle")))
-        assertEquals(listOf("腰痛伴发热"), RedFlagOptions.matchTextsOf(setOf("fever")))
+        assertEquals(listOf("发热、夜间痛持续不缓解或体重明显下降"), RedFlagOptions.matchTextsOf(setOf("fever")))
         assertEquals(
-            listOf("大小便控制变化", "会阴部麻木", "双腿进行性无力", "腰痛伴发热"),
+            listOf("大小便控制变化", "会阴部麻木", "双腿进行性无力", "发热、夜间痛持续不缓解或体重明显下降"),
             RedFlagOptions.matchTextsOf(setOf("bowel", "saddle", "legs", "fever")),
         )
     }

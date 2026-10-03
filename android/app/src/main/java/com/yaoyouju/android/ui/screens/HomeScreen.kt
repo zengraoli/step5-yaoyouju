@@ -1,5 +1,6 @@
 package com.yaoyouju.android.ui.screens
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +19,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.AnalysisView
+import com.yaoyouju.android.core.net.ApiException
 import com.yaoyouju.android.core.net.CreateAnalysisRequest
 import com.yaoyouju.android.core.net.AnalysesApi
 import com.yaoyouju.android.core.net.ContentListItem
@@ -124,6 +129,13 @@ fun HomeScreen(navController: NavHostController) {
             onError = { message ->
                 toastText = message
                 loading = false
+            },
+            onNetworkError = {
+                loading = false
+                // 断网时进服务不可用页，不要把「新用户引导」当成没有病程（第七轮第 17、21 条）
+                navController.openFallbackOnNetworkError(
+                    ApiException(0, "网络连接失败，请检查网络后重试", null, network = true),
+                )
             },
         )
     }
@@ -221,14 +233,22 @@ fun HomeScreen(navController: NavHostController) {
                                     scope = scope,
                                     analysesApi = analysesApi,
                                     episodeId = episodeId,
-                                    onDone = {
+                                    onDone = { taskId ->
                                         creatingAnalysis = false
-                                        toastText = "一页分析任务已提交，完成后在问与解释中查看"
+                                        // 带上任务 ID 进入分析页：轮询到完成后再显示，不会先闪旧版本（第七轮第 23 条）
+                                        navController.navigate(Routes.ANALYSIS + "?taskId=" + taskId)
                                         loadData()
                                     },
                                     onError = { message ->
                                         creatingAnalysis = false
                                         toastText = message
+                                    },
+                                    onSafety = { signals, stop ->
+                                        // 命中红旗：立即进就医提示页，不被「提交任务」阻断（第七轮第 18 条）
+                                        creatingAnalysis = false
+                                        navController.navigate(
+                                            Routes.EMERGENCY + "?signals=" + Uri.encode(signals) + "&stop=" + stop,
+                                        )
                                     },
                                 )
                             }
@@ -240,7 +260,7 @@ fun HomeScreen(navController: NavHostController) {
                     Spacer(modifier = Modifier.height(16.dp))
                     QuickEntries(
                         onReportInput = { navController.navigate(Routes.REPORT_INPUT) },
-                        onTimeline = { navController.navigate(Routes.TIMELINE) },
+                        onQa = { navController.navigate(Routes.QA) },
                         onToday = { navController.navigate(Routes.TODAY) },
                         onFollowup = { navController.navigate(Routes.FOLLOWUP) },
                     )
@@ -327,18 +347,23 @@ private fun HomeTopBar(navController: NavHostController) {
                 .clickable { navController.navigate(Routes.MINE) },
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "我", fontSize = 14.sp, color = Primary)
+            Text(text = "U", fontSize = 14.sp, color = Primary)
         }
         Spacer(modifier = Modifier.width(10.dp))
         Box(
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(Surface)
                 .clickable { navController.navigate(Routes.FEEDBACK) },
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "铃", fontSize = 14.sp, color = Text2)
+            // 设计稿 A14：铃形图标（本地 Material 图标，不加载外部资源）
+            Icon(
+                imageVector = Icons.Filled.Notifications,
+                contentDescription = "通知",
+                tint = Text2,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }
@@ -466,15 +491,16 @@ private fun LatestAnalysisCard(
 @Composable
 private fun QuickEntries(
     onReportInput: () -> Unit,
-    onTimeline: () -> Unit,
+    onQa: () -> Unit,
     onToday: () -> Unit,
     onFollowup: () -> Unit,
 ) {
+    // 设计稿 A14 的四个快捷入口（第七轮第 34 条：不再是「病程时间线」）
     val entries = listOf(
-        Triple("录入报告与医嘱", "原文对照，保留来源", onReportInput),
-        Triple("病程时间线", "按时间回看变化", onTimeline),
-        Triple("记录今天", "低负担，可随时补录", onToday),
-        Triple("复诊摘要", "固定六段，可导出", onFollowup),
+        Triple("记录今天", "约 1 分钟", onToday),
+        Triple("录入报告", "粘贴文字", onReportInput),
+        Triple("问与解释", "基于当前上下文", onQa),
+        Triple("复诊摘要", "待确认问题自动带入", onFollowup),
     )
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         entries.chunked(2).forEach { row ->
@@ -587,6 +613,8 @@ private fun loadHomeData(
     followupApi: FollowupApi,
     onResult: (HomeData) -> Unit,
     onError: (String) -> Unit,
+    /** 网络层异常：进入服务不可用页（第七轮第 17、21 条） */
+    onNetworkError: () -> Unit = {},
 ) {
     scope.launch {
         try {
@@ -636,7 +664,7 @@ private fun loadHomeData(
                 ),
             )
         } catch (e: Exception) {
-            onError(e.userMessage())
+            if (e.isNetworkError()) onNetworkError() else onError(e.userMessage())
         }
     }
 }
@@ -671,15 +699,18 @@ private fun createAnalysisInline(
     scope: kotlinx.coroutines.CoroutineScope,
     analysesApi: AnalysesApi,
     episodeId: String,
-    onDone: () -> Unit,
+    onDone: (String) -> Unit,
     onError: (String) -> Unit,
+    /** 命中红旗：进就医提示页，不被「提交任务」流程阻断（第七轮第 18 条） */
+    onSafety: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     scope.launch {
         try {
-            handleResponse(analysesApi.create(CreateAnalysisRequest(episodeId = episodeId)))
-            onDone()
+            val created = handleResponse(analysesApi.create(CreateAnalysisRequest(episodeId = episodeId)))
+            onDone(created.taskId)
         } catch (e: Exception) {
-            onError(e.userMessage())
+            val notice = safetyNoticeOf(e)
+            if (notice != null) onSafety(notice.first, notice.second) else onError(e.userMessage())
         }
     }
 }

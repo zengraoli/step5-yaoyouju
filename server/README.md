@@ -75,6 +75,23 @@ npm test           # 单元测试（jest；冒烟脚本不计入）
 npm run smoke      # 端到端冒烟测试（需先 npm run dev）
 ```
 
+## 验收 / 回归脚本（都先启动 server，必要时再启动 worker）
+
+| 脚本 | 覆盖内容 | 运行方式 |
+|-|-|-|
+| `scripts/redflag-cases.mjs` | 约 97 条红旗说法 / 否定或日常说法 / 正常报告，**每条用新病程**走 `/analyses` 统计命中率与误判率 | `node scripts/redflag-cases.mjs` |
+| `scripts/redflag-extra.mjs` | 另一批自编红旗与否定说法（同样每条新病程） | `node scripts/redflag-extra.mjs` |
+| `scripts/rf-quickcheck.ts` | 纯函数快速核对（无需启动 server）：上面两批 + 第五轮反馈原句 | `npx tsx scripts/rf-quickcheck.ts` |
+| `scripts/round5-newcases.ts` | 第五轮自编 41 条说法（纯函数） | `npx tsx scripts/round5-newcases.ts` |
+| `scripts/round7-feedback.ts` | 第七轮反馈的 61 条说法（10 条病历 / 报告写法 + 27 条换种说法 + 12 条误判 + 14 条越界，纯函数） | `npx tsx scripts/round7-feedback.ts` |
+| `scripts/round4-verify.mjs` | 第四轮接口级复查（删除账户、令牌吊销、双人确认、审计链、权限矩阵） | `node scripts/round4-verify.mjs` |
+| `scripts/acceptance-check.mjs` / `admin-check.mjs` / `browser-check.mjs` / `browser-flow.mjs` | 三端联调、后台五角色走查、浏览器全流程 | 见脚本头部注释 |
+| `scripts/integration.mjs` | 三端联调（`npm run integration`） | 需 server + worker |
+
+安全规则的自编说法语料（应命中 / 应不命中 / 正常报告）集中在
+`src/modules/safety/safety.corpus.ts`，由 `safety.spec.ts` 逐条断言；
+纯函数脚本与接口脚本的结果应当一致。
+
 ## 已知问题
 
 - 大模型为本地模拟实现（模板 + 证据片段），不调用任何外部服务。

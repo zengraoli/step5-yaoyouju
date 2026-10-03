@@ -325,7 +325,7 @@ describe('T09 复诊摘要（六段生成 / 预览 / 纠正 / 导出）', () => 
     expect(after.body.data.exported_at).toBe(d.exported_at);
   });
 
-  it('导出 PDF / 图片：标记为浏览器打印生成，记录格式与时间', async () => {
+  it('导出 PDF / 图片：返回摘要正文（Android 真实生成文件），记录格式与时间（第七轮第 20 条）', async () => {
     const gen = await generate();
     const summaryId = gen.body.data.id as string;
     for (const format of ['PDF', '图片']) {
@@ -335,9 +335,11 @@ describe('T09 复诊摘要（六段生成 / 预览 / 纠正 / 导出）', () => 
         .send({ format });
       expect(res.body.code).toBe(0);
       expect(res.body.data.format).toBe(format);
-      expect(res.body.data.browser_print).toBe(true);
-      expect(res.body.data.text).toContain('浏览器打印');
-      expect(res.body.data.text).toContain('不服务端生成');
+      // PDF / 图片也带完整摘要正文：Android 端用它真实渲染文件，不再只有「浏览器打印」提示
+      expect(res.body.data.text).toContain('就诊交接摘要');
+      expect(res.body.data.text).toContain('起病与时间');
+      expect(res.body.data.text).toContain('仅供参考');
+      expect(res.body.data.text).not.toContain('不服务端生成');
       expect(res.body.data.text).toContain(WATERMARK);
       expect(res.body.data.exported_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     }

@@ -90,9 +90,13 @@ fun FallbackScreen(
 
     /**
      * 错误码：从服务端 / 任务失败原因派生，不写死 ANL-503。
-     * 分析任务失败时服务端返回 50300（SERVICE_UNAVAILABLE），展示为「服务码 50300」。
+     * 没有真实错误码时（例如从「我的」手动进入）显示「网络异常 / 服务端未返回」，
+     * 不再占位写「服务码以服务端返回为准」（第七轮第 17 条）。
      */
-    val codeText = errorCode.ifBlank { "服务码以服务端返回为准" }
+    val codeText = when {
+        errorCode.isNotBlank() -> "服务码 $errorCode"
+        else -> "网络异常或服务暂时不可用"
+    }
 
     LaunchedEffect(Unit) {
         loading = true
@@ -233,8 +237,54 @@ fun FallbackScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             AppButton(
-                text = "返回首页",
+                text = "重试",
                 type = AppButtonType.Primary,
+                block = true,
+                onClick = {
+                    // 重新加载本页：网络恢复后能直接看到失败原因与可用功能（第七轮第 17 条）
+                    loading = true
+                    scope.launch {
+                        try {
+                            if (taskId.isNotBlank()) {
+                                val task = handleResponse(analysesApi.task(taskId))
+                                reason = task.reason ?: "分析服务暂时不可用"
+                                if (task.status == "completed" && task.analysis != null) {
+                                    navController.navigate(Routes.ANALYSIS + "?taskId=" + taskId) {
+                                        popUpTo(Routes.HOME)
+                                    }
+                                    return@launch
+                                }
+                            } else {
+                                reason = "分析服务暂时不可用"
+                            }
+                            val episodes = handleResponse(episodesApi.list())
+                            val episode = episodes.firstOrNull()
+                            savedInfo = if (episode != null) {
+                                try {
+                                    handleResponse(followupApi.latest(episode.id))
+                                    true
+                                } catch (_: Exception) {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                            reason = reason
+                        } catch (e: Exception) {
+                            reason = e.userMessage()
+                            reason = e.userMessage()
+                        } finally {
+                            loading = false
+                        }
+                    }
+                },
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            AppButton(
+                text = "返回首页",
+                type = AppButtonType.Secondary,
                 block = true,
                 onClick = {
                     navController.navigate(Routes.HOME) {

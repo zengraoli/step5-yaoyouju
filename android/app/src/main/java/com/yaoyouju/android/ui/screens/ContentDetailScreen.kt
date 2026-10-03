@@ -20,7 +20,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -88,6 +90,10 @@ fun ContentDetailScreen(
     var errorText by remember { mutableStateOf("") }
     var subtitleOn by remember { mutableStateOf(true) }
     var toastText by remember { mutableStateOf("") }
+    /** 举报弹层：确认 + 说明（第七轮第 35 条：不能点一下就提交，也不能连点写入两条） */
+    var showReportDialog by remember { mutableStateOf(false) }
+    var reportDetail by remember { mutableStateOf("") }
+    var reporting by remember { mutableStateOf(false) }
     // 复述任务检验理解
     var recapText by remember { mutableStateOf("") }
     var recapDone by remember { mutableStateOf(false) }
@@ -389,30 +395,12 @@ fun ContentDetailScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // 举报入口
+                        // 举报入口：先确认、可填说明，不能点一下就提交（第七轮第 35 条）
                         AppButton(
                             text = "内容有误？举报",
                             type = AppButtonType.Danger,
                             block = true,
-                            onClick = {
-                                scope.launch {
-                                    try {
-                                        handleResponse(
-                                            feedbackApi.errorReport(
-                                                ErrorReportRequest(
-                                                    contentItemId = d.id,
-                                                    category = "内容有误",
-                                                    description = "用户在 A15 提交的举报（自动附带内容版本 v" + (d.currentVersion?.version ?: 0) + "）",
-                                                    severity = "medium",
-                                                ),
-                                            ),
-                                        )
-                                        toastText = "举报已提交，我们会尽快核实"
-                                    } catch (e: Exception) {
-                                        toastText = e.userMessage()
-                                    }
-                                }
-                            },
+                            onClick = { showReportDialog = true },
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -429,6 +417,69 @@ fun ContentDetailScreen(
                 }
             }
         }
+    }
+
+    if (showReportDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!reporting) showReportDialog = false },
+            title = { Text("举报这条内容有误？") },
+            text = {
+                Column {
+                    Text(
+                        text = "请说明哪里有问题（可选）。提交后由运营编辑与临床审核核实，不会自动进入训练或内容库。",
+                        fontSize = 12.sp,
+                        color = Text2,
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = reportDetail,
+                        onValueChange = { reportDetail = it },
+                        placeholder = { Text("例如：第 2 分钟的说法与我的报告不符", color = Text3) },
+                        minLines = 3,
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                AppButton(
+                    text = if (reporting) "提交中…" else "提交举报",
+                    type = AppButtonType.Danger,
+                    loading = reporting,
+                    onClick = {
+                        reporting = true
+                        scope.launch {
+                            try {
+                                handleResponse(
+                                    feedbackApi.errorReport(
+                                        ErrorReportRequest(
+                                            contentItemId = detail?.id,
+                                            category = "内容有误",
+                                            description = (reportDetail.ifBlank { "用户在视频详情页提交的举报" }) +
+                                                "（自动附带内容版本 v" + (detail?.currentVersion?.version ?: 0) + "）",
+                                            severity = "medium",
+                                        ),
+                                    ),
+                                )
+                                showReportDialog = false
+                                reportDetail = ""
+                                toastText = "举报已提交，我们会尽快核实"
+                            } catch (e: Exception) {
+                                toastText = e.userMessage()
+                            } finally {
+                                reporting = false
+                            }
+                        }
+                    },
+                )
+            },
+            dismissButton = {
+                AppButton(
+                    text = "取消",
+                    type = AppButtonType.Secondary,
+                    onClick = { showReportDialog = false },
+                )
+            },
+        )
     }
 
     if (toastText.isNotBlank()) {

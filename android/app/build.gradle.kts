@@ -23,7 +23,7 @@ android {
 
         // 接口基地址：默认本机 server；真机调试用 adb reverse tcp:3200 tcp:3200
         buildConfigField("String", "API_BASE_URL", "\"http://127.0.0.1:3200\"")
-        // deep link scheme：yaoyouju://A07
+        // deep link scheme：yaoyoujuapp://A07
         manifestPlaceholders["deepLinkScheme"] = "yaoyoujuapp"
     }
 

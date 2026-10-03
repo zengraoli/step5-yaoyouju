@@ -93,6 +93,10 @@ fun ReportDiffScreen(
             val episodeId = episodes.firstOrNull()?.id
             if (analysisId.isNotBlank()) {
                 analysis = handleResponse(analysesApi.detail(analysisId))
+            } else if (episodeId != null) {
+                // 从分析页直接进入（没带 ID）：取该病程最新一页分析，
+                // 否则「按解释查看」永远显示「还没有可对照的解释」（第七轮第 22 条）
+                analysis = handleResponse(analysesApi.latestByEpisode(episodeId))
             }
             if (episodeId != null) {
                 val structured = handleResponse(episodesApi.structured(episodeId))
@@ -105,8 +109,8 @@ fun ReportDiffScreen(
         }
     }
 
-    // 报告原文（来自结构化条目里 raw_text 非空的项）
-    val reportItems = items.filter { !it.rawText.isNullOrBlank() }
+    // 报告原文：只取「报告」类条目（有医嘱时不能把医嘱当成 MRI 报告原文，第七轮第 22 条）
+    val reportItems = items.filter { it.eventType == "报告" && !it.rawText.isNullOrBlank() }
     val explainItems = analysis?.sections?.explain ?: emptyList()
 
     Column(

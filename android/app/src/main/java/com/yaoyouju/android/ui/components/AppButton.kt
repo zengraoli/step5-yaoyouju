@@ -97,7 +97,8 @@ private fun ButtonContent(text: String, loading: Boolean, contentColor: Color) {
             strokeWidth = 2.dp,
         )
     } else {
-        Text(text = text)
+        // 显式指定文字颜色：主题 typography 里带了深色，主按钮 / 危险按钮必须是白字（第七轮第 34 条）
+        Text(text = text, color = contentColor)
     }
 }
 

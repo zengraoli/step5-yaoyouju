@@ -82,6 +82,9 @@ fun ReportVerifyScreen(navController: NavHostController) {
     var summary by remember { mutableStateOf<com.yaoyouju.android.core.net.StructuredSummary?>(null) }
     var submitting by remember { mutableStateOf(false) }
     var toastText by remember { mutableStateOf("") }
+    /** 侧别等冲突（报告 vs 自述）；用户确认前不能生成分析（第七轮第 25 条） */
+    var conflicts by remember { mutableStateOf<List<com.yaoyouju.android.core.net.StructuredConflict>>(emptyList()) }
+    var conflictAcknowledged by remember { mutableStateOf(false) }
 
     // 主要困惑键 → 展示文案（A04 选择，本地保存）
     val confusionLabels = mapOf(
@@ -101,6 +104,8 @@ fun ReportVerifyScreen(navController: NavHostController) {
                     val structured = handleResponse(episodesApi.structured(episodeId))
                     items = structured.items
                     summary = structured.summary
+                    conflicts = structured.conflicts
+                    conflictAcknowledged = false
                 }
             } catch (e: Exception) {
                 toastText = e.userMessage()
@@ -260,11 +265,40 @@ fun ReportVerifyScreen(navController: NavHostController) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // 侧别冲突：先让用户确认，再允许生成（第七轮第 25 条）
+            if (conflicts.isNotEmpty()) {
+                AppCard(
+                    background = com.yaoyouju.android.ui.theme.ErrorLight,
+                    borderColor = com.yaoyouju.android.ui.theme.Error,
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "侧别不一致，需要你确认",
+                            fontSize = 14.sp,
+                            color = com.yaoyouju.android.ui.theme.Error,
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        conflicts.forEach { c ->
+                            Text(text = c.message, fontSize = 12.sp, color = Text2, lineHeight = 19.sp)
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                        AppButton(
+                            text = if (conflictAcknowledged) "已确认，可以生成分析" else "我已确认以哪个为准",
+                            type = if (conflictAcknowledged) AppButtonType.Soft else AppButtonType.Danger,
+                            block = true,
+                            onClick = { conflictAcknowledged = true },
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
             AppButton(
                 text = "确认无误，生成一页分析",
                 type = AppButtonType.Primary,
                 block = true,
                 loading = submitting,
+                enabled = conflicts.isEmpty() || conflictAcknowledged,
                 onClick = { generateAnalysis() },
             )
 

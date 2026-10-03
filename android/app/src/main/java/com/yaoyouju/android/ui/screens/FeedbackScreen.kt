@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.yaoyouju.android.core.net.AnalysesApi
+import com.yaoyouju.android.core.net.EpisodesApi
 import com.yaoyouju.android.core.net.FeedbackApi
 import com.yaoyouju.android.core.net.ErrorReportRequest
 import com.yaoyouju.android.core.net.HelpFeedbackRequest
@@ -78,7 +80,12 @@ fun FeedbackScreen(
 ) {
     val feedbackApi: FeedbackApi = NetworkModule.api()
     val analysesApi: AnalysesApi = NetworkModule.api()
+    val episodesApi: EpisodesApi = NetworkModule.api()
     val scope = rememberCoroutineScope()
+
+    /** 目标分析 ID：从首页「铃」进入时没有带，取当前病程最新一页分析（第七轮第 19 条） */
+    var targetAnalysisId by remember(analysisId) { mutableStateOf(analysisId) }
+    var resolvingAnalysis by remember { mutableStateOf(analysisId.isBlank()) }
 
     // 两个页签（按设计稿）
     val tabs = listOf("帮助类型反馈", "错误举报")
@@ -102,6 +109,23 @@ fun FeedbackScreen(
 
     var submitting by remember { mutableStateOf(false) }
     var toastText by remember { mutableStateOf("") }
+
+    // 没有带分析 ID（从首页铃进入）时解析最新一页分析，避免「分析不存在」
+    LaunchedEffect(Unit) {
+        if (targetAnalysisId.isBlank()) {
+            try {
+                val episodes = handleResponse(episodesApi.list())
+                val epId = episodes.firstOrNull { it.status == "进行中" }?.id ?: episodes.firstOrNull()?.id
+                if (epId != null) {
+                    targetAnalysisId = handleResponse(analysesApi.latestByEpisode(epId))?.id ?: ""
+                }
+            } catch (e: Exception) {
+                if (e.isNetworkError()) navController.openFallbackOnNetworkError(e)
+            } finally {
+                resolvingAnalysis = false
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -246,7 +270,7 @@ fun FeedbackScreen(
                                     handleResponse(
                                         feedbackApi.help(
                                             HelpFeedbackRequest(
-                                                analysisId = analysisId,
+                                                analysisId = targetAnalysisId,
                                                 helpType = helpType,
                                                 unsolvedQuestion = unsolved.ifBlank { null },
                                             ),
@@ -337,8 +361,8 @@ fun FeedbackScreen(
                             submitting = true
                             scope.launch {
                                 try {
-                                    if (analysisId.isBlank()) {
-                                        // 没有可关联的分析：明确提示，不静默返回（验收反馈第 23 条）
+                                    if (targetAnalysisId.isBlank()) {
+                                        // 没有可关联的分析：明确提示，不静默返回（第七轮第 19 条）
                                         toastText = "还没有可反馈的一页分析，请先生成分析"
                                         return@launch
                                     }
@@ -349,7 +373,7 @@ fun FeedbackScreen(
                                     handleResponse(
                                         feedbackApi.errorReport(
                                             ErrorReportRequest(
-                                                analysisId = analysisId.ifBlank { null },
+                                                analysisId = targetAnalysisId,
                                                 category = reportTypesSelected.joinToString("、").ifBlank { "其他" },
                                                 description = reportDetail,
                                                 severity = "medium",

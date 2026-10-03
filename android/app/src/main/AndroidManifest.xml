@@ -37,7 +37,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- deep link：yaoyouju://A07 形式，测试时直接打开对应页面 -->
+            <!-- deep link：yaoyoujuapp://A07 形式，测试时直接打开对应页面 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

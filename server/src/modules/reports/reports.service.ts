@@ -188,7 +188,45 @@ export class ReportsService {
         unconfirmed: events.filter((e) => (e.verify_status ?? '尚未确认') === '尚未确认').length,
         conflict: events.filter((e) => e.verify_status === '有冲突').length,
       },
+      // 侧别冲突：报告原文写的侧别与自述侧别不一致时必须在核对页暴露（第七轮验收反馈第 25 条）
+      conflicts: this.sideConflicts(events),
     };
+  }
+
+  /**
+   * 侧别冲突检测：报告原文里的「左 / 右侧」与自述（A02 第 3 题写进病程的「侧别：…」）不一致。
+   * 只读检测，不修改任何数据的核实状态；由界面提示用户确认后再生成分析。
+   */
+  private sideConflicts(
+    events: Record<string, unknown>[],
+  ): { kind: string; message: string; report_side: string; self_side: string }[] {
+    const reportSide = (text: string): string | null => {
+      const m =
+        /(左|右)侧?[^。；,，]{0,6}(?:神经根|受压|突出|膨出|麻|痛|疼)/.exec(text) ?? /(左|右)侧/.exec(text);
+      return m ? `${m[1]}侧` : null;
+    };
+    let fromReport: string | null = null;
+    let fromSelf: string | null = null;
+    for (const e of events) {
+      const reportText = (e.report_text as string | null) ?? '';
+      if (!fromReport && reportText) fromReport = reportSide(reportText);
+      const raw = (e.raw_text as string | null) ?? '';
+      const selfMatch = /侧别[:：]\s*([^；;。\n]+)/.exec(raw);
+      if (!fromSelf && selfMatch) {
+        const value = selfMatch[1].trim();
+        if (value === '左侧' || value === '右侧' || value === '双侧') fromSelf = value;
+      }
+    }
+    if (!fromReport || !fromSelf) return [];
+    if (fromSelf === '双侧' || fromReport === fromSelf) return [];
+    return [
+      {
+        kind: 'side',
+        message: `报告原文写的是「${fromReport}」，你在关键变化里选的是「${fromSelf}」。请确认以哪个为准后再生成分析。`,
+        report_side: fromReport,
+        self_side: fromSelf,
+      },
+    ];
   }
 
   private view(row: Record<string, unknown>): ReportView {
