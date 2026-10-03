@@ -1,0 +1,160 @@
+{
+  "steps": [
+    {
+      "name": "Web 登录（新手机号，1440 宽）",
+      "path": "/login",
+      "waitFor": "input",
+      "fill": [
+        [
+          "input[type=number]",
+          "${PHONE}",
+          0
+        ],
+        [
+          "input[type=number]",
+          "123456",
+          1
+        ]
+      ],
+      "wait": 1500
+    },
+    {
+      "name": "勾选两份同意",
+      "check": [
+        ".consent"
+      ],
+      "wait": 1200
+    },
+    {
+      "name": "登录并进入工作台",
+      "click": "登录 / 注册",
+      "waitForText": "问与解释",
+      "expect": [
+        "问与解释",
+        "录入报告"
+      ],
+      "wait": 9000
+    },
+    {
+      "name": "先打开问与解释（建立病程之前）",
+      "path": "/qa",
+      "waitForText": "问与解释",
+      "expect": [
+        "问与解释"
+      ],
+      "wait": 9000
+    },
+    {
+      "name": "录入报告（含病历写法的红旗）",
+      "path": "/analysis?input=report",
+      "waitForText": "录入报告（粘贴文字）",
+      "expect": [
+        "录入报告（粘贴文字）"
+      ],
+      "fill": [
+        [
+          "textarea.report-input__textarea",
+          "门诊病历：患者诉近三天小便失禁，会阴部麻木。"
+        ]
+      ],
+      "wait": 2500
+    },
+    {
+      "name": "保存并核对：命中红旗立即跳就医提示",
+      "click": "保存并核对",
+      "waitForText": "需要及时寻求专业帮助",
+      "expect": [
+        "需要及时寻求专业帮助"
+      ],
+      "wait": 8000
+    },
+    {
+      "name": "就医提示页展示命中信号与停止个性化",
+      "expect": [
+        "本轮不会生成个性化分析"
+      ],
+      "wait": 4000
+    },
+    {
+      "name": "问与解释：越界提问被拒答",
+      "path": "/qa",
+      "waitForText": "问与解释",
+      "fill": [
+        [
+          "input[type=text]",
+          "我这个程度够不够得上做手术"
+        ]
+      ],
+      "wait": 1200
+    },
+    {
+      "name": "发送：越界拒答并转复诊问题",
+      "click": "发送",
+      "waitForText": "手术",
+      "expect": [
+        "我不能给出手术建议"
+      ],
+      "wait": 8000
+    },
+    {
+      "name": "问与解释：红旗提问被拦下",
+      "path": "/qa",
+      "waitForText": "问与解释",
+      "fill": [
+        [
+          "input[type=text]",
+          "这两天会阴部麻木，伴大小便控制变化"
+        ]
+      ],
+      "wait": 1200
+    },
+    {
+      "name": "发送：命中红旗",
+      "click": "发送",
+      "waitForText": "需要及时寻求专业帮助",
+      "expect": [
+        "需要及时寻求专业帮助"
+      ],
+      "wait": 8000
+    },
+    {
+      "name": "复诊摘要",
+      "path": "/followup",
+      "waitForText": "复诊",
+      "expect": [
+        "复诊摘要"
+      ],
+      "wait": 8000
+    },
+    {
+      "name": "账户与数据：撤回同意",
+      "path": "/account",
+      "waitForText": "已撤回",
+      "click": "撤回",
+      "expect": [
+        "已撤回"
+      ],
+      "wait": 8000
+    },
+    {
+      "name": "重新同意",
+      "path": "/account",
+      "click": "重新同意",
+      "waitForText": "已重新同意",
+      "expect": [
+        "已重新同意"
+      ],
+      "wait": 8000
+    },
+    {
+      "name": "退出登录",
+      "path": "/account",
+      "click": "退出登录",
+      "waitForText": "登录",
+      "expect": [
+        "登录 / 注册"
+      ],
+      "wait": 8000
+    }
+  ]
+}
