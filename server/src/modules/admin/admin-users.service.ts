@@ -217,6 +217,7 @@ export class AdminUsersService {
         throw new ApiException(
           ErrorCode.CONFLICT,
           `已提交「${verb}超级管理员」双人确认申请（需${gate.confirmation?.requirement ?? '另一名超级管理员'}确认后生效）`,
+          { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
         );
       }
       confirmId = gate.confirmation?.id ?? null;
@@ -262,6 +263,7 @@ export class AdminUsersService {
         throw new ApiException(
           ErrorCode.CONFLICT,
           `已提交「重置超级管理员动态验证码」双人确认申请（需${gate.confirmation?.requirement ?? '另一名超级管理员'}确认后生效）`,
+          { confirmation_id: gate.confirmation?.id ?? null, requirement: gate.confirmation?.requirement ?? null },
         );
       }
       confirmId = gate.confirmation?.id ?? null;

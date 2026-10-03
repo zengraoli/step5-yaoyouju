@@ -39,7 +39,7 @@ import {
   type EpisodeDetail,
   type TodayStatus,
 } from '../../api/episodes'
-import { createAnalysis, getLatestAnalysis } from '../../api/analyses'
+import { createAnalysis, getLatestAnalysis, safetyNoticeFromError } from '../../api/analyses'
 import { getLatestFollowup, QUESTIONS_SECTION_KEY } from '../../api/followup'
 import { listContents, type ContentListItem } from '../../api/contents'
 import {
@@ -388,6 +388,19 @@ async function onGenerateAnalysis() {
       toast('个性化分析暂不可用，已改为可用的回退内容')
     }
   } catch (e) {
+    // 命中红旗（40910 / 40911）：立即进就医提示页，不只弹一条提示（产品红线第 3 条）
+    const notice = safetyNoticeFromError(e)
+    if (notice) {
+      const labels = notice.matched.map((m) => m.label).join('、')
+      const stop = notice.matched.some((m) => m.severity === 'high') ? '1' : '0'
+      const query = [
+        `signals=${encodeURIComponent(labels)}`,
+        `stop=${stop}`,
+        `rule=${encodeURIComponent(notice.rule_set_version ?? '')}`,
+      ].join('&')
+      uni.navigateTo({ url: `/pages/emergency/notice?${query}` })
+      return
+    }
     toast(e instanceof Error ? e.message : '提交分析失败，请稍后重试')
   } finally {
     generating.value = false

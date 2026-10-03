@@ -114,9 +114,14 @@ async function runStep(api, step, idx) {
         const el = wantIndex === undefined ? list[0] : list[wantIndex];
         if (!el) return 'no-element';
         el.focus();
-        el.value = ${JSON.stringify(value)};
+        // 用原生 setter 赋值：受控组件（uni-input / Vue v-model）才会收到更新
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+          ?? Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+        if (setter) setter.call(el, ${JSON.stringify(value)});
+        else el.value = ${JSON.stringify(value)};
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new Event('compositionend', { bubbles: true }));
         return 'ok';
       })()`,
       returnByValue: true,
@@ -202,7 +207,8 @@ async function runStep(api, step, idx) {
       netErrors.push(`${ev.params.response.url} → ${ev.params.response.status}`)
     }
   }
-  const bad = [...netErrors].filter((e) => !/favicon/.test(e))
+  // 401 是登录流程里的预期响应（未登录时拉用户信息），不计为失败
+  const bad = [...netErrors].filter((e) => !/favicon/.test(e) && !/→ 401(?![\d])/.test(e))
   const missing = (step.expect ?? []).filter((e) => !text.includes(e))
   const absent = (step.expectAbsent ?? []).filter((e) => text.includes(e))
   if (process.env.DEBUG) {

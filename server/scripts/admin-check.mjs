@@ -46,7 +46,8 @@ const mfaBtn = await ev('[].slice.call(document.querySelectorAll("button")).filt
 if (mfaBtn > 0) {
   await ev('(function(){var b=[].slice.call(document.querySelectorAll("button")).filter(function(x){return (x.innerText||"").indexOf("绑定动态验证码")>=0})[0];b.click();return 1})()')
   await delay(2500)
-  await ev('(function(){var e=document.querySelector("input");if(e){e.value="123456";e.dispatchEvent(new Event("input",{bubbles:true}))}return 1})()')
+  await ev('(function(){var e=document.querySelector("input[type=password]");if(e){e.value="123456";e.dispatchEvent(new Event("input",{bubbles:true}))}return 1})()')
+  await ev('(function(){var e=document.querySelector("input[type=text]");if(e){e.value="123456";e.dispatchEvent(new Event("input",{bubbles:true}))}return 1})()')
   await ev('(function(){var b=[].slice.call(document.querySelectorAll("button")).filter(function(x){return (x.innerText||"").indexOf("绑定并进入后台")>=0})[0];b.click();return 1})()')
   await delay(2500)
   console.log('mfa bound →', await ev('location.pathname'))

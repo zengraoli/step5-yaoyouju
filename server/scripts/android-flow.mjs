@@ -146,11 +146,9 @@ async function main() {
   check('登录后进入首页', homeNodes.some((t) => t.includes('当前情况') && !t.includes('登录')), homeNodes.slice(0, 6).join('/'))
   shot('02-home')
 
-  // A02 建立病程：底部「病程」→ 记录当前关键变化（四题，第 1 题必须可见）
-  await tab('病程', 395)
-  await delay(2500)
-  await tapText('记录当前关键变化')
-  await delay(3000)
+  // A02 建立病程：新用户首页有「现在确认当前关键变化」入口（设计稿 A14）
+  await tapText('现在确认当前关键变化')
+  await delay(3500)
   check('A02 第 1 题可见', dump().some((n) => n.text.includes('与上次相比')))
   await tapText('加重', true)
   await delay(500)
