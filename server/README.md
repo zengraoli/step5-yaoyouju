@@ -84,6 +84,9 @@ npm run smoke      # 端到端冒烟测试（需先 npm run dev）
 | `scripts/rf-quickcheck.ts` | 纯函数快速核对（无需启动 server）：上面两批 + 第五轮反馈原句 | `npx tsx scripts/rf-quickcheck.ts` |
 | `scripts/round5-newcases.ts` | 第五轮自编 41 条说法（纯函数） | `npx tsx scripts/round5-newcases.ts` |
 | `scripts/round7-feedback.ts` | 第七轮反馈的 61 条说法（10 条病历 / 报告写法 + 27 条换种说法 + 12 条误判 + 14 条越界，纯函数） | `npx tsx scripts/round7-feedback.ts` |
+| `scripts/round8-cases.ts` | 第八轮独立新编 100 条（60 应触发 + 40 不触发，纯函数逐条核对） | `npx tsx scripts/round8-cases.ts` |
+| `scripts/round8-api.mjs` | 上述 100 条用「新用户 + 新病程」走真实 `/analyses` 统计命中率与误判率（先 `gen-round8-data.ts` 生成数据） | 先启动 server | `node scripts/round8-api.mjs` |
+| `scripts/scope-variants.ts` | 越界提问变体（「这个情况是不是应该做手术」等）抽查（纯函数） | `npx tsx scripts/scope-variants.ts` |
 | `scripts/round4-verify.mjs` | 第四轮接口级复查（删除账户、令牌吊销、双人确认、审计链、权限矩阵） | `node scripts/round4-verify.mjs` |
 | `scripts/acceptance-check.mjs` / `admin-check.mjs` / `browser-check.mjs` / `browser-flow.mjs` | 三端联调、后台五角色走查、浏览器全流程 | 见脚本头部注释 |
 | `scripts/integration.mjs` | 三端联调（`npm run integration`） | 需 server + worker |

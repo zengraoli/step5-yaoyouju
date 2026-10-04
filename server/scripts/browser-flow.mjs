@@ -115,8 +115,12 @@ async function runStep(api, step, idx) {
         if (!el) return 'no-element';
         el.focus();
         // 用原生 setter 赋值：受控组件（uni-input / Vue v-model）才会收到更新
-        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
-          ?? Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+        // 按元素类型选对应的 prototype：对 textarea 用 HTMLInputElement 的 setter 会抛 Illegal invocation
+        const proto = Object.getPrototypeOf(el);
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set
+          ?? (el.tagName === 'INPUT'
+            ? Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+            : undefined);
         if (setter) setter.call(el, ${JSON.stringify(value)});
         else el.value = ${JSON.stringify(value)};
         el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -190,6 +194,25 @@ async function runStep(api, step, idx) {
     })
     await delay(step.afterClick ?? 3000)
   }
+  // 在包含指定文字的「行 / 卡片」里点对应按钮（如同一张表里多种同意各自撤回 / 开启）
+  if (step.clickInRow) {
+    const { rowText, buttonText } = step.clickInRow
+    const res = await api.send('Runtime.evaluate', {
+      expression: `(() => {
+        const containers = [...document.querySelectorAll('tr, li, [class*=card], [class*=row], [class*=item]')];
+        for (const c of containers) {
+          if ((c.textContent || '').includes(${JSON.stringify(rowText)})) {
+            const btns = [...c.querySelectorAll('button, uni-button, a')].filter((b) => ((b.innerText || '').trim().includes(${JSON.stringify(buttonText)})));
+            if (btns.length) { btns[btns.length - 1].click(); return 'ok'; }
+          }
+        }
+        return 'no-button';
+      })()`,
+      returnByValue: true,
+    })
+    if (res?.result?.value !== 'ok') console.log('   ⚠ 未在指定行找到按钮', rowText, buttonText)
+    await delay(step.afterClick ?? 3000)
+  }
   // 每次取值前重新启用 Runtime，避免导航后上下文被清空导致取到空
   await api.send('Runtime.enable')
   // 用 textContent 取全文：uni-app H5 的 innerText 在部分容器上会漏掉子元素文字
@@ -197,6 +220,7 @@ async function runStep(api, step, idx) {
   const text = String(doc?.result?.result?.value ?? doc?.result?.value ?? '')
   const errors = []
   const netErrors = []
+  const allowStatus = new Set(step.allowStatus ?? [])
   for (const ev of api.events) {
     if (ev.method === 'Runtime.consoleAPICalled' && ['error', 'assert'].includes(ev.params?.type)) {
       errors.push((ev.params.args ?? []).map((a) => a.value ?? a.description ?? '').join(' '))
@@ -204,7 +228,10 @@ async function runStep(api, step, idx) {
     if (ev.method === 'Runtime.exceptionThrown') errors.push(ev.params?.exceptionDetails?.text ?? 'exception')
     if (ev.method === 'Network.loadingFailed') netErrors.push(ev.params?.errorText ?? '')
     if (ev.method === 'Network.responseReceived' && (ev.params?.response?.status ?? 0) >= 400) {
-      netErrors.push(`${ev.params.response.url} → ${ev.params.response.status}`)
+      // allowStatus：步骤声明可接受的 4xx（如问与解释命中红旗返回 409 + 就医提示，属预期安全行为）
+      if (!allowStatus.has(ev.params.response.status)) {
+        netErrors.push(`${ev.params.response.url} → ${ev.params.response.status}`)
+      }
     }
   }
   // 401 是登录流程里的预期响应（未登录时拉用户信息），不计为失败

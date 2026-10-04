@@ -129,7 +129,7 @@
       "fill": [
         [
           "textarea.uni-textarea-textarea",
-          "门诊病历：患者诉近三天小便失禁，会阴部麻木。"
+          "急诊登记写的是腰背痛伴新发会阴感觉缺失。"
         ]
       ],
       "wait": 1500
@@ -140,8 +140,9 @@
       "waitForText": "需要及时寻求专业帮助",
       "expect": [
         "需要及时寻求专业帮助",
-        "会阴部麻木"
+        "会阴"
       ],
+      "allowStatus": [409],
       "wait": 6000
     },
     {
@@ -215,7 +216,7 @@
     },
     {
       "name": "点发送：越界拒答并转复诊问题",
-      "click": "发 送",
+      "clickSelector": ".qa-input__send",
       "waitForText": "手术",
       "expect": [
         "手术"
@@ -238,7 +239,8 @@
     },
     {
       "name": "点发送：命中红旗",
-      "click": "发 送",
+      "clickSelector": ".qa-input__send",
+      "allowStatus": [409, 40910, 40911],
       "waitForText": "需要及时寻求专业帮助",
       "expect": [
         "需要及时寻求专业帮助"

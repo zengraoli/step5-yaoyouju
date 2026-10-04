@@ -45,16 +45,40 @@
       "wait": 9000
     },
     {
+      "name": "建立普通病程（问与解释之后）",
+      "path": "/onboarding",
+      "waitForText": "当前关键变化确认",
+      "fill": [
+        [
+          "input.field__input",
+          "F8验收普通病程",
+          0
+        ]
+      ],
+      "expect": [
+        "当前关键变化确认"
+      ],
+      "click": "确认并建立病程",
+      "waitForText": "录入报告",
+      "expect": [
+        "录入报告",
+        "问与解释"
+      ],
+      "allowStatus": [409],
+      "wait": 8000
+    },
+    {
       "name": "录入报告（含病历写法的红旗）",
       "path": "/analysis?input=report",
       "waitForText": "录入报告（粘贴文字）",
+      "waitFor": "textarea.report-input__textarea",
       "expect": [
         "录入报告（粘贴文字）"
       ],
       "fill": [
         [
           "textarea.report-input__textarea",
-          "门诊病历：患者诉近三天小便失禁，会阴部麻木。"
+          "急诊登记写的是腰背痛伴新发会阴感觉缺失。"
         ]
       ],
       "wait": 2500
@@ -112,6 +136,7 @@
       "name": "发送：命中红旗",
       "click": "发送",
       "waitForText": "需要及时寻求专业帮助",
+      "allowStatus": [409],
       "expect": [
         "需要及时寻求专业帮助"
       ],
@@ -127,24 +152,38 @@
       "wait": 8000
     },
     {
-      "name": "账户与数据：撤回同意",
+      "name": "账户与数据：撤回对「健康信息处理」的同意",
       "path": "/account",
-      "waitForText": "已撤回",
-      "click": "撤回",
-      "expect": [
-        "已撤回"
-      ],
-      "wait": 8000
+      "waitForText": "作用域",
+      "clickInRow": { "rowText": "健康信息处理", "buttonText": "撤回" },
+      "wait": 2500,
+      "probe": "(() => { const rows=[...document.querySelectorAll('tr')].filter(r=>r.textContent.includes('健康信息处理')); const r=rows[0]; return r ? (r.textContent.includes('未开启')? 'revoked':'still-granted') : 'no-row'; })()"
     },
     {
-      "name": "重新同意",
+      "name": "确认已撤回（该行状态变为未开启）",
       "path": "/account",
-      "click": "重新同意",
-      "waitForText": "已重新同意",
+      "waitForText": "作用域",
       "expect": [
-        "已重新同意"
+        "撤回“处理健康信息”后"
       ],
-      "wait": 8000
+      "wait": 3000
+    },
+    {
+      "name": "重新开启「健康信息处理」",
+      "path": "/account",
+      "waitForText": "作用域",
+      "clickInRow": { "rowText": "健康信息处理", "buttonText": "开启" },
+      "wait": 2500,
+      "probe": "(() => { const rows=[...document.querySelectorAll('tr')].filter(r=>r.textContent.includes('健康信息处理')); const r=rows[0]; return r ? (r.textContent.includes('已同意')? 'regranted':'not-yet') : 'no-row'; })()"
+    },
+    {
+      "name": "确认已重新同意（该行回到已同意）",
+      "path": "/account",
+      "waitForText": "作用域",
+      "expect": [
+        "已同意"
+      ],
+      "wait": 3000
     },
     {
       "name": "退出登录",

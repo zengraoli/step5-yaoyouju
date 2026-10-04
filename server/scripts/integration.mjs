@@ -122,8 +122,12 @@ async function main() {
   // 命中红旗的病程：之后每次提交分析都必须被拦截（产品红线：不再生成个性化分析）
   const blocked = await req('/analyses', 'POST', { episode_id: ep.id, symptom_change: '继续观察' }, ut)
   check('命中红旗后同病程再提交分析被拦截（40911）', blocked.status === 409 && blocked.body.code === 40911, blocked.body.message)
-  // 用一个没有红旗的新病程做后续开关链路
-  const freshEp = await req('/episodes', 'POST', { title: '联调开关验证' }, ut)
+  // 开关链路用一个「没有红旗的全新用户」：命中过高危红旗的账号会被永久停止个性化分析
+  // （产品红线第 3 条：用户级拦截，跨病程生效），不能拿来验证开关回退 / 排队
+  const swPhone = '138' + String(Date.now()).slice(-8)
+  const swToken = (await req('/auth/login', 'POST', { phone: swPhone, code: '123456' })).body.data.token
+  await req('/auth/consents', 'POST', { scope: '健康信息处理' }, swToken)
+  const freshEp = await req('/episodes', 'POST', { title: '联调开关验证' }, swToken)
   const freshEpId = freshEp.body.data.id
 
   // 链路 2：高危开关（个性化分析）双人确认 → 回退 / 恢复
@@ -144,11 +148,11 @@ async function main() {
   }
   const switchedOff = await setSwitch(false)
   check('高危开关变更需双人确认后生效', switchedOff.body.code === 0, switchedOff.body.message)
-  const fallback = await req('/analyses', 'POST', { episode_id: freshEpId }, ut)
+  const fallback = await req('/analyses', 'POST', { episode_id: freshEpId }, swToken)
   check('关闭个性化分析后返回回退', fallback.body.data?.status === 'fallback', fallback.body.message)
   const switchedOn = await setSwitch(true)
   check('恢复个性化分析开关（双人确认）', switchedOn.body.code === 0, switchedOn.body.message)
-  const normal = await req('/analyses', 'POST', { episode_id: freshEpId }, ut)
+  const normal = await req('/analyses', 'POST', { episode_id: freshEpId }, swToken)
   check('恢复开关后正常排队', normal.body.data?.status === 'queued', normal.body.message)
 
   // 链路 3：内容下线 → 用户端不可见 + 引用定位

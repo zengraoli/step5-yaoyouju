@@ -1,0 +1,66 @@
+{
+  "steps": [
+    {
+      "name": "登录（新用户，375 宽）",
+      "path": "/pages/login/login",
+      "waitFor": "input.uni-input-input",
+      "fill": [["input.uni-input-input", "${PHONE}", 0], ["input.uni-input-input", "123456", 1]],
+      "wait": 1500
+    },
+    { "name": "勾选健康信息处理同意", "click": "单独同意：处理我的健康信息", "wait": 1500 },
+    {
+      "name": "登录并进入首页",
+      "click": "登录 / 注册",
+      "waitForText": "问与解释",
+      "expect": ["问与解释"],
+      "wait": 7000
+    },
+    {
+      "name": "打开问与解释",
+      "click": "问与解释",
+      "clickExact": true,
+      "waitForText": "输入你的问题",
+      "expect": ["输入你的问题"],
+      "wait": 7000
+    },
+    {
+      "name": "输入越界提问（手术决策变体）",
+      "fill": [["input.uni-input-input", "我这个情况该不该做手术"]],
+      "wait": 1200
+    },
+    {
+      "name": "发送：越界拒答并转复诊问题",
+      "clickSelector": ".qa-input__send",
+      "waitForText": "手术",
+      "expect": ["不能给出手术建议", "复诊"],
+      "allowStatus": [409],
+      "wait": 6000
+    },
+    {
+      "name": "再输入越界提问（诊断类变体）",
+      "fill": [["input.uni-input-input", "我这个程度是不是应该做手术"]],
+      "wait": 1200
+    },
+    {
+      "name": "发送：仍拒答",
+      "clickSelector": ".qa-input__send",
+      "waitForText": "手术",
+      "expect": ["不能给出手术建议"],
+      "allowStatus": [409],
+      "wait": 6000
+    },
+    {
+      "name": "输入红旗提问",
+      "fill": [["input.uni-input-input", "这两天会阴部麻木，伴大小便控制变化"]],
+      "wait": 1200
+    },
+    {
+      "name": "发送：命中红旗跳就医提示",
+      "clickSelector": ".qa-input__send",
+      "waitForText": "需要及时寻求专业帮助",
+      "expect": ["需要及时寻求专业帮助"],
+      "allowStatus": [409, 40910, 40911],
+      "wait": 6000
+    }
+  ]
+}

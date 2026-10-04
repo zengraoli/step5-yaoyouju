@@ -18,7 +18,7 @@ import {
   REASSURANCE_STREAK,
   normalizeSafetyText,
 } from './safety.rules';
-import { NORMAL_REPORTS, SHOULD_NOT_TRIGGER, SHOULD_TRIGGER } from './safety.corpus';
+import { NORMAL_REPORTS, SHOULD_NOT_TRIGGER, SHOULD_TRIGGER, ROUND8_TRIGGER, ROUND8_NOT } from './safety.corpus';
 
 describe('T04 安全规则引擎', () => {
   let app: INestApplication;
@@ -316,5 +316,29 @@ describe('T04c 自编语料逐条核对（第六轮验收反馈：换一种说�
     const prognosis = OUT_OF_SCOPE_RULES.find((r) => r.category === '预后')!;
     expect(matchesScopeRule(prognosis, '会不会以后要坐轮椅')).toBe(true);
     expect(matchesScopeRule(prognosis, '再过几年会不会更严重')).toBe(true);
+  });
+});
+
+describe('T04d 第八轮独立新编 100 条（病历写法命中、第三方 / 日常 / 正常报告零误判）', () => {
+  const flagged = (text: string) =>
+    RED_FLAG_RULES.filter((r) => matchesRedFlagRule(r, text)).map((r) => r.code);
+
+  it('60 条应触发（病历 / 交班 / 口语写法）全部命中', () => {
+    const miss = ROUND8_TRIGGER.filter((t) => flagged(t).length === 0);
+    expect(miss).toEqual([]);
+    expect(ROUND8_TRIGGER.length).toBe(60);
+  });
+
+  it('40 条不应触发（第三方 / 日常 / 否定 / 正常报告）零误判', () => {
+    const wrong = ROUND8_NOT.filter((t) => flagged(t).length > 0);
+    expect(wrong).toEqual([]);
+    expect(ROUND8_NOT.length).toBe(40);
+  });
+
+  it('手术决策变体（「是不是应该做手术」「该不该做手术」）仍明确拒答', () => {
+    const surgery = OUT_OF_SCOPE_RULES.find((r) => r.category === '手术')!;
+    for (const q of ['这个情况是不是应该做手术', '我这情况该不该做手术', '我的腰需不需要动刀', '我这个情况是不是应该手术']) {
+      expect(matchesScopeRule(surgery, q)).toBe(true);
+    }
   });
 });
