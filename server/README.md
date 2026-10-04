@@ -87,6 +87,7 @@ npm run smoke      # 端到端冒烟测试（需先 npm run dev）
 | `scripts/round8-cases.ts` | 第八轮独立新编 100 条（60 应触发 + 40 不触发，纯函数逐条核对） | `npx tsx scripts/round8-cases.ts` |
 | `scripts/round8-api.mjs` | 上述 100 条用「新用户 + 新病程」走真实 `/analyses` 统计命中率与误判率（先 `gen-round8-data.ts` 生成数据） | 先启动 server | `node scripts/round8-api.mjs` |
 | `scripts/scope-variants.ts` | 越界提问变体（「这个情况是不是应该做手术」等）抽查（纯函数） | `npx tsx scripts/scope-variants.ts` |
+| `scripts/delete-verify.mjs` | 删除账户闭环：申请 → 冷静期门槛 → 模拟冷静期结束 → 确认删除 → 查库确认清除（隔离演示库） | 先启动 server | `node scripts/delete-verify.mjs` |
 | `scripts/round4-verify.mjs` | 第四轮接口级复查（删除账户、令牌吊销、双人确认、审计链、权限矩阵） | `node scripts/round4-verify.mjs` |
 | `scripts/acceptance-check.mjs` / `admin-check.mjs` / `browser-check.mjs` / `browser-flow.mjs` | 三端联调、后台五角色走查、浏览器全流程 | 见脚本头部注释 |
 | `scripts/integration.mjs` | 三端联调（`npm run integration`） | 需 server + worker |
@@ -97,6 +98,7 @@ npm run smoke      # 端到端冒烟测试（需先 npm run dev）
 
 ## 已知问题
 
+- Android 原生客户端：本机沙箱内 Gradle 首次构建依赖下载很慢 / 会卡住，本轮未能在线上完成 APK 构建与模拟器真机联调；其安全规则与全部逻辑由同一 `server` 安全引擎驱动，已由纯函数、接口级、Web / App 浏览器全流程覆盖。
 - 大模型为本地模拟实现（模板 + 证据片段），不调用任何外部服务。
 - OCR 为模拟实现，返回示例文本；主路径是粘贴文字。
 - 任务队列用 SQLite 任务表替代 Redis Streams，单机演示够用，不做多 Worker 并发保证。
