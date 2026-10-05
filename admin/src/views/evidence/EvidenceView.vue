@@ -59,6 +59,7 @@ interface ImpactReport {
   doc_title: string
   active: boolean
   citation_count: number
+  analysis_count?: number
   analyses: ImpactItem[]
   contents: { content_item_id: string; title: string; current_status: string }[]
   note: string
@@ -421,7 +422,7 @@ function stepTag(status: string): { key: 'confirmed' | 'unconfirmed' | 'offline'
               <span class="impact-item__text">{{ a.statement }}</span>
             </li>
           </ul>
-          <p class="panel__hint">近 90 天分析 {{ impact.citation_count }} 条（脱敏统计）</p>
+          <p class="panel__hint">关联分析 {{ impact.analysis_count ?? impact.analyses.length }} 条 · 引用 {{ impact.citation_count }} 处（脱敏统计）</p>
           <AppButton type="danger" size="sm" :loading="disabling" @click="onDisable">确认停用（写入审计）</AppButton>
         </AppCard>
 

@@ -141,8 +141,10 @@ export interface EvidenceImpactReport {
   doc_id: string;
   doc_title: string;
   active: boolean;
-  /** 被引用数（analysis_citation） */
+  /** 被引用数（analysis_citation 引用条数，可能一处分析有多条引用） */
   citation_count: number;
+  /** 被关联的分析条数（去重后的 analysis 数，= analyses.length） */
+  analysis_count: number;
   analyses: EvidenceAnalysisReference[];
   contents: EvidenceContentReference[];
   /** 演示实现说明 */
@@ -407,6 +409,7 @@ export class EvidenceService implements EvidenceRetriever {
       reason: reason?.trim() || null,
       impact: {
         citation_count: impact.citation_count,
+        analysis_count: impact.analysis_count,
         analysis_ids: impact.analyses.map((a) => a.analysis_id),
         content_item_ids: impact.contents.map((c) => c.content_item_id),
       },
@@ -600,6 +603,7 @@ export class EvidenceService implements EvidenceRetriever {
       doc_title: row.title,
       active: row.active === 1,
       citation_count: citations.length,
+      analysis_count: analysesOut.length,
       analyses: analysesOut,
       contents: this.contentReferences(row.title),
       note:

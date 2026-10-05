@@ -334,7 +334,7 @@ function onBack() {
       <span class="breadcrumb__sep">›</span>
       <span class="breadcrumb__current">{{ detail.title }} · v{{ detail.current_version?.version ?? '—' }}（{{ detail.current_status }}）</span>
       <div class="breadcrumb__actions">
-        <AppButton type="soft" size="sm">视频</AppButton>
+        <AppButton type="soft" size="sm">{{ detail.type }}</AppButton>
         <StatusTag status="unconfirmed" :text="detail.current_status" />
         <AppButton type="soft" size="sm">{{ versionBadge }}</AppButton>
       </div>
