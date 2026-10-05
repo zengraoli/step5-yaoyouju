@@ -15,11 +15,23 @@ class AuditQueryDto {
   @MaxLength(50)
   actor?: string;
 
-  /** 动作（如 admin.login / feedback.authorize_view） */
+  /** 动作（如 admin.login / feedback.authorize_view；可逗号分隔多个） */
   @IsOptional()
   @IsString()
   @MaxLength(100)
   action?: string;
+
+  /** 对象类型（如 content_item / feedback / admin_user；可逗号分隔多个） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  target_type?: string;
+
+  /** 角色（如 运营编辑 / 超级管理） */
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  role?: string;
 
   /** 时间范围（UTC ISO8601，闭区间） */
   @IsOptional()
@@ -83,6 +95,8 @@ export class AdminAuditController {
     return this.adminAudit.list({
       actor: query.actor,
       action: query.action,
+      target_type: query.target_type,
+      role: query.role,
       from: query.from,
       to: query.to,
       page: query.page,

@@ -40,6 +40,8 @@ export interface AuditExportRequest {
 export interface AuditQuery {
   actor?: string;
   action?: string;
+  target_type?: string;
+  role?: string;
   from?: string;
   to?: string;
   page?: number;
@@ -96,9 +98,31 @@ export class AdminAuditService {
       where.push('u.name = ?');
       params.push(query.actor);
     }
+    if (query.role) {
+      where.push('r.name = ?');
+      params.push(query.role);
+    }
     if (query.action) {
-      where.push('l.action = ?');
-      params.push(query.action);
+      // 动作可传多个（逗号分隔）：后台动作下拉按中文归类的英文动作码集合
+      const codes = query.action.split(',').map((s) => s.trim()).filter(Boolean);
+      if (codes.length === 1) {
+        where.push('l.action = ?');
+        params.push(codes[0]);
+      } else if (codes.length > 1) {
+        where.push(`l.action IN (${codes.map(() => '?').join(', ')})`);
+        params.push(...codes);
+      }
+    }
+    if (query.target_type) {
+      // 对象类型（target 形如 `content_item:<id>`）：按「前缀:」匹配，可传多个
+      const codes = query.target_type.split(',').map((s) => s.trim()).filter(Boolean);
+      if (codes.length === 1) {
+        where.push("l.target LIKE ? || ':%'");
+        params.push(codes[0]);
+      } else if (codes.length > 1) {
+        where.push(`(${codes.map(() => "l.target LIKE ? || ':%'").join(' OR ')})`);
+        params.push(...codes);
+      }
     }
     if (query.from) {
       where.push('l.created_at >= ?');

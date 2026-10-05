@@ -390,6 +390,31 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     expect((db.app.prepare('SELECT COUNT(*) AS n FROM audit_log').get() as { n: number }).n).toBe(before + 1);
   });
 
+  it('审计筛选：动作 / 对象类型 / 角色 / 操作人都真实生效（第九轮反馈筛选不生效）', () => {
+    const audit = app.get(AuditService);
+    const svc = app.get(AdminAuditService);
+    // 造两条不同动作 / 对象 /角色的记录
+    audit.append(adminIds.super01, 'content.publish', 'content_item:aaa', {});
+    audit.append(adminIds.tech01, 'evidence.read', 'evidence_doc:bbb', {});
+    // 动作按英文 code 精确 / 多值筛选
+    const byAction = svc.list({ action: 'content.publish', page_size: 100 });
+    expect(byAction.items.some((i) => i.target === 'content_item:aaa')).toBe(true);
+    expect(byAction.items.every((i) => i.action === 'content.publish')).toBe(true);
+    // 对象类型按 target 前缀筛选
+    const byTarget = svc.list({ target_type: 'evidence_doc', page_size: 100 });
+    expect(byTarget.items.some((i) => i.target === 'evidence_doc:bbb')).toBe(true);
+    expect(byTarget.items.every((i) => (i.target ?? '').startsWith('evidence_doc:'))).toBe(true);
+    // 角色筛选
+    const byTech = svc.list({ role: '技术负责人', page_size: 100 });
+    expect(byTech.items.some((i) => i.action === 'evidence.read' && i.target === 'evidence_doc:bbb')).toBe(true);
+    expect(byTech.items.every((i) => i.actor_role === '技术负责人')).toBe(true);
+    // 中文归类多值（内容发布）仍能查到
+    expect(svc.list({ action: 'content.publish' }).items.length).toBeGreaterThan(0);
+    // 操作人筛选
+    const bySuper = svc.list({ actor: 'super01', page_size: 100 });
+    expect(bySuper.items.every((i) => i.actor_name === 'super01')).toBe(true);
+  });
+
   it('登出写审计；无自助注册接口', async () => {
     const res = await api().post('/admin/auth/logout').set(H(tokens.editor01));
     expect(res.body.code).toBe(0);

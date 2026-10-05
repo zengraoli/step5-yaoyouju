@@ -66,6 +66,25 @@ const lastVerifiedAt = ref('')
 
 const ACTION_OPTIONS = ['全部', '登录', '内容审核', '内容发布', '开关变更', '授权查看', '处置举报', '审计导出']
 const TARGET_OPTIONS = ['全部', '内容', '分析', '开关', '举报', '成员', '证据']
+/** 动作中文选项 → 真实英文动作码（审计存的是英文 code，选中项必须按码查库） */
+const ACTION_MAP: Record<string, string[]> = {
+  登录: ['admin.login', 'admin.logout', 'admin.login_failed'],
+  内容审核: ['content.create_draft', 'content.update_draft', 'content.submit_review', 'content.approve', 'content.reject', 'content.resubmit', 'content.mark_correcting'],
+  内容发布: ['content.publish'],
+  开关变更: ['switch.update', 'dual_control.update'],
+  授权查看: ['feedback.authorize_view', 'feedback.authorize_revoke'],
+  处置举报: ['feedback.triage', 'feedback.handle'],
+  审计导出: ['audit.export_request', 'audit.export_approve', 'audit.export'],
+}
+/** 对象类型中文选项 → 真实 target 前缀（target 形如 content_item:<id>） */
+const TARGET_MAP: Record<string, string[]> = {
+  内容: ['content_item'],
+  分析: ['analysis_task'],
+  开关: ['feature_switch'],
+  举报: ['feedback'],
+  成员: ['admin_user'],
+  证据: ['evidence_doc'],
+}
 const TIME_OPTIONS = [
   { label: '近 7 天', value: '168' },
   { label: '近 24 小时', value: '24' },
@@ -93,7 +112,10 @@ async function load() {
       data: {
         page: page.value,
         page_size: pageSize.value,
-        action: filters.value.action === '全部' ? undefined : filters.value.action,
+        action: filters.value.action === '全部' ? undefined : (ACTION_MAP[filters.value.action] ?? [filters.value.action]).join(','),
+        target_type: filters.value.target_type === '全部' ? undefined : (TARGET_MAP[filters.value.target_type] ?? [filters.value.target_type]).join(','),
+        role: filters.value.role === '全部' ? undefined : filters.value.role,
+        actor: filters.value.actor === '全部' || filters.value.actor === '系统' ? undefined : filters.value.actor,
         hours: filters.value.hours,
       },
     })
@@ -258,6 +280,7 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
             <option>临床审核</option>
             <option>运营编辑</option>
             <option>合规支持</option>
+            <option>超级管理</option>
           </select>
         </label>
         <label class="filter">
