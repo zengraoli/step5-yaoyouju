@@ -62,15 +62,7 @@ function anchorJournalPath(): string {
   return path.join(dir, 'audit-anchor.journal');
 }
 
-/** 流水账文件是否存在（被删掉本身就是删改证据，第七轮验收反馈第 12 条） */
-function journalExists(): boolean {
-  try {
-    return fs.existsSync(anchorJournalPath());
-  } catch {
-    return false;
-  }
-}
-
+/** 账本追加一行（每次追加审计时同步留痕） */
 function journalAppend(total: number, headHash: string, hmac: string): void {
   try {
     fs.mkdirSync(path.dirname(anchorJournalPath()), { recursive: true });
@@ -246,15 +238,31 @@ export class AuditService {
         reason: '审计追加流水表与锚点记录数不一致，可能存在被删除的审计记录',
       };
     }
-    // 锚点流水账：文件被删 / 被截回旧行都说明有人动过数据目录（第七轮第 12 条）
-    if (rows.length > 0 && !journalExists()) {
+    // sqlite_sequence 高水位：audit_append_log 用 AUTOINCREMENT，删掉尾行后
+    // COUNT / MAX(seq) 都会回落，但 sqlite_sequence 仍记录历史最大值，从而发现「删尾 + 回滚锚点」
+    // （第七轮第 12 条：删 audit_log 与 audit_append_log 末条并回放旧合法锚点仍被判完整）
+    const seqHigh = this.db.app
+      .prepare(`SELECT seq FROM sqlite_sequence WHERE name = 'audit_append_log'`)
+      .get() as { seq: number } | undefined;
+    if (appendMax > 0 && !seqHigh) {
+      return { ok: false, broken_at: null, reason: '审计追加计数表（sqlite_sequence）被重置，无法证明审计未被删减' };
+    }
+    if (seqHigh && seqHigh.seq !== appendMax) {
       return {
         ok: false,
         broken_at: null,
-        reason: '锚点流水账缺失（数据目录里的 audit-anchor.journal 被删除），无法证明审计未被删减',
+        reason: `审计追加流水表记录被删除（历史计数 ${seqHigh.seq}，现存最大 ${appendMax}），可能存在被删除的审计记录`,
       };
     }
+    // 锚点流水账：文件被删 / 被清空（含清成空文件）/ 被截回旧行都说明有人动过数据目录
     const tail = journalTail();
+    if (rows.length > 0 && !tail) {
+      return {
+        ok: false,
+        broken_at: null,
+        reason: '锚点流水账缺失或被清空（数据目录里的 audit-anchor.journal 被删除 / 内容被清空），无法证明审计未被删减',
+      };
+    }
     if (tail && (anchor.total < tail.total || anchor.head_hash !== tail.head_hash)) {
       return {
         ok: false,

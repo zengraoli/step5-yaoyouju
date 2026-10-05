@@ -346,6 +346,35 @@ describe('T14 后台账号、权限与审计（登录锁定 / 权限矩阵 / 双
     expect(res.body.data).toEqual({ ok: true, broken_at: null });
   });
 
+  it('审计完整性：清空锚点流水账 / 删尾追加记录都能被发现（第七轮第 12 条，F9 加强）', () => {
+    const audit = app.get(AuditService);
+    // 干净链基线（本用例在「篡改记录」用例之前运行）
+    expect(audit.verifyChain().ok).toBe(true);
+
+    // 攻击1：把锚点流水账清空（文件仍在但为空）→ 必须判不完整，并恢复
+    const jpath = path.join(process.env.DB_DIR as string, 'audit-anchor.journal');
+    const backup = fs.existsSync(jpath) ? fs.readFileSync(jpath, 'utf8') : '';
+    fs.writeFileSync(jpath, '');
+    const afterEmptyJournal = audit.verifyChain();
+    expect(afterEmptyJournal.ok).toBe(false);
+    expect(afterEmptyJournal.reason).toContain('流水账');
+    fs.writeFileSync(jpath, backup);
+    expect(audit.verifyChain().ok).toBe(true); // 恢复流水账后重新通过
+
+    // 攻击2：删掉 audit_append_log 最后一条（COUNT / MAX 回落，但 sqlite_sequence 仍是高水位）→ 必须判不完整，并原样恢复
+    const lastRow = db.app
+      .prepare('SELECT seq, head_hash, total, created_at FROM audit_append_log ORDER BY seq DESC LIMIT 1')
+      .get() as { seq: number; head_hash: string; total: number; created_at: string };
+    db.app.prepare('DELETE FROM audit_append_log WHERE seq = ?').run(lastRow.seq);
+    const afterDelete = audit.verifyChain();
+    expect(afterDelete.ok).toBe(false);
+    expect(afterDelete.reason).toMatch(/删除|重置|不连续|不一致|篡改/);
+    db.app
+      .prepare('INSERT INTO audit_append_log (seq, head_hash, total, created_at) VALUES (?, ?, ?, ?)')
+      .run(lastRow.seq, lastRow.head_hash, lastRow.total, lastRow.created_at);
+    expect(audit.verifyChain().ok).toBe(true); // 原样恢复后重新通过
+  });
+
   it('篡改一条审计记录后，校验接口能发现（先绕过数据库触发器再改写）', async () => {
     const target = db.app
       .prepare('SELECT id FROM audit_log ORDER BY created_at ASC, rowid ASC LIMIT 1')
