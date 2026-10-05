@@ -230,9 +230,8 @@ export class ModelReleasesService {
             '这是唯一生效的发布，回滚后新分析会全部失败；请先把另一个通过评测门禁的发布提升为生效后再回滚',
           );
         }
-        this.logger.warn(
-          `[model_release] 回滚唯一生效发布 ${id}，系统内已存在通过门禁的发布 ${ready.id} 可顶上`,
-        );
+        // 已过门禁的发布顶上为生效：回滚绝不能留下 0 个生效模型（第九轮：普通任务因无生效模型失败）
+        this.forceEnforce(ready.id, actorId, `回滚 ${this.labelOf(id)} 后顶上`);
       }
     }
 
@@ -247,6 +246,23 @@ export class ModelReleasesService {
   }
 
   // ---------- 内部 ----------
+
+  /** 把某个已过门禁的发布直接置为生效（顶上），保证系统内始终有生效模型 */
+  private forceEnforce(id: string, actorId: string | null, reason: string): void {
+    const row = this.require(id);
+    // 回滚其它仍在生效的（防御性：同一时刻只应有一个生效发布）
+    this.db.app
+      .prepare(`UPDATE model_release SET status='已回滚', gray_traffic=0 WHERE status='生效' AND id<>?`)
+      .run(id);
+    this.db.app.prepare(`UPDATE model_release SET status='生效', gray_traffic=100 WHERE id=?`).run(id);
+    this.audit.append(actorId, 'model_release.promote', `model_release:${id}`, {
+      from: row.status,
+      to: '生效',
+      auto_enforce: true,
+      reason,
+    });
+    this.logger.log(`[model_release] ${id} 顶上为生效（${reason}）`);
+  }
 
   private require(id: string): ReleaseRow {
     const row = this.db.app

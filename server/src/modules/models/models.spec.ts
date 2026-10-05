@@ -492,6 +492,23 @@ describe('T13 模型发布与评测（发布组合 / 评测门禁 / 失败用例
     expect((await api().get('/admin/eval/sets')).body.code).toBe(40100);
     expect((await api().get('/admin/eval/runs')).body.code).toBe(40100);
   });
+  it('回滚唯一生效发布时自动顶上已过门禁的候选，保证始终有生效模型（第九轮反馈：无可用模型）', async () => {
+    const active = await promoteToActive('prompt-autofallback');
+    // 再建一个已过门禁但未提升的候选
+    const cand = (await createRelease({ prompt_version: 'prompt-autofallback2' })).body.data as ReleaseItem;
+    for (const name of REQUIRED_NAMES) {
+      const res = await runEval({ model_release_id: cand.id, eval_set_id: requiredSetId(name), trigger_reason: '发布前门禁' });
+      expect(res.body.code).toBe(0);
+      expect(res.body.data.result).toBe('通过');
+    }
+    // 回滚唯一生效的 active：已有过门禁候选 → 顶上为生效，系统不能 0 生效模型
+    const rolled = await dualConfirmed('model.rollback', (cid, t) => rollback(active.id, '演示：回滚唯一生效但已有过门禁候选', cid, t));
+    expect(rolled.status).toBe('已回滚');
+    const items = (await api().get('/admin/models').set(H()).expect(200)).body.data as ReleaseItem[];
+    expect(items.find((i) => i.id === cand.id)!.status).toBe('生效');
+    expect(items.filter((i) => i.status === '生效').length).toBeGreaterThanOrEqual(1);
+  });
+
 });
 
 describe('T13 评测评分器（纯函数）', () => {
