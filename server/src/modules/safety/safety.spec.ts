@@ -18,7 +18,7 @@ import {
   REASSURANCE_STREAK,
   normalizeSafetyText,
 } from './safety.rules';
-import { NORMAL_REPORTS, SHOULD_NOT_TRIGGER, SHOULD_TRIGGER, ROUND8_TRIGGER, ROUND8_NOT } from './safety.corpus';
+import { NORMAL_REPORTS, SHOULD_NOT_TRIGGER, SHOULD_TRIGGER, ROUND8_TRIGGER, ROUND8_NOT, ROUND9_TRIGGER, ROUND9_NOT } from './safety.corpus';
 
 describe('T04 安全规则引擎', () => {
   let app: INestApplication;
@@ -340,5 +340,21 @@ describe('T04d 第八轮独立新编 100 条（病历写法命中、第三方 / 
     for (const q of ['这个情况是不是应该做手术', '我这情况该不该做手术', '我的腰需不需要动刀', '我这个情况是不是应该手术']) {
       expect(matchesScopeRule(surgery, q)).toBe(true);
     }
+  });
+});
+
+
+describe('T04e 第九轮（F9）主持全新新编 100 条（病历 / 报告 / 口语写法零漏判、零误判）', () => {
+  const flagged = (text: string) =>
+    RED_FLAG_RULES.filter((r) => matchesRedFlagRule(r, text)).map((r) => r.code);
+
+  it('60 条应触发全部命中（修复 v0.120 上 20/60 漏判）', () => {
+    expect(ROUND9_TRIGGER.filter((t) => flagged(t).length === 0)).toEqual([]);
+    expect(ROUND9_TRIGGER.length).toBe(60);
+  });
+
+  it('40 条不应触发零误判（含 祖父第三方、感冒高烧已好）', () => {
+    expect(ROUND9_NOT.filter((t) => flagged(t).length > 0)).toEqual([]);
+    expect(ROUND9_NOT.length).toBe(40);
   });
 });
