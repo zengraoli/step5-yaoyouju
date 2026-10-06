@@ -119,6 +119,9 @@ const stats = ref({
 const tab = ref<'error_report' | 'feedback'>('error_report')
 const selectedId = ref('')
 const detail = ref<FeedbackDetail | null>(null)
+// 两种反馈各自的真实条数（徽标不受当前 tab 影响）
+const errorCount = ref(0)
+const helpCount = ref(0)
 const detailLoading = ref(false)
 const handleAction = ref('')
 const handleComment = ref('')
@@ -137,32 +140,31 @@ onMounted(async () => {
 async function load() {
   loading.value = true
   try {
-    const res = await request<{ items: QueueItem[]; stats: FeedbackStats }>({
-      url: '/admin/feedback',
-      data: { type: tab.value },
-    })
-    items.value = res.items
+    // 一次取两种反馈的真实条数，保证两个 tab 徽标互不受影响（第九轮：帮助 tab 下错误徽标误显示帮助数）
+    const [errRes, helpRes] = await Promise.all([
+      request<{ items: QueueItem[]; stats: FeedbackStats }>({ url: '/admin/feedback', data: { type: 'error_report' } }),
+      request<{ items: QueueItem[]; stats: FeedbackStats }>({ url: '/admin/feedback', data: { type: 'feedback' } }),
+    ])
+    errorCount.value = errRes.items.length
+    helpCount.value = helpRes.items.length
+    items.value = (tab.value === 'feedback' ? helpRes.items : errRes.items) ?? []
     stats.value = {
-      pending: res.stats.pending,
-      pendingHigh: res.stats.pending_high,
-      pendingMedium: res.stats.pending_medium,
-      pendingLow: res.stats.pending_low,
-      reviewing: res.stats.reviewing,
-      closed: res.stats.closed,
-      avg_review_days: res.stats.avg_review_days,
-      avg_closed_days: res.stats.avg_closed_days,
+      pending: errRes.stats.pending,
+      pendingHigh: errRes.stats.pending_high,
+      pendingMedium: errRes.stats.pending_medium,
+      pendingLow: errRes.stats.pending_low,
+      reviewing: errRes.stats.reviewing,
+      closed: errRes.stats.closed,
+      avg_review_days: errRes.stats.avg_review_days,
+      avg_closed_days: errRes.stats.avg_closed_days,
       helpTotal: 0,
       helpUnderstood: 0,
       helpNext: 0,
       helpNone: 0,
     }
-    // 帮助类型反馈（近 7 天）单独统计
-    const help7d = await request<{ items: QueueItem[] }>({
-      url: '/admin/feedback',
-      data: { type: 'feedback' },
-    })
+    // 帮助类型反馈（近 7 天）来自 helpRes
     const weekAgo = Date.now() - 7 * 24 * 3600 * 1000
-    const recent = help7d.items.filter((i) => new Date(i.created_at).getTime() >= weekAgo)
+    const recent = helpRes.items.filter((i) => new Date(i.created_at).getTime() >= weekAgo)
     stats.value.helpTotal = recent.length
     const pct = (k: string) =>
       recent.length > 0 ? Math.round((recent.filter((i) => i.help_type === k).length / recent.length) * 100) : 0
@@ -176,6 +178,9 @@ async function load() {
 
 function onTabChange(t: 'error_report' | 'feedback') {
   tab.value = t
+  // 切 tab 清空上一种反馈的选中与详情，避免旧错误详情残留在帮助列表里（第九轮：残留）
+  selectedId.value = ''
+  detail.value = null
   void load()
 }
 
@@ -365,7 +370,7 @@ const affectedText = computed<string>(() => {
             :class="{ 'tabs__item--active': tab === 'error_report' }"
             @click="onTabChange('error_report')"
           >
-            错误举报（{{ items.length }}）
+            错误举报（{{ errorCount }}）
           </button>
           <button
             type="button"
@@ -373,7 +378,7 @@ const affectedText = computed<string>(() => {
             :class="{ 'tabs__item--active': tab === 'feedback' }"
             @click="onTabChange('feedback')"
           >
-            帮助类型反馈
+            帮助类型反馈（{{ helpCount }}）
           </button>
           <button type="button" class="tabs__item" @click="notify('复述任务为二期功能，当前未开放')">复述任务抽查</button>
         </div>

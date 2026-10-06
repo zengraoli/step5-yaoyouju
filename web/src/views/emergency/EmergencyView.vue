@@ -91,7 +91,7 @@ async function loadBringItems() {
     bringItems.value = base.map((item, i) => {
       if (i === 0 && report) {
         const date = report.report?.report_date ?? detail.onset_date ?? ''
-        return { ...item, detail: date ? `（${date} 检查报告）` : '', available: true }
+        return { ...item, detail: date ? `（${date} 检查报告）` : '（检查报告日期尚未确认）', available: true }
       }
       if (i === 1 && detail.onset_date && symptomCount > 0) {
         return { ...item, detail: `（${detail.onset_date} 起，共 ${symptomCount} 条症状记录）`, available: true }

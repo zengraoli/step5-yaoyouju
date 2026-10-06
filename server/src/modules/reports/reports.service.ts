@@ -100,7 +100,8 @@ export class ReportsService {
       .run(
         id,
         careEventId,
-        input.report_date && input.report_date.trim() ? input.report_date : occurred.slice(0, 10),
+        // 产品红线：报告日期留空 = 尚未确认，不伪造日期（存 null，界面显示「尚未确认」）
+        input.report_date && input.report_date.trim() ? input.report_date : null,
         text,
         JSON.stringify(extractTerms(text)),
         `local://reports/${id}`,

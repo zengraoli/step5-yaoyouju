@@ -171,7 +171,13 @@ async function load() {
       request<EvidenceListItem[]>({ url: '/admin/evidence' }),
     ])
     items.value = Array.isArray(list) ? list : []
-    stats.value = computeStats(Array.isArray(all) ? all : [])
+    const allDocs = Array.isArray(all) ? all : []
+    stats.value = computeStats(allDocs)
+    // 索引统计（首屏也要真实：onMounted 只走 load，故在此一并计算真实片段数 / 文档数）
+    indexStats.value = {
+      chunks: allDocs.reduce((n, d) => n + (d.chunk_count ?? 0), 0),
+      docs: allDocs.length,
+    }
   } catch (e) {
     errorText.value = e instanceof Error ? e.message : '数据加载失败'
     items.value = []

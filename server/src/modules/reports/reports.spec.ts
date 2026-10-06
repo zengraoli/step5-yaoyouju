@@ -113,11 +113,12 @@ describe('T06 报告录入与结构化核对', () => {
     expect(list.body.data).toHaveLength(1);
   });
 
-  it('报告日期可留空：空串等同未填；非法格式仍拒绝（第九轮反馈）', async () => {
+  it('报告日期可留空：空串等同未填，存 null 并显示尚未确认；非法格式仍拒绝（第十轮反馈）', async () => {
     const ep = episodes.create(me.user.id, { title: '日期测试' }).id as string;
     const blank = await api().post('/reports').set(H()).send({ episode_id: ep, report_date: '', raw_text: SAMPLE_REPORT_TEXT, source_type: '报告原文' });
     expect(blank.body.code).toBe(0);
-    expect(blank.body.data.report_date).toBeTruthy();
+    // 留空 = 尚未确认：存 null，不伪造今天（第十轮：此前存今天违背红线）
+    expect(blank.body.data.report_date).toBeNull();
     const bad = await api().post('/reports').set(H()).send({ episode_id: ep, report_date: '2026/08/30', raw_text: SAMPLE_REPORT_TEXT, source_type: '报告原文' });
     expect(bad.body.code).toBe(40000);
   });

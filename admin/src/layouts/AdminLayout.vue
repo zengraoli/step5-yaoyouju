@@ -3,7 +3,7 @@
  * 后台整体布局：侧边栏按角色显示菜单（最小必要）+ 顶栏（标题 / 环境标识 / 账号）。
  * 路由守卫按权限拦截越权访问（见 router/index.ts）。
  */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { adminLogout } from '@/api/auth'
@@ -89,6 +89,10 @@ onMounted(() => {
 /** 是否需要绑定 MFA（新成员 / 重置 MFA 后） */
 const mfaPending = computed(() => auth.admin ? auth.admin.mfa_enabled === false : false)
 const deniedTip = ref('')
+// 离开被拒页面后清除旧「无权限」顶栏提示（第九轮：临床在正常页面仍看到旧越权提示）
+watch(() => route.query.denied, (v) => {
+  deniedTip.value = v === '1' ? '没有权限访问该页面，已回到仪表盘' : ''
+})
 /** 待确认单面板刷新（页面内完成双人确认后同步一次） */
 const pendingRef = ref<{ load: () => Promise<void> } | null>(null)
 

@@ -189,7 +189,7 @@ const videos = computed(() => analysis.value?.sections.videos ?? [])
 
 const reportItem = computed<StructuredItem | undefined>(() => items.value.find((i) => i.report))
 const reportRawText = computed<string>(() => reportItem.value?.raw_text ?? '')
-const reportDateLabel = computed<string>(() => reportItem.value?.report?.report_date ?? '')
+const reportDateLabel = computed<string>(() => reportItem.value?.report?.report_date ?? '尚未确认')
 const reportLines = computed<string[]>(() => reportRawText.value.split('\n'))
 
 interface Term {
