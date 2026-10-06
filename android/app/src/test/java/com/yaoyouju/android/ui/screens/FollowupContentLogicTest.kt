@@ -3,6 +3,7 @@ package com.yaoyouju.android.ui.screens
 import com.yaoyouju.android.core.net.ContentCurrentVersion
 import com.yaoyouju.android.core.net.ContentDetail
 import com.yaoyouju.android.core.net.ContentListItem
+import com.yaoyouju.android.core.net.ContentVersionView
 import com.yaoyouju.android.core.net.FollowupItem
 import com.yaoyouju.android.core.net.FollowupSection
 import com.yaoyouju.android.core.net.FollowupSummaryView
@@ -82,19 +83,7 @@ class FollowupContentLogicTest {
         assertFalse(unconfirmed.isEmpty())
     }
 
-    @Test
-    fun `导出格式三种`() {
-        val formats = listOf("文本", "PDF", "图片")
-        assertEquals(3, formats.size)
-        assertTrue(formats.contains("文本"))
-    }
 
-    @Test
-    fun `导出后由用户自行决定分享`() {
-        // exported=true 时提示用户自行决定，不自动分享
-        val exported = true
-        assertTrue(exported)
-    }
 
     // ---------- A13 内容库 ----------
 
@@ -143,7 +132,11 @@ class FollowupContentLogicTest {
             assetKey = null,
             publishedAt = "2026-08-30T00:00:00.000Z",
         ),
-        versions = emptyList(),
+        versions = listOf(
+            ContentVersionView(version = 1, subtitleText = "v1字幕", publishedAt = "2026-06-01T00:00:00.000Z"),
+            ContentVersionView(version = 2, subtitleText = "v2字幕", publishedAt = "2026-07-01T00:00:00.000Z"),
+            ContentVersionView(version = 3, subtitleText = "v3字幕", publishedAt = "2026-08-30T00:00:00.000Z"),
+        ),
         reviewRecords = listOf(
             ReviewRecordView(
                 id = "r1",
@@ -185,7 +178,8 @@ class FollowupContentLogicTest {
     fun `版本链展示`() {
         val d = sampleDetail()
         val chain = d.versions.map { "v" + it.version }
-        assertTrue(chain.isEmpty() || chain.isNotEmpty())
+        assertTrue(chain.isNotEmpty())
+        d.versions.forEachIndexed { i, v -> assertEquals("v" + v.version, chain[i]) }
     }
 
     @Test
