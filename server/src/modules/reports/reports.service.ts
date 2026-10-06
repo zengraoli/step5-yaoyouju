@@ -100,7 +100,7 @@ export class ReportsService {
       .run(
         id,
         careEventId,
-        input.report_date ?? occurred.slice(0, 10),
+        input.report_date && input.report_date.trim() ? input.report_date : occurred.slice(0, 10),
         text,
         JSON.stringify(extractTerms(text)),
         `local://reports/${id}`,

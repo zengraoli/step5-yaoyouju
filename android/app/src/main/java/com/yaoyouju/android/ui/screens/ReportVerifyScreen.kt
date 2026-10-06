@@ -149,7 +149,7 @@ fun ReportVerifyScreen(navController: NavHostController) {
                     val error = e as? ApiException
                     if (error != null && (error.code == 40910 || error.code == 40911)) {
                         // 命中红旗：走就医提示分支
-                        navController.navigate(Routes.EMERGENCY + "?stop=1")
+                        navController.navigate(Routes.EMERGENCY + "?stop=true")
                         return@launch
                     }
                     throw e

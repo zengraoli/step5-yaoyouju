@@ -85,7 +85,8 @@ fun FallbackScreen(
     val scope = rememberCoroutineScope()
 
     var reason by remember { mutableStateOf("") }
-    var savedInfo by remember { mutableStateOf(false) }
+    /** 是否已有保存摘要：true=有；false=确认没有；null=离线/尚未拉到（不断言「还没有」） */
+    var savedInfo by remember { mutableStateOf<Boolean?>(null) }
     var loading by remember { mutableStateOf(true) }
 
     /**
@@ -203,9 +204,13 @@ fun FallbackScreen(
             Spacer(modifier = Modifier.height(8.dp))
             FallbackFeatureRow(
                 title = "查看 / 导出复诊摘要",
-                desc = if (savedInfo) "你已有保存的摘要，可继续查看与导出" else "还没有生成过摘要",
-                available = savedInfo,
-                onClick = { if (savedInfo) navController.navigate(Routes.FOLLOWUP) },
+                desc = when (savedInfo) {
+                    true -> "你已有保存的摘要，可继续查看与导出"
+                    false -> "还没有生成过摘要"
+                    null -> "恢复网络后可查看与导出复诊摘要"
+                },
+                available = savedInfo == true,
+                onClick = { if (savedInfo != false) navController.navigate(Routes.FOLLOWUP) },
             )
             Spacer(modifier = Modifier.height(8.dp))
             FallbackFeatureRow(

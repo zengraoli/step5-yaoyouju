@@ -181,7 +181,7 @@ fun QaScreen(navController: NavHostController) {
                         ?: ""
                     navController.navigate(
                         Routes.EMERGENCY + "?signals=" + labels +
-                            "&stop=" + (if (api.code == 40911) "1" else "0"),
+                            "&stop=" + (if (api.code == 40911) "true" else "false"),
                     )
                     return@launch
                 }

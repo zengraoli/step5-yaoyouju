@@ -28,6 +28,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,7 +84,8 @@ fun ChangeScreen(navController: NavHostController) {
     val changeOptions = RedFlagOptions.changeOptions
     var change by remember { mutableStateOf<String?>(null) }
     // 第 2 题：需要医生及时评估的情况（多选）
-    var redFlags by remember { mutableStateOf(setOf<String>()) }
+    // 用 rememberSaveable：从就医提示页返回后仍保留勾选，避免「返回丢选择」并重复写关键变化事件（第九轮第 8 条）
+    var redFlags by rememberSaveable(stateSaver = RedFlagsSaver) { mutableStateOf(setOf<String>()) }
     // 第 3 题：涉及侧别（单选）
     val sideOptions = RedFlagOptions.sideOptions
     var side by remember { mutableStateOf<String?>(null) }
@@ -92,8 +95,8 @@ fun ChangeScreen(navController: NavHostController) {
 
     var submitting by remember { mutableStateOf(false) }
     var toastText by remember { mutableStateOf("") }
-    /** 本次 A02 是否已经写过「关键变化确认」事件（勾选红旗 / 提交只写一次，第七轮第 32 条） */
-    var answeredWritten by remember { mutableStateOf(false) }
+    /** 本次 A02 是否已经写过「关键变化确认」事件（勾选红旗 / 提交只写一次，第七轮第 32 条；跨返回保留） */
+    var answeredWritten by rememberSaveable { mutableStateOf(false) }
 
     // 红旗选项（与 server 安全规则 RF-xx 对应；逻辑见 RedFlagOptions，单元测试直接验证）
     val redFlagOptions = RedFlagOptions.all
@@ -162,7 +165,7 @@ fun ChangeScreen(navController: NavHostController) {
                 if (flags.isNotEmpty()) {
                     navController.navigate(
                         Routes.EMERGENCY + "?signals=" +
-                            RedFlagOptions.signalsOf(redFlags).joinToString(",") + "&stop=" + if (high) "1" else "0",
+                            RedFlagOptions.signalsOf(redFlags).joinToString(",") + "&stop=" + if (high) "true" else "false",
                     )
                     return@launch
                 }
@@ -180,7 +183,7 @@ fun ChangeScreen(navController: NavHostController) {
                         navController.navigate(
                             Routes.EMERGENCY + "?signals=" +
                                 RedFlagOptions.signalsOf(redFlags).joinToString(",") +
-                                "&stop=" + if (error.code == 40911) "1" else "0",
+                                "&stop=" + if (error.code == 40911) "true" else "false",
                         )
                         return@launch
                     }
@@ -193,7 +196,7 @@ fun ChangeScreen(navController: NavHostController) {
                 val signal = e as? SafetySignalException
                 if (signal != null) {
                     navController.navigate(
-                        Routes.EMERGENCY + "?signals=" + signal.labels + "&stop=" + if (signal.stop) "1" else "0",
+                        Routes.EMERGENCY + "?signals=" + signal.labels + "&stop=" + if (signal.stop) "true" else "false",
                     )
                 } else {
                     toastText = e.userMessage()
@@ -308,7 +311,7 @@ fun ChangeScreen(navController: NavHostController) {
                                 navController.navigate(
                                     Routes.EMERGENCY + "?signals=" +
                                         RedFlagOptions.signalsOf(redFlags).joinToString(",") +
-                                        "&stop=" + if (option.severity == "high") "1" else "0",
+                                        "&stop=" + if (option.severity == "high") "true" else "false",
                                 )
                             }
                         },
@@ -390,6 +393,12 @@ fun ChangeScreen(navController: NavHostController) {
     }
     }
 }
+
+/** Set<String> 的可保存还原（供 A02 红旗多选状态跨导航 / 旋屏保留，第九轮第 8 条） */
+private val RedFlagsSaver: Saver<Set<String>, List<String>> = Saver(
+    save = { it.toList() },
+    restore = { (it as? List<*>?)?.filterIsInstance<String>()?.toSet() ?: emptySet() },
+)
 
 /** 单选芯片行（自绘，保证长文案可换行） */
 @Composable

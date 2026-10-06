@@ -1,5 +1,5 @@
 import { Test } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -52,6 +52,7 @@ describe('T06 报告录入与结构化核对', () => {
     app = moduleRef.createNestApplication();
     app.useGlobalInterceptors(new ResponseInterceptor());
     app.useGlobalFilters(new AllExceptionsFilter());
+    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
     await app.init();
     auth = app.get(AuthService);
     episodes = app.get(EpisodesService);
@@ -110,6 +111,15 @@ describe('T06 报告录入与结构化核对', () => {
 
     const list = await api().get(`/episodes/${episodeId}/reports`).set(H());
     expect(list.body.data).toHaveLength(1);
+  });
+
+  it('报告日期可留空：空串等同未填；非法格式仍拒绝（第九轮反馈）', async () => {
+    const ep = episodes.create(me.user.id, { title: '日期测试' }).id as string;
+    const blank = await api().post('/reports').set(H()).send({ episode_id: ep, report_date: '', raw_text: SAMPLE_REPORT_TEXT, source_type: '报告原文' });
+    expect(blank.body.code).toBe(0);
+    expect(blank.body.data.report_date).toBeTruthy();
+    const bad = await api().post('/reports').set(H()).send({ episode_id: ep, report_date: '2026/08/30', raw_text: SAMPLE_REPORT_TEXT, source_type: '报告原文' });
+    expect(bad.body.code).toBe(40000);
   });
 
   it('空文本被拒绝', async () => {

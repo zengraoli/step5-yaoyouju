@@ -92,7 +92,7 @@ fun FeedbackScreen(
     var tab by remember { mutableStateOf(tabs[0]) }
 
     // 帮助类型反馈
-    val helpOptions = listOf("看懂了", "知道下一步", "都不好，问题没解决")
+    val helpOptions = listOf("看懂了", "知道下一步", "都不好")
     var helpType by remember { mutableStateOf("") }
     var unsolved by remember { mutableStateOf("") }
 

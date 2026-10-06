@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, Matches } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches, ValidateIf } from 'class-validator';
 import { ReportsService } from './reports.service';
 import { CurrentUser } from '../../common/current-user.decorator';
 import { RequireConsent } from '../../common/require-consent.decorator';
@@ -22,8 +22,9 @@ class CreateReportDto {
   @IsString()
   care_event_id?: string;
 
-  @ApiProperty({ description: '报告日期 YYYY-MM-DD', required: false, nullable: true })
+  @ApiProperty({ description: '报告日期 YYYY-MM-DD（可留空 = 尚未确认）', required: false, nullable: true })
   @IsOptional()
+  @ValidateIf((o: CreateReportDto) => o.report_date != null && o.report_date !== '')
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: '日期格式应为 YYYY-MM-DD' })
   report_date?: string | null;
 

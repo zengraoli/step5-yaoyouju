@@ -224,7 +224,7 @@ fun AnalysisScreen(
                     borderColor = Error,
                     modifier = Modifier.clickable {
                         navController.navigate(
-                            Routes.EMERGENCY + "?stop=" + if (analysis?.safetyFlag == "stop_personal") "1" else "0",
+                            Routes.EMERGENCY + "?stop=" + if (analysis?.safetyFlag == "stop_personal") "true" else "false",
                         )
                     },
                 ) {

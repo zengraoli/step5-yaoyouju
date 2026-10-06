@@ -49,9 +49,17 @@ class MainActivity : ComponentActivity() {
                 try {
                     ServiceLocator.authRepository.me()
                     token
-                } catch (_: Exception) {
-                    ServiceLocator.authRepository.logout()
-                    ""
+                } catch (e: Exception) {
+                    // 区分「网络 / 服务端问题」与「令牌确实失效」：
+                    // 断网或 5xx 只是暂时不能校验，保留登录态进首页（不因网络异常把已登录用户踢回登录页）；
+                    // 仅当令牌被明确鉴权拒绝（401 / 40100…）才登出清除（源码风险 #1，第九轮反馈）
+                    val ex = com.yaoyouju.android.core.net.networkErrorOf(e)
+                    if (ex.network || ex.code in 500..599) {
+                        token
+                    } else {
+                        ServiceLocator.authRepository.logout()
+                        ""
+                    }
                 }
             }
         }
