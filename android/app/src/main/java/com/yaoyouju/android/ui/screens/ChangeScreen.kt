@@ -95,8 +95,12 @@ fun ChangeScreen(navController: NavHostController) {
 
     var submitting by remember { mutableStateOf(false) }
     var toastText by remember { mutableStateOf("") }
-    /** 本次 A02 是否已经写过「关键变化确认」事件（勾选红旗 / 提交只写一次，第七轮第 32 条；跨返回保留） */
-    var answeredWritten by rememberSaveable { mutableStateOf(false) }
+    /** 最近一次已写入病程的「关键变化确认」内容签名（空 = 还没写过）。
+     *  勾选红旗后从就医提示返回、或无修改再次「下一步」时按内容去重，不再重复写完全相同的事件（第十轮第 5 条）。 */
+    var writtenSnapshot by rememberSaveable { mutableStateOf("") }
+
+    /** 当前这题的关键变化确认内容签名（变化 / 侧别 / 起病 / 红旗） */
+    fun snapshotSignature(): String = RedFlagOptions.snapshotSignature(change, side, onset, redFlags)
 
     // 红旗选项（与 server 安全规则 RF-xx 对应；逻辑见 RedFlagOptions，单元测试直接验证）
     val redFlagOptions = RedFlagOptions.all
@@ -150,7 +154,7 @@ fun ChangeScreen(navController: NavHostController) {
                 val flags = RedFlagOptions.all.filter { redFlags.contains(it.key) }
                 val high = flags.any { it.severity == "high" }
                 val episodeId = ensureEpisode() ?: return@launch
-                if (!answeredWritten) {
+                if (writtenSnapshot != snapshotSignature()) {
                     writeEvents(
                         episodesApi,
                         episodeId,
@@ -160,7 +164,7 @@ fun ChangeScreen(navController: NavHostController) {
                         RedFlagOptions.matchTextsOf(redFlags),
                         RedFlagOptions.labelsOf(redFlags),
                     )
-                    answeredWritten = true
+                    writtenSnapshot = snapshotSignature()
                 }
                 if (flags.isNotEmpty()) {
                     navController.navigate(
@@ -294,7 +298,7 @@ fun ChangeScreen(navController: NavHostController) {
                             // 不再每勾一次就追加一条「关键变化确认」事件（第七轮第 32 条）
                             scope.launch {
                                 val episodeId = runCatching { ensureEpisode() }.getOrNull()
-                                if (episodeId != null && !answeredWritten) {
+                                if (episodeId != null && writtenSnapshot != snapshotSignature()) {
                                     runCatching {
                                         writeEvents(
                                             episodesApi,
@@ -305,7 +309,7 @@ fun ChangeScreen(navController: NavHostController) {
                                             RedFlagOptions.matchTextsOf(redFlags),
                                             RedFlagOptions.labelsOf(redFlags),
                                         )
-                                        answeredWritten = true
+                                        writtenSnapshot = snapshotSignature()
                                     }
                                 }
                                 navController.navigate(

@@ -148,8 +148,12 @@ fun ReportVerifyScreen(navController: NavHostController) {
                 } catch (e: Exception) {
                     val error = e as? ApiException
                     if (error != null && (error.code == 40910 || error.code == 40911)) {
-                        // 命中红旗：走就医提示分支
-                        navController.navigate(Routes.EMERGENCY + "?stop=true")
+                        // 命中红旗：走就医提示分支，并带上命中的具体信号（第十轮：账户级拦下也不能丢具体红旗）
+                        val labels = safetyNoticeOf(error)?.first ?: ""
+                        navController.navigate(
+                            Routes.EMERGENCY + "?signals=" + android.net.Uri.encode(labels) +
+                                "&stop=" + if (error.code == 40911) "true" else "false",
+                        )
                         return@launch
                     }
                     throw e
@@ -386,7 +390,12 @@ private fun StructuredItemCard(
                 )
                 // 时间
                 Text(
-                    text = BjTime.date(item.occurredAt).ifBlank { "时间尚未确认" },
+                    text = if (item.report != null) {
+                        // 报告显示「检查日期」：留空 = 尚未确认，不拿录入时间冒充（第十轮：跨端一致）
+                        BjTime.date(item.report.reportDate ?: "").ifBlank { "报告日期尚未确认" }
+                    } else {
+                        BjTime.date(item.occurredAt ?: "").ifBlank { "时间尚未确认" }
+                    },
                     fontSize = 11.sp,
                     color = Text3,
                 )

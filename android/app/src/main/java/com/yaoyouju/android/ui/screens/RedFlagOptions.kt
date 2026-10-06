@@ -57,6 +57,20 @@ object RedFlagOptions {
     }.flatten()
 
     /**
+     * 「关键变化确认」内容签名：用于写病程前去重（第十轮第 5 条）。
+     * 相同勾选 / 变化组合得到相同签名（据此判定「无修改」，跳过重复写入）；
+     * 任一维度变化签名随之改变（据此写入新一次确认）。
+     */
+    fun snapshotSignature(change: String?, side: String?, onset: String?, keys: Set<String>): String =
+        listOf(
+            change ?: "",
+            side ?: "",
+            onset ?: "",
+            matchTextsOf(keys).sorted().joinToString("+"),
+            labelsOf(keys).sorted().joinToString("+"),
+        ).joinToString("|")
+
+    /**
      * 第 4 题快速选项 → 起病日期（YYYY-MM-DD）。
      * 「记不清 / 尚未确认」返回 null（缺失不默认阴性）。
      */

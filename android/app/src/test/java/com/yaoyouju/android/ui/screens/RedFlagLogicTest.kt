@@ -121,4 +121,22 @@ class RedFlagLogicTest {
         assertNull(RedFlagOptions.onsetDateOf("更久 / 说不清"))
         assertNull(RedFlagOptions.onsetDateOf(null))
     }
+
+
+    @Test
+    fun `关键变化确认签名相同组合相同不同组合不同`() {
+        // 相同勾选 / 变化 → 相同签名（据此「无修改」去重，不再重复写关键变化事件；第十轮第 5 条）
+        val a = RedFlagOptions.snapshotSignature("加重", "左侧", "约1周内", setOf("bowel"))
+        val aAgain = RedFlagOptions.snapshotSignature("加重", "左侧", "约1周内", setOf("bowel"))
+        assertEquals(a, aAgain)
+        // 勾选变化 → 签名改变
+        val ab = RedFlagOptions.snapshotSignature("加重", "左侧", "约1周内", setOf("bowel", "saddle"))
+        assertFalse(a == ab)
+        // 变化维度变化 → 签名改变
+        val changed = RedFlagOptions.snapshotSignature("减轻", "左侧", "约1周内", setOf("bowel"))
+        assertFalse(a == changed)
+        // 全都未答也给稳定签名
+        val empty = RedFlagOptions.snapshotSignature(null, null, null, emptySet())
+        assertEquals(empty, RedFlagOptions.snapshotSignature(null, null, null, emptySet()))
+    }
 }
