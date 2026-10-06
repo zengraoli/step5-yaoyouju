@@ -307,7 +307,12 @@ function buildQuery(db: DatabaseSync, episodeId: string, payload: TaskPayload): 
 /** 已知段：把病程事件整理为带来源 / 时间 / 核实状态 / care_event_id 的条目 */
 function buildKnown(db: DatabaseSync, episodeId: string): KnownItem[] {
   const events = db
-    .prepare(`SELECT * FROM care_event WHERE episode_id=? ORDER BY occurred_at ASC, rowid ASC`)
+    .prepare(
+      `SELECT c.*, r.report_date AS report_date
+        FROM care_event c
+        LEFT JOIN report r ON r.care_event_id = c.id
+        WHERE c.episode_id=? ORDER BY c.occurred_at ASC, c.rowid ASC`,
+    )
     .all(episodeId) as {
     id: string;
     event_type: string;
@@ -315,16 +320,26 @@ function buildKnown(db: DatabaseSync, episodeId: string): KnownItem[] {
     source_type: string;
     raw_text: string | null;
     verify_status: string;
+    report_date: string | null;
   }[];
-  return events.map((e) => ({
-    // 来源与核实状态由字段下发（source / verify_status），各端自行渲染状态标签，
-    // 不再拼进正文，避免「（自述，尚未确认）」「（自述，已确认）」与状态标签重复出现（第七轮第 30 条）
-    text: `${beijingDate(e.occurred_at)} ${compactKnownText(e.raw_text, e.event_type)}`,
-    source: e.source_type,
-    occurred_at: e.occurred_at,
-    verify_status: e.verify_status,
-    care_event_id: e.id,
-  }));
+  return events.map((e) => {
+    // 报告的日期取「检查日期 report_date」：留空 = 尚未确认，不用录入时间（occurred_at）冒充今天（第十一轮第 1 条）
+    const datePart =
+      e.event_type === '报告'
+        ? e.report_date
+          ? beijingDate(e.report_date)
+          : '检查日期尚未确认'
+        : e.occurred_at
+          ? beijingDate(e.occurred_at)
+          : '时间尚未确认';
+    return {
+      text: `${datePart} ${compactKnownText(e.raw_text, e.event_type)}`,
+      source: e.source_type,
+      occurred_at: e.occurred_at,
+      verify_status: e.verify_status,
+      care_event_id: e.id,
+    };
+  });
 }
 
 /** 已知段单条原文的最大长度（超出截断，完整原文留在「原文对照」里看） */

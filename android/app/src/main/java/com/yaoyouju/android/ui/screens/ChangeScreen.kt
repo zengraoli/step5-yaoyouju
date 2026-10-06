@@ -515,18 +515,14 @@ private fun MultiSelectRow(
     }
 }
 
-/** 写入结构化摘要事件（缺失不默认阴性） */
-private suspend fun writeEvents(
-    episodesApi: EpisodesApi,
-    episodeId: String,
+/** 「关键变化确认」紧凑单行文本（缺失不默认阴性，未回答记为「尚未确认」） */
+internal fun buildConfirmationText(
     change: String?,
     side: String?,
     onset: String?,
     matchTexts: List<String>,
-    flagLabels: List<String> = emptyList(),
-) {
-    val now = java.time.Instant.now().toString()
-    // 紧凑单行记录：不在病程 / 一页分析里堆放问卷原文；未回答的记为「尚未确认」
+    flagLabels: List<String>,
+): String {
     val parts = mutableListOf("关键变化确认（自述，尚未确认）")
     parts.add("与上次相比：${change ?: "尚未确认"}")
     val flagText = if (flagLabels.isEmpty()) "尚未确认" else flagLabels.joinToString("、")
@@ -536,6 +532,27 @@ private suspend fun writeEvents(
     if (matchTexts.isNotEmpty()) {
         parts.add("信号：${matchTexts.joinToString("、")}")
     }
+    return parts.joinToString("；")
+}
+
+/** 写入结构化摘要事件（幂等：内容完全相同的关键变化确认已存在则跳过，不重复写） */
+private suspend fun writeEvents(
+    episodesApi: EpisodesApi,
+    episodeId: String,
+    change: String?,
+    side: String?,
+    onset: String?,
+    matchTexts: List<String>,
+    flagLabels: List<String> = emptyList(),
+) {
+    val rawText = buildConfirmationText(change, side, onset, matchTexts, flagLabels)
+    // 幂等（第十一轮第 2 条）：该病程已有内容完全相同的「关键变化确认」事件时不再重复写。
+    // 覆盖「勾选红旗写一次 → 返回 → 不改答案再次下一步又写一次」以及重启后重复提交的真实路径；命中一次即已在库并记录安全事件。
+    val existing = runCatching { handleResponse(episodesApi.detail(episodeId)).events }.getOrNull().orEmpty()
+    if (existing.any { it.eventType == "症状" && it.rawText == rawText }) {
+        return
+    }
+    val now = java.time.Instant.now().toString()
     val event = handleResponse(
         episodesApi.addEvent(
             episodeId,
@@ -543,7 +560,7 @@ private suspend fun writeEvents(
                 eventType = "症状",
                 occurredAt = now,
                 sourceType = "自述",
-                rawText = parts.joinToString("；"),
+                rawText = rawText,
                 verifyStatus = "尚未确认",
             ),
         ),

@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import request from 'supertest';
+import { randomUUID } from 'node:crypto';
 import { APP_GUARD } from '@nestjs/core';
 import { DbModule } from '../../db/db.module';
 import { SafetyModule } from '../safety/safety.module';
@@ -33,6 +34,7 @@ describe('T07 一页分析流水线与 Worker', () => {
   let db: DbService;
   let qa: QaService;
   let analyses: AnalysesService;
+  let safety: SafetyService;
   let token: string;
   let episodeId: string;
   let flaggedToken = '';
@@ -74,6 +76,7 @@ describe('T07 一页分析流水线与 Worker', () => {
     db = app.get(DbService);
     qa = app.get(QaService);
     analyses = app.get(AnalysesService);
+    safety = app.get(SafetyService);
 
     // 演示用户 u1（13800001234）已同意「健康信息处理」
     const me = auth.login('13800001234', '123456');
@@ -338,5 +341,45 @@ describe('T07 一页分析流水线与 Worker', () => {
     expect(sections.explain[0].citations[0].supported).toBe(true);
     expect(removed).toHaveLength(1);
     expect(removed[0].statement).toContain('诊断');
+  });
+
+  it('停个性化分析时聚合同一账号全部高危红旗（第十一轮第 3 条：不同来源信号不丢失）', async () => {
+    const u = auth.login('13800003333', '123456');
+    auth.grantConsent(u.user.id, '健康信息处理');
+    const ep = episodes.create(u.user.id, { title: '聚合信号病程' }).id as string;
+    // 病程里写过大小便红旗（本次提交命中 RF-03）
+    episodes.addEvent(u.user.id, ep, { event_type: '症状', occurred_at: '2026-09-01', source_type: '自述', raw_text: '这两天大小便控制异常，尿失禁', verify_status: '尚未确认' });
+    // 问答里另说过一个高危红旗（不同途径记录到该账号，属于 userHighEvents）
+    safety.checkRedFlags({ user_id: u.user.id, texts: ['今天会阴部麻木，排尿困难'] });
+    const res = await api().post('/analyses').set({ Authorization: `Bearer ${u.token}` }).send({ episode_id: ep });
+    expect(res.status).toBe(202 + 207); // 409（控制器把 40911 转成 409）
+    expect(String(res.body.code)).toBe('40911');
+    const codes = (res.body.data.matched as { rule_code: string }[]).map((m) => m.rule_code);
+    expect(codes).toContain('RF-03'); // 病程里的本次命中
+    expect(codes).toContain('RF-01'); // 问答里记录的其它高危红旗
+  });
+
+  it('报告日期留空：分析已知段显示尚未确认，不用录入时间冒充今天（第十一轮第 1 条）', async () => {
+    const u = auth.login('13800004444', '123456');
+    auth.grantConsent(u.user.id, '健康信息处理');
+    const ep = episodes.create(u.user.id, { title: '空日期报告' }).id as string;
+    const now = new Date().toISOString();
+    const ceId = randomUUID();
+    db.app.prepare(`INSERT INTO care_event (id, episode_id, event_type, occurred_at, reported_at, source_type, raw_text, verify_status, created_at) VALUES (?, ?, '报告', ?, ?, '报告原文', ?, '尚未确认', ?)`).run(ceId, ep, now, now, 'MRI：L5/S1 椎间盘轻度膨出（F11 空日期）', now);
+    db.app.prepare(`INSERT INTO report (id, care_event_id, report_date, raw_text, extracted_terms, oss_key) VALUES (?, ?, ?, ?, ?, ?)`).run(randomUUID(), ceId, null, 'MRI：L5/S1 椎间盘轻度膨出（F11 空日期）', '[]', `local://reports/${ceId}`);
+    const created = await api().post('/analyses').set({ Authorization: `Bearer ${u.token}` }).send({ episode_id: ep });
+    expect(created.body.code).toBe(0);
+    const taskId = created.body.data.task_id as string;
+    let guard = 0;
+    while (guard++ < 10) {
+      const cur = await api().get(`/analyses/task/${taskId}`).set({ Authorization: `Bearer ${u.token}` });
+      if (cur.body.data.status !== 'queued') break;
+      consumeOneTask(db.app, new LocalMockAdapter());
+    }
+    const done = await api().get(`/analyses/task/${taskId}`).set({ Authorization: `Bearer ${u.token}` });
+    const known = done.body.data.analysis.sections.known as { text: string }[];
+    const reportItem = known.find((k) => k.text.includes('MRI'))!;
+    expect(reportItem.text).toContain('尚未确认');
+    expect(reportItem.text).not.toMatch(/20[2-9][0-9]-[0-9]{2}-[0-9]{2} MRI/); // 不用录入时间伪造检查日期
   });
 });

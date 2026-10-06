@@ -75,9 +75,33 @@ export class AnalysesService {
 
     // 2. 命中 high（停止个性化）→ 不创建任务，返回就医提示（40911，由控制器抛错）
     if (result.safety_flag === 'stop_personal') {
-      const notice = this.buildNotice(result);
-      const high = result.matched.find((m) => m.severity === 'high') ?? result.matched[0];
-      throw new ApiException(ErrorCode.SAFETY_STOP_PERSONAL, high?.advice, notice);
+      // 聚合保留全部真实信号：本次提交命中 + 该账号历史记录的其它高危红旗（不同病程 / 问答记录的），
+      // 避免就医提示只显示最先命中的一条、漏掉后续新增信号（第十一轮第 3 条）
+      const recorded = this.safety.userHighEvents(userId);
+      const merged = [...result.matched];
+      for (const r of recorded) {
+        if (!merged.some((m) => m.rule_code === r.rule_code)) {
+          merged.push({
+            rule_code: r.rule_code,
+            label: r.label,
+            severity: 'high',
+            action: '停止个性化分析' as const,
+            advice: '该账号已记录需要及时就医的信号，请先就医，本产品不再生成个性化分析。',
+            excerpt: '',
+          });
+        }
+      }
+      const notice = this.buildNotice({
+        safety_flag: 'stop_personal',
+        matched: merged,
+        rule_set_version: RULE_SET_VERSION,
+        out_of_scope: null,
+      });
+      const advice = merged.map((m) => m.label).join('、') + '：这些信号需要尽快由医生评估，本产品不再生成个性化分析。';
+      this.logger.warn(
+        `[analysis] 命中 / 已记录高危红旗 ${merged.map((m) => m.rule_code).join(',')}，停止个性化分析`,
+      );
+      throw new ApiException(ErrorCode.SAFETY_STOP_PERSONAL, advice, notice);
     }
 
     // 1b. 该用户历史上命中过的高危红旗：无论本次提交是否再命中、也无论新建了几个病程，

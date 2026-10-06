@@ -139,4 +139,17 @@ class RedFlagLogicTest {
         val empty = RedFlagOptions.snapshotSignature(null, null, null, emptySet())
         assertEquals(empty, RedFlagOptions.snapshotSignature(null, null, null, emptySet()))
     }
+
+
+    @Test
+    fun `关键变化确认文本相同组合稳定缺失记尚未确认`() {
+        // 去重依赖：相同「变化/侧别/起病/红旗」组合必然生成完全相同的落库文本（第十一轮第 2 条幂等据此判定）
+        val a = buildConfirmationText("加重", null, "约1周内", listOf("大小便控制变化"), listOf("大小便控制异常"))
+        val b = buildConfirmationText("加重", null, "约1周内", listOf("大小便控制变化"), listOf("大小便控制异常"))
+        assertEquals(a, b)
+        // 缺失项（未作答）记为「尚未确认」，不默认阴性
+        assertTrue(a.contains("侧别：尚未确认"))
+        // 只要有任一维度不同，文本即不同
+        assertFalse(a == buildConfirmationText("减轻", null, "约1周内", listOf("大小便控制变化"), listOf("大小便控制异常")))
+    }
 }
