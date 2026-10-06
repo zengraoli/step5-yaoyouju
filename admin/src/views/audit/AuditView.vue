@@ -145,10 +145,19 @@ function notify(title: string) {
   globalThis.alert?.(title)
 }
 
-/** 提交导出申请（合规支持可申请；只有超级管理员能审批） */
+// 导出原因弹层：用站内弹层替代原生 prompt()（原生弹窗对 DOM 自动化不可见，导致首次点击像「无反应」；第十轮）
+const showExport = ref(false)
+const exportReason = ref('')
+
+/** 打开导出原因弹层（合规支持可申请；只有超级管理员能审批） */
 async function onRequestExport() {
-  const reason = globalThis.prompt?.('导出原因（写入审计）') ?? ''
-  if (!reason.trim()) {
+  exportReason.value = ''
+  showExport.value = true
+}
+
+/** 提交导出申请（弹层内提交，写入原因到审计） */
+async function submitExport() {
+  if (!exportReason.value.trim()) {
     notify('请填写导出原因')
     return
   }
@@ -157,9 +166,10 @@ async function onRequestExport() {
     await request({
       url: '/admin/audit/export-request',
       method: 'POST',
-      data: { reason: reason.trim() },
+      data: { reason: exportReason.value.trim() },
     })
     notify('导出申请已提交，需超级管理员审批')
+    showExport.value = false
     await loadApprovals()
   } catch (e) {
     notify(e instanceof Error ? e.message : '提交失败')
@@ -420,6 +430,26 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
     <AppNotice type="info">
       审计日志只追加、不可修改、不可删除；每条记录含前序哈希形成链；日志中不含明文健康资料，用户仅以匿名标识出现。导出需超管审批并再次写入审计。
     </AppNotice>
+
+    <!-- 导出原因弹层（站内弹层，DOM 可见，可被自动化驱动；替代原生 prompt） -->
+    <div v-if="showExport" class="modal-overlay" @click.self="showExport = false">
+      <AppCard class="audit-export-modal">
+        <h3 class="audit-export-modal__title">申请导出审计日志</h3>
+        <p class="audit-export-modal__hint">导出原因将写入审计；提交后需超级管理员审批，审批通过后由申请人本人下载。</p>
+        <textarea
+          v-model="exportReason"
+          class="audit-export-modal__input"
+          rows="3"
+          placeholder="请填写导出原因（必填）"
+        ></textarea>
+        <div class="audit-export-modal__actions">
+          <AppButton type="soft" @click="showExport = false">取消</AppButton>
+          <AppButton type="primary" :disabled="exporting" data-testid="submit-export" @click="submitExport">
+            {{ exporting ? '提交中…' : '提交申请' }}
+          </AppButton>
+        </div>
+      </AppCard>
+    </div>
   </div>
 </template>
 
@@ -587,4 +617,47 @@ const pageCount = (): number => Math.max(1, Math.ceil(total.value / pageSize.val
   justify-content: center;
   font-size: var(--font-size-aux-sm);
 }
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.audit-export-modal {
+  width: 440px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.audit-export-modal__title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--color-text-1, #1a1a1a);
+}
+.audit-export-modal__hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-3, #888);
+  line-height: 1.6;
+}
+.audit-export-modal__input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border, #e2e2e2);
+  border-radius: var(--radius-tag, 8px);
+  padding: 8px 10px;
+  font-size: 13px;
+  resize: vertical;
+  font-family: inherit;
+}
+.audit-export-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 </style>
