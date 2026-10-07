@@ -17,7 +17,7 @@ import { ConsentGuard } from '../../common/consent.guard';
 import { ResponseInterceptor } from '../../common/response.interceptor';
 import { AllExceptionsFilter } from '../../common/all-exceptions.filter';
 import { FollowupController } from './followup.controller';
-import { FollowupService } from './followup.service';
+import { FollowupService, QUESTION_SOURCES } from './followup.service';
 
 const SECTION_KEYS = ['onset', 'symptom', 'report', 'advice', 'worry', 'questions'];
 const SECTION_TITLES = [
@@ -113,7 +113,7 @@ describe('T09 复诊摘要（六段生成 / 预览 / 纠正 / 导出）', () => 
       expect(s.items.length).toBeGreaterThan(0);
       for (const item of s.items) {
         // 每条内容都标注来源类型
-        expect(SOURCE_TYPES).toContain(item.source);
+        expect(s.key === 'questions' ? [...SOURCE_TYPES, ...QUESTION_SOURCES] : SOURCE_TYPES).toContain(item.source);
       }
     }
     // 事实段的文字里也带来源标记
@@ -216,7 +216,7 @@ describe('T09 复诊摘要（六段生成 / 预览 / 纠正 / 导出）', () => 
       texts.indexOf('复查时请医生查体确认下肢肌力与放射感'),
     );
     expect(questions.items[0].from).toBe('用户加入');
-    expect(questions.items.every((i) => ['自述', '报告原文', '医生记录'].includes(i.source))).toBe(
+    expect(questions.items.every((i) => [...QUESTION_SOURCES, '自述', '报告原文', '医生记录'].includes(i.source))).toBe(
       true,
     );
   });

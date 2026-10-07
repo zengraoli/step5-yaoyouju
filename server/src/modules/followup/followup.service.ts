@@ -29,6 +29,8 @@ export const FOLLOWUP_SECTION_KEYS = FOLLOWUP_SECTIONS.map((s) => s.key);
 
 /** 问题清单段 key（该段条目是「问题」而不是病程事实，不标核实状态） */
 const QUESTIONS_KEY = 'questions';
+/** 问题清单条目来源：用户主动加入 vs 系统（一页分析）整理——必须区分，不能把系统整理显示成「自述」 */
+export const QUESTION_SOURCES = ['自述', '分析整理'] as const;
 
 /** 导出格式：文本必做；PDF / 图片由浏览器打印生成（演示实现） */
 export const EXPORT_FORMATS = ['文本', 'PDF', '图片'] as const;
@@ -460,7 +462,7 @@ export class FollowupService {
         const q = typeof n.text === 'string' ? n.text.trim() : '';
         if (q && !seen.has(q)) {
           seen.add(q);
-          items.push({ text: q, source: '自述', from: '分析整理' });
+          items.push({ text: q, source: '分析整理', from: '分析整理' });
         }
       }
     }
@@ -550,7 +552,9 @@ export class FollowupService {
     if (text.length > MAX_ITEM_TEXT) {
       throw new ApiException(ErrorCode.BAD_REQUEST, `摘要条目过长（不超过 ${MAX_ITEM_TEXT} 字）`);
     }
-    const source = this.pickEnum(raw.source, SOURCE_TYPES, '来源类型', '自述');
+    const source = sectionKey === QUESTIONS_KEY
+      ? this.pickEnum(raw.source, QUESTION_SOURCES, '来源', '自述')
+      : this.pickEnum(raw.source, SOURCE_TYPES, '来源类型', '自述');
     const item: FollowupItem = { text, source };
     if (sectionKey === QUESTIONS_KEY) {
       // 问题清单：条目是「问题」而非病程事实，不标核实状态；保留来源标识
@@ -623,7 +627,7 @@ export class FollowupService {
           .map((i) => {
             const text = typeof i.text === 'string' ? i.text : '';
             const source =
-              typeof i.source === 'string' && SOURCE_TYPES.includes(i.source as never) ? i.source : '自述';
+              typeof i.source === 'string' && (def.key === QUESTIONS_KEY ? [...SOURCE_TYPES, ...QUESTION_SOURCES] : SOURCE_TYPES).includes(i.source as never) ? i.source : '自述';
             const item: FollowupItem = { text, source };
             if (typeof i.verify_status === 'string') item.verify_status = i.verify_status;
             if (typeof i.care_event_id === 'string') item.care_event_id = i.care_event_id;
@@ -652,7 +656,10 @@ export class FollowupService {
       if (section.items.length === 0) {
         lines.push('（暂无记录，尚未确认）');
       } else {
-        section.items.forEach((item, j) => lines.push(`${j + 1}. ${item.text}`));
+        section.items.forEach((item, j) => {
+          const tag = section.key === QUESTIONS_KEY && item.source ? `（${item.source}）` : '';
+          lines.push(`${j + 1}. ${item.text}${tag}`);
+        });
       }
       lines.push('');
     });
