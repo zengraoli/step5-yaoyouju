@@ -500,7 +500,10 @@ async function submitRoleDual(confirmationId: string): Promise<unknown> {
             </li>
           </ul>
           <p class="panel__note">
-            双人确认{{ dualControl?.enabled ? '已开启' : '已关闭' }}；关闭需要超管并写明原因（写入审计）。
+            双人确认{{ dualControl === null ? '状态未确认' : dualControl.enabled ? '已开启' : '已关闭' }}；关闭需要超管并写明原因（写入审计）。
+            <span v-if="dualControl === null || panelError" class="panel__warn">
+              （会员 / 权限数据未能加载，可能是会话已失效，请重新登录后查看；未确认不代表已关闭）
+            </span>
           </p>
         </AppCard>
       </aside>
@@ -686,6 +689,13 @@ async function submitRoleDual(confirmationId: string): Promise<unknown> {
   margin: 0;
   font-size: var(--font-size-aux-sm);
   color: var(--color-text-2);
+  line-height: var(--line-height-body);
+}
+.panel__warn {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--font-size-aux-sm);
+  color: var(--color-warning, #b26a00);
   line-height: var(--line-height-body);
 }
 

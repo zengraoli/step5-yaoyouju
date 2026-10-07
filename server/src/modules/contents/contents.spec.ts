@@ -494,4 +494,20 @@ describe('T10 内容库与审核流程（状态机 / 双人确认 / 下线生效
     expect(offline.content.offline).toBe(true);
     expect(contents.markCorrecting(adminId('editor01'), draft2.id, {}).current_status).toBe('更正中');
   });
+
+
+  it('引用定位预览返回与后台客户端一致的契约、空引用不崩溃（F12 第 5 条）', () => {
+    const item = db.app.prepare("SELECT id FROM content_item WHERE type='视频' LIMIT 1").get() as { id: string } | undefined;
+    expect(item).toBeTruthy();
+    const impact = contents.impactPreview(item!.id) as { reference_count: number; analyses: unknown[]; note: string; followups: unknown[] };
+    expect(typeof impact.reference_count).toBe('number');
+    expect(Array.isArray(impact.analyses)).toBe(true);
+    expect(Array.isArray(impact.followups)).toBe(true);
+    expect(typeof impact.note).toBe('string');
+    for (const a of impact.analyses as { analysis_version: number; statement: string }[]) {
+      expect(typeof a.analysis_version).toBe('number');
+      expect(typeof a.statement).toBe('string');
+    }
+  });
+
 });

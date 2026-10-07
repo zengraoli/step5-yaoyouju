@@ -563,9 +563,28 @@ export class ContentsService {
     return { content: this.detailOf(this.loadItem(itemId)), references, confirmation_id: gate.confirmation?.id ?? null };
   }
 
-  /** 引用定位预览（下线前查看哪些分析引用了该内容；B04） */
-  impactPreview(itemId: string): ReferenceReport {
-    return this.locateReferences(itemId);
+  /**
+   * 引用定位预览（后台内容更多菜单「引用定位」；B04）。
+   * 返回契约需与后台客户端（ContentsView.onImpact）一致：reference_count / analyses[{analysis_version, statement}] / followups / note；
+   * 空引用（0 条）也要返回结构完整（而非崩溃），接口与客户端契约对齐（F12 第 5 条）。
+   */
+  impactPreview(itemId: string) {
+    const item = this.db.app.prepare('SELECT title FROM content_item WHERE id = ?').get(itemId) as { title: string } | undefined;
+    const refs = this.locateReferences(itemId);
+    return {
+      content_item_id: itemId,
+      title: item?.title ?? '未知内容',
+      reference_count: refs.count,
+      analyses: refs.analyses.map((a) => ({
+        analysis_id: a.analysis_id,
+        episode_id: a.episode_id,
+        analysis_version: a.analysis_version,
+        statement: a.videos.map((v) => v.title).join('、') || refs.source,
+      })),
+      followups: [] as { episode_id: string; exported_at: string | null }[],
+      note: '定位来源：' + refs.source + '；共 ' + refs.count + ' 条一页分析引用了该内容。',
+      source: refs.source,
+    };
   }
 
   /** 后台内容详情：任何状态都可查看（草稿 / 待审 / 已下线等；B04） */

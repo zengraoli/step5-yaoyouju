@@ -100,13 +100,18 @@ async function onImpact(item: ContentAdminItem) {
   menuFor.value = ''
   try {
     const impact = await contentImpact(item.id)
+    // 契约变化 / 空引用都不得崩溃，也不能 catch 后伪称成功（F12 第 5 条）
+    const analyses = Array.isArray(impact?.analyses) ? impact.analyses : []
+    const followups = Array.isArray(impact?.followups) ? impact.followups : []
     const lines = [
       `《${item.title}》引用定位：`,
-      `· 被一页分析引用 ${impact.analyses.length} 处`,
-      ...impact.analyses.slice(0, 3).map((a) => `  - v${a.analysis_version}：${a.statement.slice(0, 40)}`),
-      `· 出现在 ${impact.followups.length} 份复诊摘要里`,
-      impact.note,
-    ]
+      analyses.length === 0
+        ? '· 暂无一页分析引用该内容'
+        : `· 被一页分析引用 ${analyses.length} 处`,
+      ...analyses.slice(0, 3).map((a) => `  - v${a.analysis_version}：${String(a.statement ?? '').slice(0, 40)}`),
+      `· 出现在 ${followups.length} 份复诊摘要里`,
+      impact?.note ?? '',
+    ].filter((l) => l !== '')
     notify(lines.join('\n'))
   } catch (e) {
     notify(e instanceof Error ? e.message : '引用定位加载失败')

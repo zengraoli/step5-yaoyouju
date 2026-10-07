@@ -203,6 +203,10 @@ const gateRows = computed<GateRow[]>(() => {
 })
 
 const gateAllPassed = computed<boolean>(() => gateRows.value.length > 0 && gateRows.value.every((r) => r.passed))
+/** 该候选的评测门禁是否已通过（服务端 gate.passed）；未通过则前端禁用推进，与服务端强校验一致（F12 第 9 条） */
+function gatePassed(r: ReleaseItem): boolean {
+  return r.gate?.passed === true
+}
 
 /** 候选失败用例 */
 const failedCases = computed<FailedCase[]>(() => {
@@ -363,8 +367,9 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
                 v-if="r.status === '候选' || r.status === '灰度' || r.status === '已回滚'"
                 type="button"
                 class="op-link"
-                :disabled="promoting === r.id"
-                @click.stop="onPromote(r)"
+                :disabled="promoting === r.id || !gatePassed(r)"
+                :title="gatePassed(r) ? '' : '评测门禁未通过，需跑齐全部必需评测集后再推进'"
+                @click.stop="gatePassed(r) && onPromote(r)"
               >
                 提升一级（需双人确认）
               </button>
@@ -452,7 +457,9 @@ const FLOW = ['候选', '评测门禁', '灰度', '生效']
             type="primary"
             size="sm"
             :loading="promoting === selectedRelease.id"
-            @click="onPromote(selectedRelease)"
+            :disabled="!gatePassed(selectedRelease)"
+            :title="gatePassed(selectedRelease) ? '' : '评测门禁未通过，需跑齐全部必需评测集后再推进'"
+            @click="gatePassed(selectedRelease) && onPromote(selectedRelease)"
           >
             推进到下一阶段
           </AppButton>
