@@ -7,6 +7,7 @@ import {
   LlmAdapter,
   LocalMockAdapter,
   VideoItem,
+  chunkRelevantToReport,
 } from './model-adapter';
 import {
   EvidenceRetriever,
@@ -195,8 +196,10 @@ function runPipeline(
   // 3. 已知段（确定性构建，带 care_event_id，前端可定位原文）
   const known = buildKnown(db, episodeId);
 
-  // 4. 候选视频（受「视频推荐」开关控制）
-  const videos = switchEnabled(db, '视频推荐') ? buildVideoCandidates(db, hasReport) : [];
+  // 4. 候选视频（受「视频推荐」开关控制；按报告真实节段 / 类型过滤）
+  const reportText =
+    (db.prepare(`SELECT r.raw_text AS rt FROM report r JOIN care_event c ON c.id=r.care_event_id WHERE c.episode_id=? AND r.raw_text IS NOT NULL`).all(episodeId) as { rt: string }[]).map((r) => r.rt).join('\n');
+  const videos = switchEnabled(db, '视频推荐') ? buildVideoCandidates(db, hasReport, reportText) : [];
 
   // 5. 上下文（缺失信息用于「未知」段，不补写）
   const context = buildContext(db, episodeId, payload);
@@ -372,19 +375,20 @@ function compactKnownText(raw: string | null, eventType?: string): string {
 
 /**
  * 候选视频：已发布且未下线的视频内容。
- * 没有录入报告时不推荐「怎么看报告」类视频（第七轮验收反馈第 30 条）。
+ * 没有录入报告时不推荐「怎么看报告」类视频（第七轮第 30 条）；
+ * 有报告时按报告真实节段 / 影像类型过滤，避免给 CT/L4-5 的报告推荐 MRI/L5/S1 视频（F12 第 1 条）。
  */
-function buildVideoCandidates(db: DatabaseSync, hasReport: boolean): VideoItem[] {
+function buildVideoCandidates(db: DatabaseSync, hasReport: boolean, reportText = ''): VideoItem[] {
   const rows = db
     .prepare(
       `SELECT id, title, applicable_scope FROM content_item
-       WHERE type='视频' AND current_status='已发布' AND offline_switch=0
-       ORDER BY created_at DESC LIMIT 4`,
+        WHERE type='视频' AND current_status='已发布' AND offline_switch=0
+        ORDER BY created_at DESC LIMIT 8`,
     )
     .all() as { id: string; title: string; applicable_scope: string | null }[];
-  const picked = (
-    hasReport ? rows : rows.filter((r) => !/报告|影像|片子|术语/.test(r.applicable_scope ?? ''))
-  ).slice(0, 2);
+  const pool =
+    hasReport ? rows : rows.filter((r) => !/报告|影像|片子|术语/.test(r.applicable_scope ?? ''));
+  const picked = (hasReport ? pool.filter((r) => chunkRelevantToReport(r.title, reportText)) : pool).slice(0, 2);
   return picked.map((r) => ({
     content_item_id: r.id,
     title: r.title,

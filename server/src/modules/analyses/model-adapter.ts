@@ -56,6 +56,57 @@ export interface AnalysisSections {
   videos: VideoItem[];
 }
 
+/**
+ * 影像节段对被规范化集合：把「L5/S1、L4-L5、L4/5、腰5骶1」等二级配对归一成比较键（如 L5S1、L4L5），
+ * 单节（L4、S1）也归一（如 L4、S1）。供「解释 / 视频与用户输入是否同节段」判断（第十一轮~F12 第 1 条）。
+ */
+export function segmentPairs(text: string): Set<string> {
+  const pairs = new Set<string>();
+  if (!text) return pairs;
+  const re = /([lsct])\s*(\d)\s*[/／\\\-—＿_]\s*([lsct])?\s*(\d)?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const a = m[1].toUpperCase() + m[2];
+    if (m[4]) {
+      const b = (m[3] ? m[3].toUpperCase() : m[1].toUpperCase()) + m[4];
+      pairs.add(a + b); // e.g. L5S1、L4L5
+      pairs.add(a);
+      pairs.add(b);
+    } else {
+      pairs.add(a); // 单节 L4 / S1
+    }
+  }
+  return pairs;
+}
+
+/** 文本里声明的影像类型（MRI / CT / X线…），小写归一 */
+export function imagingTypes(text: string): Set<string> {
+  const out = new Set<string>();
+  if (/mri|核磁|磁共振/i.test(text)) out.add('mri');
+  if (/\bct\b|断层|螺旋ct/i.test(text)) out.add('ct');
+  if (/x\s*线|dr\b|正侧位|平片|x-ray/i.test(text)) out.add('xray');
+  return out;
+}
+
+/**
+ * 证据片段内容是否与报告原文的真实节段 / 影像类型相符：
+ * - 片段若解释了某个二级节段（如 L5/S1），该节段必须出现在报告里，否则判为不相关（不凭空补未知节段）；
+ * - 片段若属某影像类型（如 MRI）而报告是另一明确类型（如 CT），判为不相关。
+ * 两者都没声明节段 / 类型（一般性内容）时视为相关。
+ */
+export function chunkRelevantToReport(chunkContent: string, reportText: string): boolean {
+  const reportPairs = segmentPairs(reportText);
+  const chunkPairs = segmentPairs(chunkContent);
+  if (reportPairs.size > 0 && chunkPairs.size > 0) {
+    const chunkOnlyPairs = [...chunkPairs].filter((p) => p.length > 2 && !reportPairs.has(p));
+    if (chunkOnlyPairs.length > 0) return false; // 片段解释的报告里没有的节段
+  }
+  const cT = imagingTypes(chunkContent);
+  const rT = imagingTypes(reportText);
+  if (cT.size > 0 && rT.size > 0 && [...cT].every((t) => !rT.has(t))) return false; // 类型不符
+  return true;
+}
+
 export interface GenerateContext {
   episode_title: string;
   /** 腿部变化：有 / 无 / 尚未确认 / 未记录 */
@@ -107,8 +158,12 @@ export class LocalMockAdapter implements LlmAdapter {
 
   generateDraft(input: GenerateInput): AnalysisSections {
     const { context, evidence } = input;
-    // 解释：仅使用检索到的证据片段，逐条生成可核实解释（缺失即不生成，不补写）
-    const explain: ExplainStatement[] = evidence.slice(0, 5).map((c) => ({
+    // 解释只解释用户输入里真实出现的节段 / 类型：检索片段若解释了报告没有的节段（如报告是 CT 的 L4-5，
+    // 却解释 MRI 的 L5/S1），先按 segmentPairs / imagingTypes 判为不相关，绝不凭空补未知节段（F12 第 1 条）。
+    const reportText = input.known.map((k) => k.text).join('\n') + '\n' + (context.question ?? '');
+    const relevantEvidence = evidence.filter((c) => chunkRelevantToReport(c.content, reportText));
+    // 解释：仅使用相关且受控的证据片段，逐条生成可核实解释（缺失即不生成，不补写）
+    const explain: ExplainStatement[] = relevantEvidence.slice(0, 5).map((c) => ({
       text: c.content,
       citations: [
         {

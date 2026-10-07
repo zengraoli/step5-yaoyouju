@@ -2,6 +2,8 @@ package com.yaoyouju.android.ui.screens
 
 import java.time.Instant
 import java.time.ZoneId
+import java.time.LocalDate
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
@@ -31,7 +33,13 @@ object BjTime {
         return try {
             Instant.parse(iso)
         } catch (_: Exception) {
-            null
+            // 支持「仅日期 YYYY-MM-DD」（如报告检查日期）：按当天零点解析，
+            // 不再因 Instant.parse 只接受完整时间戳而把明确日期误判成「尚未确认」（F12 第 3 条）
+            try {
+                LocalDate.parse(iso.trim()).atStartOfDay(ZoneOffset.UTC).toInstant()
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 }
