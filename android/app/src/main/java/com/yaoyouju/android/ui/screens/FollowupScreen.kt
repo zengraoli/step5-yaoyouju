@@ -22,11 +22,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,6 +61,7 @@ import com.yaoyouju.android.ui.theme.InfoLight
 import com.yaoyouju.android.ui.theme.NeutralLight
 import com.yaoyouju.android.ui.theme.Primary
 import com.yaoyouju.android.ui.theme.PrimaryLight
+import com.yaoyouju.android.ui.theme.Error
 import com.yaoyouju.android.ui.theme.Surface
 import com.yaoyouju.android.ui.theme.Text1
 import com.yaoyouju.android.ui.theme.Text2
@@ -93,6 +98,51 @@ fun FollowupScreen(navController: NavHostController) {
     // 三个页签（按设计稿）
     val tabs = listOf("六段草稿", "导出预览", "问题清单")
     var tab by remember { mutableStateOf(tabs[0]) }
+
+    // 问题清单编辑（导出前可自行删改；F12 第 8 条）：本地草稿 + 通过 correct 持久，保留来源标识
+    val questionDrafts = remember { mutableStateListOf<QDraft>() }
+    var savingQuestions by remember { mutableStateOf(false) }
+    var editingIndex by remember { mutableStateOf(-1) }
+    var editingText by remember { mutableStateOf("") }
+    LaunchedEffect(summary?.id, summary?.corrected, tab) {
+        val items = summary?.content?.sections?.firstOrNull { it.key == "questions" }?.items ?: emptyList()
+        questionDrafts.clear()
+        items.forEach { questionDrafts.add(QDraft(text = it.text, source = it.source)) }
+    }
+    fun saveQuestions() {
+        val s = summary ?: return
+        val baseSections = s.content.sections
+        if (baseSections.none { it.key == "questions" }) return
+        savingQuestions = true
+        scope.launch {
+            try {
+                val episodes = handleResponse(episodesApi.list())
+                val episode = episodes.firstOrNull() ?: return@launch
+                val sections = baseSections.map { sec ->
+                    com.yaoyouju.android.core.net.FollowupSectionInput(
+                        key = sec.key,
+                        items = if (sec.key == "questions") {
+                            questionDrafts.map { d ->
+                                com.yaoyouju.android.core.net.FollowupItemInput(text = d.text, source = d.source, verifyStatus = "尚未确认")
+                            }
+                        } else {
+                            sec.items.map { it ->
+                                com.yaoyouju.android.core.net.FollowupItemInput(text = it.text, source = it.source, verifyStatus = it.verifyStatus ?: "尚未确认")
+                            }
+                        },
+                    )
+                }
+                summary = handleResponse(
+                    followupApi.correct(episode.id, s.id, com.yaoyouju.android.core.net.CorrectFollowupRequest(sections)),
+                )
+                toastText = "问题清单已更新"
+            } catch (e: Exception) {
+                toastText = e.userMessage()
+            } finally {
+                savingQuestions = false
+            }
+        }
+    }
 
     fun load() {
         loading = true
@@ -354,22 +404,61 @@ fun FollowupScreen(navController: NavHostController) {
                     } else {
                         Text(text = q.title, fontSize = 15.sp, color = Text1)
                         Spacer(modifier = Modifier.height(8.dp))
-                        q.items.forEach { item ->
+                        questionDrafts.forEachIndexed { index, draft ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(PrimaryLight)
-                                    .padding(12.dp),
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(text = "· ", fontSize = 13.sp, color = Primary)
-                                Text(text = item.text, fontSize = 13.sp, color = Text1)
+                                Text(
+                                    text = draft.text,
+                                    fontSize = 13.sp,
+                                    color = Text1,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                // 来源标识：不把系统「分析整理」的来源静默改成用户自述
+                                if (draft.source.isNotBlank() && draft.source != "自述") {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = draft.source, fontSize = 11.sp, color = Text3)
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "编辑",
+                                    fontSize = 12.sp,
+                                    color = Primary,
+                                    modifier = Modifier
+                                        .clickable {
+                                            editingIndex = index
+                                            editingText = draft.text
+                                        }
+                                        .padding(4.dp),
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "删除",
+                                    fontSize = 12.sp,
+                                    color = Error,
+                                    modifier = Modifier
+                                        .clickable { questionDrafts.removeAt(index) }
+                                        .padding(4.dp),
+                                )
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                        if (questionDrafts.isNotEmpty()) {
+                            AppButton(
+                                type = AppButtonType.Primary,
+                                text = if (savingQuestions) "保存中…" else "保存问题修改",
+                                onClick = { saveQuestions() },
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
                         Text(
-                            text = "该段条目是「问题」，不标核实状态；导出前可自行删改。",
+                            text = "该段条目是「问题」，不标核实状态；导出前可自行删改（保存后同步到摘要与导出）。",
                             fontSize = 11.sp,
                             color = Text3,
                         )
@@ -432,7 +521,37 @@ fun FollowupScreen(navController: NavHostController) {
             )
         }
     }
+
+    if (editingIndex >= 0 && editingIndex < questionDrafts.size) {
+        AlertDialog(
+            onDismissRequest = { editingIndex = -1 },
+            title = { Text("编辑复诊问题") },
+            text = {
+                OutlinedTextField(
+                    value = editingText,
+                    onValueChange = { editingText = it },
+                    label = { Text("问题内容") },
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val t = editingText.trim()
+                    if (t.isNotEmpty()) {
+                        val d = questionDrafts[editingIndex]
+                        questionDrafts[editingIndex] = QDraft(text = t, source = d.source)
+                    }
+                    editingIndex = -1
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                Button(onClick = { editingIndex = -1 }) { Text("取消") }
+            },
+        )
+    }
 }
+
+/** 问题清单本地草稿（编辑 / 删除后经 correct 持久，source 保留原来源标识） */
+private data class QDraft(val text: String, val source: String)
 
 /** 六段中的一段 */
 @Composable
