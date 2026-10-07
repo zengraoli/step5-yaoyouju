@@ -158,6 +158,7 @@ async function load() {
   try {
     const query = {
       source_type: filters.value.source_type === '全部' ? undefined : filters.value.source_type,
+      license: filters.value.license === '全部' ? undefined : filters.value.license,
       active:
         filters.value.status === '全部'
           ? undefined

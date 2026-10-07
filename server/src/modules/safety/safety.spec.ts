@@ -357,4 +357,16 @@ describe('T04e 第九轮（F9）主持全新新编 100 条（病历 / 报告 / �
     expect(ROUND9_NOT.filter((t) => flagged(t).length > 0)).toEqual([]);
     expect(ROUND9_NOT.length).toBe(40);
   });
+
+
+  it('英语 / 中英混合手术决策提问明确拒答，普通知识问题不过度拒答（F12 第 4 条）', () => {
+    const surgery = OUT_OF_SCOPE_RULES.find((r) => r.code === 'OOS-02')!;
+    for (const q of ['Should I have surgery?', 'should i get the operation', 'do i need a surgery', '我需不需要surgery']) {
+      expect(matchesScopeRule(surgery, q)).toBe(true);
+    }
+    // 普通知识类问题不过度拒答
+    expect(OUT_OF_SCOPE_RULES.some((r) => matchesScopeRule(r, 'What does an MRI show?'))).toBe(false);
+    expect(OUT_OF_SCOPE_RULES.some((r) => matchesScopeRule(r, '报告里写的 L5/S1 是什么意思'))).toBe(false);
+  });
+
 });

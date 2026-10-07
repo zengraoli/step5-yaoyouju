@@ -797,6 +797,18 @@ describe('T11 医学证据库（文档管理 / 切分入库管线 / 本地检索
       .send({ title: 'x', source_type: '指南' });
     expect(denied.body.code).toBe(40100);
   });
+
+
+  it('按许可筛选证据（F12 第 6 条：此前 license 未实现，选待确认仍返回全部）', () => {
+    const pending = evidence.list({ license: '待确认' });
+    expect(pending.every((d) => d.license === '待确认')).toBe(true);
+    // 与来源类型 / 启用状态组合筛选
+    const combined = evidence.list({ license: '待确认', active: true });
+    expect(combined.every((d) => d.license === '待确认' && d.active)).toBe(true);
+    // 不存在的许可返回空（空态明确）
+    expect(evidence.list({ license: '不存在的许可' })).toHaveLength(0);
+  });
+
 });
 
 /** 来源类型枚举（与 EvidenceService.EVIDENCE_SOURCE_TYPES 一致） */

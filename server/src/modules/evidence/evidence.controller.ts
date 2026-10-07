@@ -13,8 +13,12 @@ class ListEvidenceQuery {
   @IsOptional()
   @IsString()
   active?: string;
-}
 
+  /** 许可：可引用 / 待确认 / 仅内部（F12 第 6 条：按许可筛选） */
+  @IsOptional()
+  @IsString()
+  license?: string;
+}
 /** 检索（POST /evidence/search） */
 class EvidenceSearchBody {
   @ApiProperty({ description: '检索关键词', maxLength: 2000 })
@@ -67,6 +71,7 @@ export class EvidenceController {
   list(@Query() query: ListEvidenceQuery) {
     return this.evidence.list({
       source_type: query.source_type?.trim() || undefined,
+      license: query.license?.trim() || undefined,
       active: parseBool(query.active),
     });
   }

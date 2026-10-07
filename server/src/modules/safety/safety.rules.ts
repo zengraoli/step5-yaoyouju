@@ -1892,6 +1892,11 @@ export const OUT_OF_SCOPE_RULES: ScopeRule[] = [
       '要不要[^。，,;；]{0,6}(?:手术|动刀|开刀)',
       '需不需要[^。，,;；]{0,6}(?:手术|动刀|开刀)',
       '用不用[^。，,;；]{0,6}(?:手术|动刀|开刀)',
+      // 第十二轮：英语 / 中英混合的手术决策说法（Should I have surgery?）
+      'surger(?:y|ies)',
+      'operat(?:e|ed|ing|ion|ions)',
+      '(?:have|get|undergo|need|do|consider)[^a-z]{0,15}(?:an?s*)?(?:surgery|operation)',
+      '(?:do i|will i|shall i|should i|can i|could i)[^a-z]{0,20}surg',
     ],
   },
   {

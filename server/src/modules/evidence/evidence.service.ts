@@ -58,6 +58,8 @@ type EvidenceDocRow = {
 export interface EvidenceListFilters {
   /** 来源类型：指南 / 研究 / 审核科普 */
   source_type?: string;
+  /** 许可：可引用 / 待确认 / 仅内部 */
+  license?: string;
   /** 启用状态：true=只看启用，false=只看停用，undefined=全部 */
   active?: boolean;
 }
@@ -195,6 +197,11 @@ export class EvidenceService implements EvidenceRetriever {
     if (filters.source_type) {
       where.push('d.source_type = ?');
       params.push(filters.source_type);
+    }
+    if (filters.license) {
+      // 许可筛选：按临床选定的许可状态精确过滤（如 待确认）——此前未实现导致筛选无效（F12 第 6 条）
+      where.push('d.license = ?');
+      params.push(filters.license);
     }
     if (filters.active !== undefined) {
       where.push('d.active = ?');
